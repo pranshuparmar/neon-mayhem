@@ -951,7 +951,32 @@ GAME.city = (function () {
     // the whole beach at deck height before they climb. The sand carpet must
     // part around those corridors: laid straight through, the anti-flicker
     // height tiers sat ON TOP of the flat approach — the road sunk in sand.
-    var BRIDGE_CUTS = [[-359, -341], [141, 159]];
+    // The cut has to match the DECK, and it did not: the decks are 14 m wide
+    // (half: 7, isla.js) spanning z -357..-343 and 143..157, while these cuts
+    // took out 18 m. That left two metres of bare nothing down each side of
+    // each bridge — and since the beach there is already below sea level, what
+    // showed through was open water, a slot of sea cut into the sand right
+    // where you drive onto the span.
+    //
+    // The cuts are the band the deck covers at EVERY x across the beach, not
+    // its width at one of them: the spans drift as they cross (the north
+    // deck's south edge walks from z -357 at x=376 to -355.25 at x=426), so a
+    // cut sized to the near end opens a sliver at the far end and a cut sized
+    // to the far end is a slot at the near one. The measured intersections
+    // are what is written above.
+    //
+    // What this costs is a strip about 1.4 m wide beside the north approach
+    // where sand now lies under the deck's edge. Over the beach that approach
+    // runs at y=0 (flat from x=360 to about x=400, climbing only past 405)
+    // while the sand tiers sit at 0.06, so the sand stands a few centimetres
+    // proud of the road there. Sand at the edge of a beach road is a great
+    // deal less wrong than a slot of open water beside the bridge.
+    //
+    // Coupled to isla.js by hand because the spans are built long after this
+    // carpet is; city.bridgeCuts is exported so a test can hold the two to
+    // each other.
+    var BRIDGE_CUTS = [[-355.2, -343.05], [144.05, 156.95]];
+    city.bridgeCuts = BRIDGE_CUTS;
     function bandSegs(z0, z1) {
       var segs = [[z0, z1]];
       for (var bc = 0; bc < BRIDGE_CUTS.length; bc++) {

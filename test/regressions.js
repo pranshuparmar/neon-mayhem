@@ -22,6 +22,8 @@
 //   3. PARACHUTE      — a life that ends under the canopy must stow it, so
 //      it is not left hanging over the body through the wasted screen and
 //      the first living frame does not run a glide step at the hospital.
+//   3r. THE BEACH AT THE BRIDGES — the sand parts for the span and for
+//       nothing else, so no slot of open sea is left beside it.
 //   3q. THE RADAR'S HOME MARKER — a property in range is a dot where it
 //       actually is; one out of range is an ARROW, not a dot pretending.
 //   3p. THE ICE CREAM ROUND — a customer walks over and is SERVED, rather
@@ -1179,6 +1181,52 @@ function withTimeout(p, ms) {
   check('runover: jacking a moving van does not kill the driver you pulled out',
     jacked.tries > 0 && jacked.survived === jacked.tries,
     jacked.survived + '/' + jacked.tries + ' walked away from their own car');
+
+  // ---------- 3r: the sand parts for the deck, not wider than it ----------
+  // The sand carpet has to part around the bridge approaches, because over the
+  // beach they run at y=0 while the sand tiers sit at 0.06 and would bury the
+  // road. But the cuts were 18 m against 14 m decks, so two metres of bare
+  // nothing ran down each side of each bridge — and the beach out there is
+  // already below sea level, so what showed through the hole was open water.
+  //
+  // This holds the cut to the DECK rather than to a number: every metre the
+  // sand gives up has to have bridge over it, at every x across the beach.
+  var beach = await page.evaluate(function () {
+    var C = GAME.city;
+    if (!C.bridgeCuts) return { missing: true };
+    var XS = [376, 384, 392, 400, 410, 420, 426];    // in across the sand
+    var out = [];
+    C.bridgeCuts.forEach(function (cut) {
+      var bare = 0, covered = 0, worstX = null;
+      for (var z = cut[0]; z <= cut[1]; z += 0.1) {
+        for (var i = 0; i < XS.length; i++) {
+          // ask from above, so the deck answers rather than the ground
+          if (C.crossingY(XS[i], z, 99) === null) { bare++; if (worstX === null) worstX = XS[i]; }
+          else covered++;
+        }
+      }
+      out.push({ cut: [+cut[0].toFixed(2), +cut[1].toFixed(2)],
+                 width: +(cut[1] - cut[0]).toFixed(2), bare: bare, covered: covered, worstX: worstX });
+    });
+    // and the cut must still be wide enough to be doing its job — a cut of
+    // nothing would pass the test above and bury the road
+    return { cuts: out };
+  });
+  check('beach: the sand knows where the bridges are', !beach.missing,
+    beach.missing ? 'city.bridgeCuts is not exported' : beach.cuts.length + ' cuts');
+  if (!beach.missing) {
+    beach.cuts.forEach(function (c, i) {
+      var which = i === 0 ? 'north' : 'south';
+      check('beach: the ' + which + ' cut is wide enough to clear the approach (anchor sanity)',
+        c.width > 10 && c.covered > 100,
+        'cut is ' + c.width + ' m across, ' + c.covered + ' sampled points have deck over them');
+      // 2 m of bare sand each side was the bug; anything above zero is a hole
+      check('beach: and every metre of it has bridge over it, at every x',
+        c.bare === 0,
+        c.bare ? c.bare + ' samples of open nothing, first at x=' + c.worstX
+               : 'no bare ground anywhere in the cut');
+    });
+  }
 
   // ---------- 3q: a home off the radar is a direction, not a place ----------
   // A home you own ignores the range gate so the radar can always say which
