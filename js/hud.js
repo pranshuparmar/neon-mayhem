@@ -597,6 +597,25 @@ GAME.hud = (function () {
     }
   }
 
+  // Where a home you own goes on the radar, and as WHAT.
+  //
+  // In range it is a dot on its real position. Out of range it becomes an
+  // arrow on the rim pointing at it, because the radar's job there is to say
+  // which way home is, not to claim it is somewhere it is not. Kept out of
+  // the drawing code so the decision can be tested without a canvas.
+  //
+  // The rim is 90 — the canvas is 180 square, drawn from its centre — and the
+  // arrow tip needs room, so the anchor sits at 80 and the point reaches 85.
+  var RADAR_RIM = 80;
+  function homeMarker(dx, dz, zoom) {
+    var rx = dx * MAP_S, rz = dz * MAP_S;
+    var rr = Math.sqrt(rx * rx + rz * rz);
+    var lim = RADAR_RIM / zoom;
+    if (rr <= lim) return { mode: 'dot', x: rx, z: rz, ux: 0, uz: 0, dist: rr };
+    var ux = rx / rr, uz = rz / rr;
+    return { mode: 'arrow', x: ux * lim, z: uz * lim, ux: ux, uz: uz, dist: rr };
+  }
+
   function drawMinimap() {
     var cv = el.minimap, g = cv.getContext('2d');
     var P = GAME.player;
@@ -637,14 +656,30 @@ GAME.hud = (function () {
         if (!catVis(sbp.home ? 'home' : 'shops')) continue;
         if (!sbp.home && U.dist2(sbp.x, sbp.z, px, pz) > 170 * 170) continue;
         if (sbp.home) {
-          // clamp far homes to the radar rim so the direction still reads
-          var rx = (sbp.x - px) * MAP_S, rz = (sbp.z - pz) * MAP_S;
-          var rr = Math.sqrt(rx * rx + rz * rz);
-          var lim = 78 / zoom;
-          if (rr > lim) { rx = rx / rr * lim; rz = rz / rr * lim; }
+          var hm = homeMarker(sbp.x - px, sbp.z - pz, zoom);
           g.fillStyle = sbp.color;
-          g.beginPath(); g.arc(rx, rz, 4.4 / zoom, 0, Math.PI * 2); g.fill();
-          g.strokeStyle = '#ffffff'; g.lineWidth = 1.6 / zoom; g.stroke();
+          if (hm.mode === 'dot') {
+            g.beginPath(); g.arc(hm.x, hm.z, 4.4 / zoom, 0, Math.PI * 2); g.fill();
+            g.strokeStyle = '#ffffff'; g.lineWidth = 1.6 / zoom; g.stroke();
+          } else {
+            // Out of range: an ARROW on the rim pointing the way, not a dot.
+            //
+            // A clamped dot drawn exactly like an in-range one is the same
+            // picture as a house sitting that far from you — so as you drove,
+            // your property appeared to hold station off your shoulder and
+            // then snap onto its real spot the moment it came into range. It
+            // was doing what it was told; it just said the wrong thing.
+            var s2 = 5.5 / zoom;
+            g.beginPath();
+            g.moveTo(hm.x + hm.ux * s2, hm.z + hm.uz * s2);
+            g.lineTo(hm.x - hm.ux * s2 * 0.55 - hm.uz * s2 * 0.85,
+                     hm.z - hm.uz * s2 * 0.55 + hm.ux * s2 * 0.85);
+            g.lineTo(hm.x - hm.ux * s2 * 0.55 + hm.uz * s2 * 0.85,
+                     hm.z - hm.uz * s2 * 0.55 - hm.ux * s2 * 0.85);
+            g.closePath();
+            g.fill();
+            g.strokeStyle = '#ffffff'; g.lineWidth = 1.2 / zoom; g.stroke();
+          }
         } else {
           blip(sbp.x, sbp.z, sbp.color, 3.2 / zoom);
         }
@@ -972,7 +1007,9 @@ GAME.hud = (function () {
       var on = el['crt-layer'].style.display !== 'block';
       el['crt-layer'].style.display = on ? 'block' : 'none';
       return on;
-    }
+    },
+    // headless hook: where a home you own lands on the radar, and as what
+    testHomeMarker: homeMarker
   };
   return api;
 })();

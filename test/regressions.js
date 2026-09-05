@@ -22,6 +22,8 @@
 //   3. PARACHUTE      — a life that ends under the canopy must stow it, so
 //      it is not left hanging over the body through the wasted screen and
 //      the first living frame does not run a glide step at the hospital.
+//   3q. THE RADAR'S HOME MARKER — a property in range is a dot where it
+//       actually is; one out of range is an ARROW, not a dot pretending.
 //   3p. THE ICE CREAM ROUND — a customer walks over and is SERVED, rather
 //       than sprinting at the hatch and teleporting money into the till.
 //   3o. PICKUPS ON DRY LAND — nothing you are meant to walk to stands at
@@ -1177,6 +1179,54 @@ function withTimeout(p, ms) {
   check('runover: jacking a moving van does not kill the driver you pulled out',
     jacked.tries > 0 && jacked.survived === jacked.tries,
     jacked.survived + '/' + jacked.tries + ' walked away from their own car');
+
+  // ---------- 3q: a home off the radar is a direction, not a place ----------
+  // A home you own ignores the range gate so the radar can always say which
+  // way it is — but a far one was CLAMPED to a circle around the player and
+  // then drawn exactly like an in-range blip. That is the same picture as a
+  // house sitting that far from you: it appeared to hold station off your
+  // shoulder as you drove, and snap onto its real spot when it came into
+  // range. It was doing what it was told, it just said the wrong thing.
+  var radar = await page.evaluate(function () {
+    var hm = GAME.hud.testHomeMarker;
+    if (!hm) return { missing: true };
+    var Z = 0.62;                                  // the in-car zoom
+    function px(m) { return Math.hypot(m.x, m.z) * Z; }   // canvas px from centre
+    var near = [hm(20, 0, Z), hm(60, 0, Z), hm(120, 0, Z)];
+    var far = [hm(400, 0, Z), hm(800, 0, Z), hm(1600, 0, Z)];
+    // and the direction has to be the real one
+    var diag = hm(600, 600, Z);
+    return {
+      nearModes: near.map(function (m) { return m.mode; }),
+      nearPx: near.map(function (m) { return +px(m).toFixed(1); }),
+      farModes: far.map(function (m) { return m.mode; }),
+      farPx: far.map(function (m) { return +px(m).toFixed(1); }),
+      diagMode: diag.mode,
+      // unit vector should point at the home: equal parts x and z here
+      diagAim: +(diag.ux - diag.uz).toFixed(3),
+      diagUx: +diag.ux.toFixed(3)
+    };
+  });
+  check('radar: the home marker answers at all', !radar.missing,
+    radar.missing ? 'GAME.hud.testHomeMarker is not exposed' : 'present');
+  if (!radar.missing) {
+    check('radar: a home in range is a dot, and it moves as you close on it',
+      radar.nearModes.every(function (m) { return m === 'dot'; }) &&
+      radar.nearPx[0] < radar.nearPx[1] && radar.nearPx[1] < radar.nearPx[2],
+      'at 20/60/120 m: ' + radar.nearModes.join(', ') + ' at ' + radar.nearPx.join(', ') + ' px');
+    // The clamp itself is not the bug and is still here — an edge indicator
+    // has to sit at the edge. What must differ is WHAT IS DRAWN there.
+    check('radar: one out of range is an arrow rather than a dot',
+      radar.farModes.every(function (m) { return m === 'arrow'; }),
+      'at 400/800/1600 m: ' + radar.farModes.join(', '));
+    check('radar: pinned to the rim, inside the 90 px face',
+      radar.farPx.every(function (v) { return Math.abs(v - radar.farPx[0]) < 0.01; }) &&
+      radar.farPx[0] > 60 && radar.farPx[0] + 6 < 90,
+      'all three at ' + radar.farPx[0] + ' px, tip reaching about ' + (radar.farPx[0] + 5.5).toFixed(0));
+    check('radar: and it points at the house, not just outward',
+      radar.diagMode === 'arrow' && Math.abs(radar.diagAim) < 0.01 && radar.diagUx > 0.5,
+      'a home to the north-east gives a heading of (' + radar.diagUx + ', ' + radar.diagUx + ')');
+  }
 
   // ---------- 3p: the round has a pace ----------
   // Customers covered the ground at 6.8 m/s — 0.85x the player's full sprint,
