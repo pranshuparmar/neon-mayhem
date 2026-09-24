@@ -1159,6 +1159,38 @@ GAME.shops = (function () {
     disposeTree(pv.obj);
     pv.obj = null;
   }
+  // The preview's context is its own, a second WebGL context with its own
+  // buffers and shaders, and it used to live for the rest of the session from
+  // the first visit to any counter. Now it goes when the shop closes and is
+  // made again on the next visit, while the game is frozen behind the shop.
+  //
+  // That only lets go cleanly if the preview has drawn nothing shared: r128
+  // ties every geometry and material a renderer draws to that renderer until
+  // the resource is disposed, and the town's shared ones never are — so one
+  // shared car body or shirt colour drawn here would hold every torn-down
+  // preview renderer alive. The preview therefore draws copies of anything
+  // shared (a few small buffers), and they are disposed with it.
+  function ownCopies(root) {
+    root.traverse(function (o) {
+      var g = o.geometry;
+      if (g && g.userData && g.userData.shared) { o.geometry = g.clone(); o.geometry.userData = {}; }
+      if (o.material && !Array.isArray(o.material) && o.material.userData && o.material.userData.shared) {
+        o.material = o.material.clone();
+        o.material.userData = {};
+      }
+    });
+    return root;
+  }
+  function releasePv() {
+    clearPvObj();
+    if (!pv.renderer) return;
+    pv.renderer.dispose();
+    pv.renderer.forceContextLoss();
+    // a canvas whose context was lost cannot be given a new one
+    var old = $('shop-preview');
+    if (old && old.parentNode) old.parentNode.replaceChild(old.cloneNode(false), old);
+    pv.renderer = pv.scene = pv.cam = null;
+  }
   function previewOutfit(it) {
     var o = { shirt: outfit().shirt, pants: outfit().pants, hairStyle: outfit().hairStyle, hairColor: outfit().hairColor, skin: outfit().skin };
     if (it) {
@@ -1294,7 +1326,7 @@ GAME.shops = (function () {
       pv.cam.position.set(0, 1.5, 3.2);
       pv.cam.lookAt(0, 1.0, 0);
     }
-    pv.scene.add(pv.obj);
+    pv.scene.add(ownCopies(pv.obj));
   }
   function renderPreview() {
     if (!pv.on || !pv.renderer || !pv.obj || !GAME.shopOpen) return;
@@ -1381,7 +1413,7 @@ GAME.shops = (function () {
     el.screen.style.display = 'none';
     GAME.shopOpen = false;
     pv.on = false;
-    clearPvObj();
+    releasePv();
     pv.key = '';
     if (GAME.syncOverlayMusic) GAME.syncOverlayMusic();
     GAME.regainPointer();
