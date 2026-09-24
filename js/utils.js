@@ -90,12 +90,67 @@ function disposeTree(root) {
 }
 
 // Batches transformed boxes/quads into one BufferGeometry (vertex colors + tiled uvs).
+//
+// The vertices go straight into typed arrays that grow as they fill. They
+// used to be gathered in plain arrays of doubles, twice the size of the
+// floats they end up as, and copied across at build() while both were alive,
+// with a few dozen small arrays thrown away for every box on the way:
+// building the world peaked at some 250 MB of heap for 40 MB of geometry.
+var NO_FLOATS = new Float32Array(0);
 function GeoBatch() {
-  this.pos = []; this.nrm = []; this.col = []; this.uv = [];
+  this.n = 0;      // vertices written
+  this.cap = 0;    // vertices the arrays have room for
+  this.pos = NO_FLOATS; this.nrm = NO_FLOATS; this.col = NO_FLOATS; this.uv = NO_FLOATS;
   // Window light, per building (see addBox). Only a batch given a `light`
   // setting carries it, so every other mesh in the game is exactly as it was.
-  this.light = null; this.lgt = [];
+  this.light = null; this.lgt = NO_FLOATS; this.nl = 0;
 }
+function growFloats(a, len) { var b = new Float32Array(len); b.set(a); return b; }
+// make room for k more vertices
+GeoBatch.prototype.room = function (k) {
+  if (this.n + k <= this.cap) return;
+  var cap = Math.max(256, this.cap * 2, this.n + k);
+  this.pos = growFloats(this.pos, cap * 3); this.nrm = growFloats(this.nrm, cap * 3);
+  this.col = growFloats(this.col, cap * 3); this.uv = growFloats(this.uv, cap * 2);
+  this.cap = cap;
+};
+GeoBatch.prototype.vert = function (x, y, z, nx, ny, nz, r, g, b, u, v) {
+  var i = this.n++, i3 = i * 3, i2 = i * 2;
+  var p = this.pos, q = this.nrm, c = this.col, t = this.uv;
+  p[i3] = x; p[i3 + 1] = y; p[i3 + 2] = z;
+  q[i3] = nx; q[i3 + 1] = ny; q[i3 + 2] = nz;
+  c[i3] = r; c[i3 + 1] = g; c[i3 + 2] = b;
+  t[i2] = u; t[i2 + 1] = v;
+};
+// window light for the vertex just written
+GeoBatch.prototype.winLight = function (a, b, c) {
+  var j = this.nl * 3;
+  if (j + 3 > this.lgt.length) this.lgt = growFloats(this.lgt, Math.max(768, this.lgt.length * 2));
+  this.lgt[j] = a; this.lgt[j + 1] = b; this.lgt[j + 2] = c;
+  this.nl++;
+};
+// A box's faces, +x -x +y -y +z -z: for each, its four corners as signs on
+// the half sizes, its normal, and which two of the box's sizes its texture
+// spans across and up (0 x, 1 y, 2 z). A quad's corners go down as two
+// triangles in QUAD_TRIS order, corner k taking the uv (QUAD_U[k], QUAD_V[k])
+// of its rectangle.
+var BOX_CORNER = [
+  1, -1, 1, 1, -1, -1, 1, 1, -1, 1, 1, 1,
+  -1, -1, -1, -1, -1, 1, -1, 1, 1, -1, 1, -1,
+  -1, 1, 1, 1, 1, 1, 1, 1, -1, -1, 1, -1,
+  -1, -1, -1, 1, -1, -1, 1, -1, 1, -1, -1, 1,
+  -1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1, 1,
+  1, -1, -1, -1, -1, -1, -1, 1, -1, 1, 1, -1
+];
+var BOX_NORMAL = [1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1];
+var BOX_SPAN = [2, 1, 2, 1, 0, 2, 0, 2, 0, 1, 0, 1];
+var QUAD_TRIS = [0, 1, 2, 0, 2, 3];
+var QUAD_U = [0, 1, 1, 0], QUAD_V = [0, 0, 1, 1];
+// a flat quad's corners, as signs on its half sizes, and the order its
+// triangles take them in (wound to face up)
+var FLAT_X = [-1, 1, 1, -1], FLAT_Z = [-1, -1, 1, 1];
+var GROUND_TRIS = [0, 2, 1, 0, 3, 2];
+function boxSize(k, sx, sy, sz) { return k === 0 ? sx : k === 1 ? sy : sz; }
 // murmur3's finaliser: scrambles an integer hash so one position can seed
 // several independent choices without any of them echoing another
 function fmix32(h) {
@@ -124,15 +179,6 @@ GeoBatch.prototype.addBox = function (cx, cy, cz, sx, sy, sz, rotY, color, uvSca
   var c = Math.cos(rotY || 0), s = Math.sin(rotY || 0);
   var r = (color >> 16 & 255) / 255, g = (color >> 8 & 255) / 255, b = (color & 255) / 255;
   var us = uvScale || 0;
-  // faces: +x -x +y -y +z -z ; each as [corner order for two tris]
-  var faces = [
-    [[hx, -hy, hz], [hx, -hy, -hz], [hx, hy, -hz], [hx, hy, hz], [1, 0, 0], sz, sy],
-    [[-hx, -hy, -hz], [-hx, -hy, hz], [-hx, hy, hz], [-hx, hy, -hz], [-1, 0, 0], sz, sy],
-    [[-hx, hy, hz], [hx, hy, hz], [hx, hy, -hz], [-hx, hy, -hz], [0, 1, 0], sx, sz],
-    [[-hx, -hy, -hz], [hx, -hy, -hz], [hx, -hy, hz], [-hx, -hy, hz], [0, -1, 0], sx, sz],
-    [[-hx, -hy, hz], [hx, -hy, hz], [hx, hy, hz], [-hx, hy, hz], [0, 0, 1], sx, sy],
-    [[hx, -hy, -hz], [-hx, -hy, -hz], [-hx, hy, -hz], [hx, hy, -hz], [0, 0, -1], sx, sy]
-  ];
   // Where along its texture a wall starts. This used to be a per-position
   // offset of floor(x * 8) — a whole number, on a texture that REPEATS, and a
   // repeating texture samples u and u + 1 identically. So it did nothing: 249
@@ -156,40 +202,37 @@ GeoBatch.prototype.addBox = function (cx, cy, cz, sx, sy, sz, rotY, color, uvSca
   // home), and a seed for WHICH windows. The shader does the rest — see
   // lamBlock in city.js. A box with no pattern of its own, a plinth or a deco
   // cap, gets a negative share: it keeps the windows it has always had.
-  var lv = null;
-  if (this.light) {
+  var lit = !!this.light, lv0 = 0, lv1 = 0, lv2 = 0;
+  if (lit) {
     if (shift && us) {
       // (the deal is kept on the batch; names here stay clear of r, g and b
       // above, which are this box's colour — reusing `r` once repainted every
       // block's walls with a random number)
       if (this.lightDeal === undefined) this.lightDeal = fmix32(h0 ^ 0x68e31da4) % WINDOW_DECK.length;
       var cls = WINDOW_DECK[this.lightDeal++ % WINDOW_DECK.length];
-      lv = [Math.min(0.95, this.light.lit * WINDOW_SHARE[cls]),
-            Math.max(0, Math.min(1, this.light.warm + (fmix32(h0 ^ 0xb5297a4d) / 4294967296 - 0.5) * 0.9)),
-            // a whole number, not a fraction: an interpolated value is never
-            // quite constant across a face, and the hash turns the difference
-            // into windows that sparkle on and off pixel by pixel
-            fmix32(h0 ^ 0x1b56c4e9) % 61];
-    } else lv = [-1, 0.5, 0];
+      lv0 = Math.min(0.95, this.light.lit * WINDOW_SHARE[cls]);
+      lv1 = Math.max(0, Math.min(1, this.light.warm + (fmix32(h0 ^ 0xb5297a4d) / 4294967296 - 0.5) * 0.9));
+      // a whole number, not a fraction: an interpolated value is never
+      // quite constant across a face, and the hash turns the difference
+      // into windows that sparkle on and off pixel by pixel
+      lv2 = fmix32(h0 ^ 0x1b56c4e9) % 61;
+    } else { lv0 = -1; lv1 = 0.5; lv2 = 0; }
   }
+  this.room(36);
   for (var f = 0; f < 6; f++) {
-    var F = faces[f], n = F[4];
-    var nx = n[0] * c + n[2] * s, nz = -n[0] * s + n[2] * c;
-    var fw = F[5], fh = F[6];
+    var n0 = BOX_NORMAL[f * 3], n1 = BOX_NORMAL[f * 3 + 1], n2 = BOX_NORMAL[f * 3 + 2];
+    var nx = n0 * c + n2 * s, nz = -n0 * s + n2 * c;
+    var fw = boxSize(BOX_SPAN[f * 2], sx, sy, sz), fh = boxSize(BOX_SPAN[f * 2 + 1], sx, sy, sz);
     var uw = us ? fw / us : 1, vh = us ? fh / (us * 0.75) : 1;
     var u0 = 0;
     if (us && f >= 2 && f <= 3) { uw = 0.01; vh = 0.01; }
     else u0 = ushift;
-    var quv = [[u0, 0], [u0 + uw, 0], [u0 + uw, vh], [u0, vh]];
-    var idx = [0, 1, 2, 0, 2, 3];
     for (var i = 0; i < 6; i++) {
-      var v = F[idx[i]];
-      var vx = v[0] * c + v[2] * s, vz = -v[0] * s + v[2] * c;
-      this.pos.push(cx + vx, cy + v[1], cz + vz);
-      this.nrm.push(nx, n[1], nz);
-      this.col.push(r, g, b);
-      this.uv.push(quv[idx[i]][0], quv[idx[i]][1]);
-      if (lv) this.lgt.push(lv[0], lv[1], lv[2]);
+      var k = QUAD_TRIS[i], o = (f * 4 + k) * 3;
+      var v0 = BOX_CORNER[o] * hx, v1 = BOX_CORNER[o + 1] * hy, v2 = BOX_CORNER[o + 2] * hz;
+      this.vert(cx + (v0 * c + v2 * s), cy + v1, cz + (-v0 * s + v2 * c), nx, n1, nz, r, g, b,
+        QUAD_U[k] ? u0 + uw : u0, QUAD_V[k] ? vh : 0);
+      if (lit) this.winLight(lv0, lv1, lv2);
     }
   }
 };
@@ -198,16 +241,10 @@ GeoBatch.prototype.addGroundQuad = function (cx, y, cz, sx, sz, rotY, color) {
   var hx = sx / 2, hz = sz / 2;
   var c = Math.cos(rotY || 0), s = Math.sin(rotY || 0);
   var r = (color >> 16 & 255) / 255, g = (color >> 8 & 255) / 255, b = (color & 255) / 255;
-  var corners = [[-hx, -hz], [hx, -hz], [hx, hz], [-hx, hz]];
-  var uvq = [[0, 0], [1, 0], [1, 1], [0, 1]];
-  var idx = [0, 2, 1, 0, 3, 2];
+  this.room(6);
   for (var i = 0; i < 6; i++) {
-    var v = corners[idx[i]];
-    var vx = v[0] * c + v[1] * s, vz = -v[0] * s + v[1] * c;
-    this.pos.push(cx + vx, y, cz + vz);
-    this.nrm.push(0, 1, 0);
-    this.col.push(r, g, b);
-    this.uv.push(uvq[idx[i]][0], uvq[idx[i]][1]);
+    var k = GROUND_TRIS[i], v0 = FLAT_X[k] * hx, v1 = FLAT_Z[k] * hz;
+    this.vert(cx + (v0 * c + v1 * s), y, cz + (-v0 * s + v1 * c), 0, 1, 0, r, g, b, QUAD_U[k], QUAD_V[k]);
   }
 };
 // Quad from four explicit corners, wound a-b-c-d — for surfaces that follow a
@@ -225,15 +262,10 @@ GeoBatch.prototype.addQuad = function (a, b, c, d, color, face) {
     var t = b; b = d; d = t;
     nx = -nx; ny = -ny; nz = -nz;
   }
-  var corners = [a, b, c, d];
-  var uvq = [[0, 0], [1, 0], [1, 1], [0, 1]];
-  var idx = [0, 1, 2, 0, 2, 3];
+  this.room(6);
   for (var i = 0; i < 6; i++) {
-    var p = corners[idx[i]];
-    this.pos.push(p[0], p[1], p[2]);
-    this.nrm.push(nx, ny, nz);
-    this.col.push(r, g, bl);
-    this.uv.push(uvq[idx[i]][0], uvq[idx[i]][1]);
+    var k = QUAD_TRIS[i], p = k === 0 ? a : k === 1 ? b : k === 2 ? c : d;
+    this.vert(p[0], p[1], p[2], nx, ny, nz, r, g, bl, QUAD_U[k], QUAD_V[k]);
   }
 };
 // Vertical quad centered at (cx,cy,cz), width w, height h, facing rotY direction; custom uv rect.
@@ -242,32 +274,30 @@ GeoBatch.prototype.addWallQuad = function (cx, cy, cz, w, h, rotY, color, u0, v0
   var c = Math.cos(rotY), s = Math.sin(rotY);
   var r = (color >> 16 & 255) / 255, g = (color >> 8 & 255) / 255, b = (color & 255) / 255;
   if (u0 === undefined) { u0 = 0; v0 = 0; u1 = 1; v1 = 1; }
-  var corners = [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]];
-  var uvq = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
-  var idx = [0, 1, 2, 0, 2, 3];
-  var nx = s, nz = c;
+  this.room(6);
   for (var i = 0; i < 6; i++) {
-    var v = corners[idx[i]];
     // local +x maps along the wall, facing normal (s, c)
-    var vx = v[0] * c, vz = -v[0] * s;
-    this.pos.push(cx + vx, cy + v[1], cz + vz);
-    this.nrm.push(nx, 0, nz);
-    this.col.push(r, g, b);
-    this.uv.push(uvq[idx[i]][0], uvq[idx[i]][1]);
+    var k = QUAD_TRIS[i], x = FLAT_X[k] * hw;
+    this.vert(cx + x * c, cy + FLAT_Z[k] * hh, cz + -x * s, s, 0, c, r, g, b,
+      QUAD_U[k] ? u1 : u0, QUAD_V[k] ? v1 : v0);
   }
 };
 GeoBatch.prototype.build = function () {
-  var g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nrm, 3));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
-  if (this.lgt.length) {
+  var n = this.n, g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(this.pos.slice(0, n * 3), 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(this.nrm.slice(0, n * 3), 3));
+  g.setAttribute('color', new THREE.BufferAttribute(this.col.slice(0, n * 3), 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(this.uv.slice(0, n * 2), 2));
+  if (this.nl) {
     // every vertex or none: a light batch given a quad by some other route
     // would feed the shader garbage, so say so loudly instead
-    if (this.lgt.length !== this.pos.length) console.error('GeoBatch: window light missing on some vertices');
-    g.setAttribute('winLight', new THREE.Float32BufferAttribute(this.lgt, 3));
+    if (this.nl !== n) console.error('GeoBatch: window light missing on some vertices');
+    g.setAttribute('winLight', new THREE.BufferAttribute(this.lgt.slice(0, this.nl * 3), 3));
   }
+  // A batch is built once. What it held is the geometry's now; keeping the
+  // working arrays as well would hold the world twice over.
+  this.pos = this.nrm = this.col = this.uv = this.lgt = NO_FLOATS;
+  this.n = this.cap = this.nl = 0;
   return g;
 };
 
@@ -295,9 +325,8 @@ BoxSet.prototype.build = function (material) {
   if (!geo) {
     var b = new GeoBatch();
     b.addBox(0, 0, 0, 1, 1, 1, 0, 0xffffff, 0);
-    geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(b.pos, 3));
-    geo.setAttribute('normal', new THREE.Float32BufferAttribute(b.nrm, 3));
+    geo = b.build();
+    geo.deleteAttribute('color'); geo.deleteAttribute('uv');
     geo.userData.shared = true;
     SHARED.geo.unitBox = geo;
   }
