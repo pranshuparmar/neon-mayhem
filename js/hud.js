@@ -276,13 +276,16 @@ GAME.hud = (function () {
   // one disagrees. A pad is treated exactly like the airport it shares a
   // legend row with: same family, same filter, same blip.
   // (refilled, not rebuilt: the radar asks twenty times a second, and every
-  // caller reads the list straight away and keeps none of it)
+  // caller reads the list straight away and keeps none of it; written by
+  // index and cut to length, since emptying it would drop its storage)
   var padBuf = [];
   function shownHelipads() {
-    padBuf.length = 0;
-    if (!catVis('airport')) return padBuf;
-    if (GAME.city.helipad) padBuf.push(GAME.city.helipad);
-    if (GAME.city.roofHelipad) padBuf.push(GAME.city.roofHelipad);
+    var n = 0;
+    if (catVis('airport')) {
+      if (GAME.city.helipad) padBuf[n++] = GAME.city.helipad;
+      if (GAME.city.roofHelipad) padBuf[n++] = GAME.city.roofHelipad;
+    }
+    padBuf.length = n;
     return padBuf;
   }
   function pickupCat(t) { return t === 'health' ? 'health' : t === 'armor' ? 'armor' : 'weapon'; }

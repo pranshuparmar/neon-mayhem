@@ -168,15 +168,18 @@ GAME.police = (function () {
 
   // The pursuit's working lists are asked for every tick, so they are kept
   // and refilled rather than built new each time: a caller reads one before
-  // the next tick asks again, and nobody holds on to it past that.
+  // the next tick asks again, and nobody holds on to it past that. Refilled
+  // by index and then cut to length — emptying one with `length = 0` and
+  // pushing drops its storage and grows it again, which allocates about as
+  // much as the filter() it replaced.
   var copBuf = [], chaseBuf = [], pedBuf = [];
   function copCars() {
-    copBuf.length = 0;
-    var cars = GAME.world.cars;
+    var n = 0, cars = GAME.world.cars;
     for (var i = 0; i < cars.length; i++) {
       var c = cars[i];
-      if (c.isPolice && !c.dead && c.ai && (c.ai.mode === 'chase' || c.ai.mode === 'roadblock')) copBuf.push(c);
+      if (c.isPolice && !c.dead && c.ai && (c.ai.mode === 'chase' || c.ai.mode === 'roadblock')) copBuf[n++] = c;
     }
+    copBuf.length = n;
     return copBuf;
   }
 
@@ -796,9 +799,9 @@ GAME.police = (function () {
 
     // pursuit cars
     var active = copCars();
-    var chasing = chaseBuf;
-    chasing.length = 0;
-    for (var ch = 0; ch < active.length; ch++) if (active[ch].ai.mode === 'chase') chasing.push(active[ch]);
+    var chasing = chaseBuf, cn = 0;
+    for (var ch = 0; ch < active.length; ch++) if (active[ch].ai.mode === 'chase') chasing[cn++] = active[ch];
+    chasing.length = cn;
     if (!flownOff && chasing.length < CAR_CAP[s] && GAME.frame % 45 === 0) spawnCruiser();
     var pf = GAME.focus();
     for (var a = 0; a < active.length; a++) {
@@ -811,8 +814,8 @@ GAME.police = (function () {
     // foot cops
     // a snapshot, because an officer's turn can add or remove people
     var peds = pedBuf, wpeds = GAME.world.peds;
-    peds.length = 0;
-    for (var pi = 0; pi < wpeds.length; pi++) peds.push(wpeds[pi]);
+    for (var pi = 0; pi < wpeds.length; pi++) peds[pi] = wpeds[pi];
+    peds.length = wpeds.length;
     var anyGrab = false;
     for (var f = 0; f < peds.length; f++) {
       if (peds[f].isCop && !peds[f].dead) {

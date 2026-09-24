@@ -1510,10 +1510,12 @@ GAME.shops = (function () {
   }
 
   // (kept and rewritten rather than built new: the radar asks twenty times a
-  // second, and its callers read the list straight away and keep none of it)
+  // second, and its callers read the list straight away and keep none of it;
+  // written by index and cut to length, since emptying it would drop its
+  // storage every time)
   var blipList = [], blipPool = [];
   function blips() {
-    blipList.length = 0;
+    var n = 0;
     for (var i = 0; i < locations.length; i++) {
       var loc = locations[i];
       // the desk sergeant lives inside the police station — the P badge
@@ -1521,13 +1523,14 @@ GAME.shops = (function () {
       if (loc.kind === 'bribe') continue;
       var home = loc.kind === 'safehouse' && owns(loc.sh.id);
       if (!loc.blipColor) loc.blipColor = '#' + loc.color.toString(16).padStart(6, '0');
-      var b = blipPool[blipList.length] || (blipPool[blipList.length] = {});
+      var b = blipPool[n] || (blipPool[n] = {});
       b.x = loc.at.x; b.z = loc.at.z;
       b.color = home ? '#5dff9e' : loc.blipColor;
       b.label = loc.kind === 'safehouse' ? (home ? '⌂' : '$') : '$';
       b.home = home;
-      blipList.push(b);
+      blipList[n++] = b;
     }
+    blipList.length = n;
     return blipList;
   }
 

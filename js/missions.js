@@ -227,12 +227,13 @@ GAME.missions = (function () {
   Object.keys(MARKER_COLORS).forEach(function (k) { MARKER_HEX[k] = '#' + MARKER_COLORS[k].toString(16).padStart(6, '0'); });
   // The radar asks for the blips twenty times a second, so the list and its
   // entries are kept and rewritten instead of built new: a caller reads it
-  // straight away and never keeps it.
-  var blipList = [], blipPool = [];
+  // straight away and never keeps it. (Written by index and cut to length at
+  // the end: emptied with `length = 0` it would drop its storage every time.)
+  var blipList = [], blipPool = [], blipN = 0;
   function putBlip(x, z, color, size, kind) {
-    var b = blipPool[blipList.length] || (blipPool[blipList.length] = {});
+    var b = blipPool[blipN] || (blipPool[blipN] = {});
     b.x = x; b.z = z; b.color = color; b.size = size; b.kind = kind;
-    blipList.push(b);
+    blipList[blipN++] = b;
   }
   var TYPE_LABEL = { race: 'STREET RACE', courier: 'COURIER RUN', rampage: 'RAMPAGE' };
   // the POI line's words for a marker (kind 1) or a respray door (kind 2),
@@ -1715,7 +1716,7 @@ GAME.missions = (function () {
     getBlips: function () {
       // `kind` keys each blip to its legend entry, so the map legend can
       // hide and show marker families like a chart legend
-      blipList.length = 0;
+      blipN = 0;
       var rs = GAME.city.pois.resprays;
       for (var r = 0; r < rs.length; r++) putBlip(rs[r].door.x, rs[r].door.z, '#c86bff', 4, 'respray');
       if (!active) {
@@ -1734,6 +1735,7 @@ GAME.missions = (function () {
         }
         if (cpMarker.visible) putBlip(cpMarker.position.x, cpMarker.position.z, '#ffe14f', 5, 'objective');
       }
+      blipList.length = blipN;
       return blipList;
     }
   };
