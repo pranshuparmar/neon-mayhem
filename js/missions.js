@@ -1469,12 +1469,20 @@ GAME.missions = (function () {
       active.routeT = (active.routeT || 0) - dt;
       if (active.routeT <= 0 || active.routeCp !== active.cpIndex) {
         active.routeT = 1.0; active.routeCp = active.cpIndex;
-        var rc = P.car ? [P.car.pos.x, P.car.pos.z] : [P.pos.x, P.pos.z];
+        // Only the first leg, from wherever the car is now, changes during a
+        // race; the legs between checkpoints are the same all the way round.
+        // They were routed afresh every second regardless — twenty legs of
+        // path-finding a second on the long island races — and are kept now,
+        // routed again only if the bridge gates change what can be driven.
+        var gated = !!(GAME.isla && !GAME.isla.isOpen());
+        if (!active.legs || active.legsGated !== gated) { active.legs = []; active.legsGated = gated; }
         var pts = [];
-        for (var k = active.cpIndex; k < d2.cps.length; k++) {
-          var seg = roadRoute(rc[0], rc[1], d2.cps[k][0], d2.cps[k][1]);
-          for (var si = 0; si < seg.length; si++) pts.push(seg[si]);
-          rc = d2.cps[k];
+        var here = P.car ? P.car.pos : P.pos;
+        var first = roadRoute(here.x, here.z, d2.cps[active.cpIndex][0], d2.cps[active.cpIndex][1]);
+        for (var si = 0; si < first.length; si++) pts.push(first[si]);
+        for (var k = active.cpIndex + 1; k < d2.cps.length; k++) {
+          var seg = active.legs[k] || (active.legs[k] = roadRoute(d2.cps[k - 1][0], d2.cps[k - 1][1], d2.cps[k][0], d2.cps[k][1]));
+          for (si = 0; si < seg.length; si++) pts.push(seg[si]);
         }
         active.raceRoute = pts;
       }

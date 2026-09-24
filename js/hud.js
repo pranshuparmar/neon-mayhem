@@ -1081,14 +1081,20 @@ GAME.hud = (function () {
 GAME.nav = (function () {
   var dest = null, path = [], recompT = 0;
 
-  function key(n) { return n.id; }
-
   // Dijkstra over edge length along the road-node graph; [{x,z}...] start->goal.
   // Hop-count BFS minimized the wrong thing once the island joined: its lane
   // links run ~34 m against the mainland's ~100 m blocks, so "fewest edges"
   // biased routes onto fewer-but-longer mainland legs. Metres win now. The
-  // graph is a few hundred nodes and this runs at most every 1.5 s, so the
-  // heapless closest-first scan is comfortably inside budget.
+  // graph is a few hundred nodes, so the heapless closest-first scan is
+  // comfortably inside budget.
+  //
+  // The search's working state lives in typed arrays, one slot per road node
+  // (a node's id is its index), reused by every call and told apart by a
+  // generation stamp. A route is asked for every second along a race line,
+  // every 1.5 s by the map and every 2.5 s by each rival, and each ask used
+  // to build three maps and an open list afresh, then splice the open list
+  // once per node it settled.
+  var pDist = null, pPrev = null, pSeen = null, pDone = null, pGen = 0, pOpen = [];
   function roadPath(x0, z0, x1, z1) {
     var start = GAME.city.nearestNode(x0, z0);
     var goal = GAME.city.nearestNode(x1, z1);
@@ -1097,36 +1103,49 @@ GAME.nav = (function () {
     // off the graph, so a cross-channel destination degrades to a stub at
     // the far end instead of a confident line through the police barrier
     var gated = GAME.isla && !GAME.isla.isOpen();
-    var dist = {}, prev = {}, done = {}, open = [start];
-    dist[key(start)] = 0; prev[key(start)] = null;
-    while (open.length) {
+    var nodes = GAME.city.nodes;
+    if (!pDist || pDist.length < nodes.length) {
+      pDist = new Float64Array(nodes.length); pPrev = new Int32Array(nodes.length);
+      pSeen = new Uint32Array(nodes.length); pDone = new Uint32Array(nodes.length); pGen = 0;
+    }
+    // (the open list is sized by a count of its own, never by its length:
+    // truncating a JS array to nothing drops its storage, and it would be
+    // grown again on every call)
+    var g = ++pGen, open = pOpen, on = 0;
+    open[on++] = start;
+    pSeen[start.id] = g; pDist[start.id] = 0; pPrev[start.id] = -1;
+    while (on) {
       var bi = 0;
-      for (var i = 1; i < open.length; i++) if (dist[key(open[i])] < dist[key(open[bi])]) bi = i;
-      var n = open.splice(bi, 1)[0];
-      var nk = key(n);
-      if (done[nk]) continue;
-      done[nk] = true;
+      for (var i = 1; i < on; i++) if (pDist[open[i].id] < pDist[open[bi].id]) bi = i;
+      var n = open[bi];
+      // taken out in place, keeping the rest in order (as splice did), so
+      // among equally short routes the same one wins as before
+      for (var k = bi; k < on - 1; k++) open[k] = open[k + 1];
+      on--;
+      var nk = n.id;
+      if (pDone[nk] === g) continue;
+      pDone[nk] = g;
       if (n === goal) break;
       var nbs = GAME.city.neighbors(n);
       for (var j = 0; j < nbs.length; j++) {
         var b = nbs[j];
         if (gated && b.span) continue;
-        var bk = key(b);
-        if (done[bk]) continue;
-        var d = dist[nk] + U.dist(n.x, n.z, b.x, b.z);
-        if (dist[bk] === undefined || d < dist[bk]) {
-          dist[bk] = d; prev[bk] = n;
-          open.push(b);
+        var bk = b.id;
+        if (pDone[bk] === g) continue;
+        var d = pDist[nk] + U.dist(n.x, n.z, b.x, b.z);
+        if (pSeen[bk] !== g || d < pDist[bk]) {
+          pSeen[bk] = g; pDist[bk] = d; pPrev[bk] = nk;
+          open[on++] = b;
         }
       }
     }
     // an unreached goal is no route at all: the degraded walk-back used to
     // hand back a single far-end stub, and the map drew the player-to-stub
     // connector as a confident schematic line straight across the water
-    if (!(key(goal) in prev)) return [];
-    var out = [], cur = goal;
-    while (cur) { out.unshift({ x: cur.x, z: cur.z }); cur = prev[key(cur)]; }
-    return out;
+    if (pSeen[goal.id] !== g) return [];
+    var out = [], cur = goal.id;
+    while (cur >= 0) { out.push({ x: nodes[cur].x, z: nodes[cur].z }); cur = pPrev[cur]; }
+    return out.reverse();
   }
 
   function computePath() {
