@@ -362,6 +362,21 @@ GAME.city = (function () {
     t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.RepeatWrapping;
     return t;
   }
+  // Once a canvas texture is on the GPU, the canvas behind it is a second copy
+  // that nothing reads again: none of these is ever redrawn. So the copy is
+  // shrunk to nothing right after the first upload, about 10 MB of 2D canvas
+  // across the city's textures. The cost is the one the static geometry
+  // already pays: a lost WebGL context would come back with these blank, and
+  // the game does not restore contexts. Only for textures drawn by the main
+  // renderer — the shop preview's own context never samples any of them.
+  function releaseAfterUpload(tex) {
+    tex.onUpdate = function () {
+      tex.onUpdate = null;
+      var im = tex.image;
+      if (im && im.getContext) im.width = im.height = 1;
+    };
+    return tex;
+  }
 
   // Two images, not one, and the reason is the whole business of a building
   // having a colour at all.
@@ -409,9 +424,17 @@ GAME.city = (function () {
     // only the pale twins have a glow apart from their map (see above)
     var gv = null, e = null;
     if (opts.glowAll) {
+      // Half the resolution of the wall, drawn in the wall's own coordinates.
+      // The glow only says which windows are lit and how brightly, and at a
+      // street's distance or further the two sizes cannot be told apart; up
+      // against a facade a lit window's edge is a little softer. It saves
+      // three quarters of each one's GPU memory, about 0.8 MB a texture, four
+      // of them. (Compared side by side at street level and across the
+      // skyline before it was chosen.)
       gv = document.createElement('canvas');
-      gv.width = 512; gv.height = 384;
+      gv.width = 256; gv.height = 192;
       e = gv.getContext('2d');
+      e.scale(0.5, 0.5);
       e.fillStyle = '#000'; e.fillRect(0, 0, 512, 384);
     }
     var cw = 512 / cols, ch = 384 / rows;
@@ -444,7 +467,10 @@ GAME.city = (function () {
     var wv = parseInt(wall.slice(1), 16);
     var wallMax = Math.max((wv >> 16) & 255, (wv >> 8) & 255, wv & 255) / 255;
     var map = repeatTex(cv);
-    return { map: map, glow: gv ? repeatTex(gv) : map, cells: [cols, rows], wallMax: wallMax };
+    // (a pale wall keeps its canvas: testFacadeContrast reads the wall's
+    // colour off it; its glow and every dark wall let theirs go)
+    if (!opts.glowAll) releaseAfterUpload(map);
+    return { map: map, glow: gv ? releaseAfterUpload(repeatTex(gv)) : map, cells: [cols, rows], wallMax: wallMax };
   }
 
   // ---------- window light ----------
@@ -583,7 +609,7 @@ GAME.city = (function () {
       g.restore();
       slots.push({ u0: x / 1024, v0: 1 - (y + ROW) / 1024, u1: (x + 512) / 1024, v1: 1 - y / 1024 });
     }
-    return { tex: new THREE.CanvasTexture(cv), slots: slots };
+    return { tex: releaseAfterUpload(new THREE.CanvasTexture(cv)), slots: slots };
   }
   // One canvas per colour: the city, the island and the shops each ask for the
   // same soft pool, and each ask used to draw and upload a copy of its own.
@@ -597,7 +623,7 @@ GAME.city = (function () {
     var gr = g.createRadialGradient(64, 64, 4, 64, 64, 62);
     gr.addColorStop(0, color); gr.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
-    return (glowTexCache[color] = new THREE.CanvasTexture(cv));
+    return (glowTexCache[color] = releaseAfterUpload(new THREE.CanvasTexture(cv)));
   }
   city.glowTexture = radialGlowTexture;
 
@@ -1513,7 +1539,7 @@ GAME.city = (function () {
       var gr = g.createLinearGradient(0, 256, 0, 0);
       for (var i = 0; i < stops.length; i++) gr.addColorStop(stops[i][0], stops[i][1]);
       g.fillStyle = gr; g.fillRect(0, 0, 32, 256);
-      return new THREE.CanvasTexture(cv);
+      return releaseAfterUpload(new THREE.CanvasTexture(cv));
     }
 
   function buildSky(scene) {

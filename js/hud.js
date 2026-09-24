@@ -235,6 +235,10 @@ GAME.hud = (function () {
     });
 
     el['bigmap'].addEventListener('click', onMapClick);
+    // the full map is drawn to size each time it opens (drawBigMap), so while
+    // it is shut its canvas holds nothing — ~1.7 MB it used to keep for the
+    // rest of the session after the first look
+    el['bigmap'].width = el['bigmap'].height = 0;
     el['map-clear'].addEventListener('click', function () { GAME.nav.clear(); drawBigMap(); });
     el['map-close'].addEventListener('click', function () { api.toggleMap(false); });
     // like the pause screen: a click on the dark around the map closes it
@@ -901,7 +905,10 @@ GAME.hud = (function () {
       // the sim loop halts while the map is open; syncOverlayMusic below
       // silences every voice the halted tick would otherwise leave held
       if (open) drawBigMap();
-      else if (!GAME.paused) GAME.audio.resume(); // don't leave the context suspended
+      else {
+        el.bigmap.width = el.bigmap.height = 0;
+        if (!GAME.paused) GAME.audio.resume(); // don't leave the context suspended
+      }
       // the map is a mouse screen: hand the cursor back without touching
       // fullscreen (Esc would drop both, which is why we never make the
       // player reach for it)
