@@ -146,36 +146,42 @@ var VEHICLES = {
 // plus the baked-in colors. The palettes are small and finite, so the cache
 // tops out at a few dozen geometries and every spawn after the first reuses
 // them: the bubble stops paying typed-array and GPU-upload tax per car.
-// (The batch is still filled on a hit — plain array pushes, near-free.)
+// The builder's boxes are laid only on a miss, too. They used to be laid on
+// every spawn and thrown away on a hit, and that was not near-free: seventy-
+// odd small arrays a box, 100-350 KB of garbage for every car the bubble made.
 var carGeoCache = {};
-function cachedGeo(key, batch) {
+function cachedGeo(key, fill) {
   var g = carGeoCache[key];
-  if (!g) { g = batch.build(); g.userData.shared = true; carGeoCache[key] = g; }
+  if (!g) {
+    var b = new GeoBatch();
+    fill(b);
+    g = b.build(); g.userData.shared = true; carGeoCache[key] = g;
+  }
   return g;
 }
 
 function buildBikeMesh(colorHex, trim) {
   var g = new THREE.Group();
-  var b = new GeoBatch();
-  b.addBox(0, 0.62, 0, 0.28, 0.34, 1.5, 0, colorHex, 0);       // fuel tank / frame
-  b.addBox(0, 0.78, -0.55, 0.42, 0.14, 0.5, 0, 0x141824, 0);    // seat
-  b.addBox(0, 0.98, 0.62, 0.5, 0.1, 0.1, 0, 0x101014, 0);       // handlebars
-  b.addBox(0, 0.7, 0.7, 0.2, 0.24, 0.24, 0, 0x0c0c10, 0);       // front cowl — wider than the wheel so their side faces don't share a plane
-  if (trim) {
-    // the GT wears a full fairing, a tail cowl and racing stripes in its
-    // trim color — reads as a different machine at a glance
-    b.addBox(0, 0.56, 0.42, 0.4, 0.34, 0.6, 0, colorHex, 0);    // fairing
-    b.addBox(0, 0.6, 0.455, 0.44, 0.1, 0.62, 0, trim, 0);       // fairing stripe — nosed past the tank so their front faces split
-    b.addBox(0, 0.82, -0.86, 0.34, 0.16, 0.34, 0, colorHex, 0); // tail cowl
-    b.addBox(0, 0.8, 0, 0.32, 0.06, 1.56, 0, trim, 0);          // spine stripe — its top clears the seat's by 2 cm
-    b.addBox(0, 0.9, 0.58, 0.34, 0.16, 0.1, 0, 0x141824, 0);    // screen
-  }
-  var wheel = new GeoBatch();
-  wheel.addBox(0, 0.34, 0.82, 0.16, 0.68, 0.68, 0, 0x0c0c10, 0);
-  wheel.addBox(0, 0.34, -0.82, 0.16, 0.68, 0.68, 0, 0x0c0c10, 0);
-  var body = new THREE.Mesh(cachedGeo('bike|' + colorHex + '|' + (trim || 0), b), sharedVertexLambert());
+  var body = new THREE.Mesh(cachedGeo('bike|' + colorHex + '|' + (trim || 0), function (b) {
+    b.addBox(0, 0.62, 0, 0.28, 0.34, 1.5, 0, colorHex, 0);       // fuel tank / frame
+    b.addBox(0, 0.78, -0.55, 0.42, 0.14, 0.5, 0, 0x141824, 0);    // seat
+    b.addBox(0, 0.98, 0.62, 0.5, 0.1, 0.1, 0, 0x101014, 0);       // handlebars
+    b.addBox(0, 0.7, 0.7, 0.2, 0.24, 0.24, 0, 0x0c0c10, 0);       // front cowl — wider than the wheel so their side faces don't share a plane
+    if (trim) {
+      // the GT wears a full fairing, a tail cowl and racing stripes in its
+      // trim color — reads as a different machine at a glance
+      b.addBox(0, 0.56, 0.42, 0.4, 0.34, 0.6, 0, colorHex, 0);    // fairing
+      b.addBox(0, 0.6, 0.455, 0.44, 0.1, 0.62, 0, trim, 0);       // fairing stripe — nosed past the tank so their front faces split
+      b.addBox(0, 0.82, -0.86, 0.34, 0.16, 0.34, 0, colorHex, 0); // tail cowl
+      b.addBox(0, 0.8, 0, 0.32, 0.06, 1.56, 0, trim, 0);          // spine stripe — its top clears the seat's by 2 cm
+      b.addBox(0, 0.9, 0.58, 0.34, 0.16, 0.1, 0, 0x141824, 0);    // screen
+    }
+  }), sharedVertexLambert());
   g.add(body);
-  g.add(new THREE.Mesh(cachedGeo('bikewheels', wheel), sharedVertexLambert()));
+  g.add(new THREE.Mesh(cachedGeo('bikewheels', function (wheel) {
+    wheel.addBox(0, 0.34, 0.82, 0.16, 0.68, 0.68, 0, 0x0c0c10, 0);
+    wheel.addBox(0, 0.34, -0.82, 0.16, 0.68, 0.68, 0, 0x0c0c10, 0);
+  }), sharedVertexLambert()));
   var hl = new THREE.Mesh(sharedBoxGeo(0.2, 0.14, 0.06), sharedBasic(0xfff2c0));
   hl.position.set(0, 0.72, 0.83);
   g.add(hl);
@@ -198,40 +204,40 @@ function buildBikeRider() {
 
 function buildHeliMesh(colorHex, gunship) {
   var g = new THREE.Group();
-  var b = new GeoBatch();
-  b.addBox(0, 1.2, -0.6, 2.2, 1.7, 3.6, 0, colorHex, 0);        // cabin
-  if (gunship) {
-    // chin gun, stub wings and rocket pods — it reads military at a glance
-    b.addBox(0, 0.62, 1.35, 0.26, 0.26, 1.1, 0, 0x161a12, 0);
-    for (var gs = -1; gs <= 1; gs += 2) {
-      b.addBox(gs * 1.85, 1.05, -0.9, 1.5, 0.16, 0.56, 0, 0x2c3626, 0);
-      b.addBox(gs * 2.45, 0.82, -0.9, 0.52, 0.5, 1.7, 0, 0x1f2a1a, 0);
+  var body = new THREE.Mesh(cachedGeo('heli|' + colorHex + '|' + (gunship ? 1 : 0), function (b) {
+    b.addBox(0, 1.2, -0.6, 2.2, 1.7, 3.6, 0, colorHex, 0);        // cabin
+    if (gunship) {
+      // chin gun, stub wings and rocket pods — it reads military at a glance
+      b.addBox(0, 0.62, 1.35, 0.26, 0.26, 1.1, 0, 0x161a12, 0);
+      for (var gs = -1; gs <= 1; gs += 2) {
+        b.addBox(gs * 1.85, 1.05, -0.9, 1.5, 0.16, 0.56, 0, 0x2c3626, 0);
+        b.addBox(gs * 2.45, 0.82, -0.9, 0.52, 0.5, 1.7, 0, 0x1f2a1a, 0);
+      }
     }
-  }
-  // the canopy rides proud of the cabin roof — flush tops fight for depth
-  // (the airplane's cockpit learned this first)
-  b.addBox(0, 1.52, 1.2, 1.7, 1.1, 1.4, 0, 0x141824, 0);        // canopy glass
-  b.addBox(0, 1.4, -3.4, 0.5, 0.5, 3.6, 0, colorHex, 0);        // tail boom
-  b.addBox(0, 1.9, -5.1, 0.16, 1.1, 0.7, 0, colorHex, 0);       // tail fin
-  b.addBox(-0.9, 0.1, -0.4, 0.14, 0.14, 3.4, 0, 0x0c0c10, 0);   // left skid
-  b.addBox(0.9, 0.1, -0.4, 0.14, 0.14, 3.4, 0, 0x0c0c10, 0);    // right skid
-  b.addBox(-0.9, 0.5, 0.6, 0.1, 0.7, 0.1, 0, 0x0c0c10, 0);
-  b.addBox(0.9, 0.5, 0.6, 0.1, 0.7, 0.1, 0, 0x0c0c10, 0);
-  b.addBox(0, 2.05, -0.6, 0.24, 0.3, 0.24, 0, 0x0c0c10, 0);     // rotor mast
-  var body = new THREE.Mesh(cachedGeo('heli|' + colorHex + '|' + (gunship ? 1 : 0), b), sharedVertexLambert());
+    // the canopy rides proud of the cabin roof — flush tops fight for depth
+    // (the airplane's cockpit learned this first)
+    b.addBox(0, 1.52, 1.2, 1.7, 1.1, 1.4, 0, 0x141824, 0);        // canopy glass
+    b.addBox(0, 1.4, -3.4, 0.5, 0.5, 3.6, 0, colorHex, 0);        // tail boom
+    b.addBox(0, 1.9, -5.1, 0.16, 1.1, 0.7, 0, colorHex, 0);       // tail fin
+    b.addBox(-0.9, 0.1, -0.4, 0.14, 0.14, 3.4, 0, 0x0c0c10, 0);   // left skid
+    b.addBox(0.9, 0.1, -0.4, 0.14, 0.14, 3.4, 0, 0x0c0c10, 0);    // right skid
+    b.addBox(-0.9, 0.5, 0.6, 0.1, 0.7, 0.1, 0, 0x0c0c10, 0);
+    b.addBox(0.9, 0.5, 0.6, 0.1, 0.7, 0.1, 0, 0x0c0c10, 0);
+    b.addBox(0, 2.05, -0.6, 0.24, 0.3, 0.24, 0, 0x0c0c10, 0);     // rotor mast
+  }), sharedVertexLambert());
   g.add(body);
   // spinning main rotor
-  var rg = new GeoBatch();
-  // the blades stack 2 cm apart at the hub, like real ones — crossing in the
-  // same plane, their top and bottom faces flickered where they met
-  rg.addBox(0, 0, 0, 0.3, 0.06, 11, 0, 0x1a1a20, 0);
-  rg.addBox(0, 0.08, 0, 11, 0.06, 0.3, 0, 0x1a1a20, 0);
-  var rotor = new THREE.Mesh(cachedGeo('helirotor', rg), sharedVertexLambert());
+  var rotor = new THREE.Mesh(cachedGeo('helirotor', function (rg) {
+    // the blades stack 2 cm apart at the hub, like real ones — crossing in the
+    // same plane, their top and bottom faces flickered where they met
+    rg.addBox(0, 0, 0, 0.3, 0.06, 11, 0, 0x1a1a20, 0);
+    rg.addBox(0, 0.08, 0, 11, 0.06, 0.3, 0, 0x1a1a20, 0);
+  }), sharedVertexLambert());
   rotor.position.set(0, 2.3, -0.6);
   g.add(rotor);
-  var tg = new GeoBatch();
-  tg.addBox(0, 0, 0, 0.14, 0.05, 2.2, 0, 0x1a1a20, 0);
-  var tail = new THREE.Mesh(cachedGeo('helitail', tg), sharedVertexLambert());
+  var tail = new THREE.Mesh(cachedGeo('helitail', function (tg) {
+    tg.addBox(0, 0, 0, 0.14, 0.05, 2.2, 0, 0x1a1a20, 0);
+  }), sharedVertexLambert());
   tail.position.set(0.2, 1.9, -5.1);
   g.add(tail);
   var hl = new THREE.Mesh(sharedBoxGeo(0.3, 0.16, 0.06), sharedBasic(0xfff2c0));
@@ -247,27 +253,27 @@ function buildPlaneMesh(colors) {
   var body = colors[0], accent = colors[1] || 0xff2f7a;
   var g = new THREE.Group();
   g.rotation.order = 'YXZ';
-  var b = new GeoBatch();
-  b.addBox(0, 1.2, 0, 1.5, 1.5, 9, 0, body, 0);            // fuselage
-  // the canopy rides proud of the fuselage: with both tops on the same plane
-  // (1.95) the dark glass and the body fought for depth and the roof flickered
-  b.addBox(0, 1.62, 3.0, 1.1, 0.9, 2.2, 0, 0x141824, 0);   // cockpit glass
-  b.addBox(0, 1.35, -0.4, 12, 0.28, 2.2, 0, body, 0);      // main wing
-  // the stripe stands clear of the wing on every face — flush tops shimmer
-  b.addBox(0, 1.35, -0.4, 12.1, 0.36, 0.36, 0, accent, 0); // wing stripe
-  b.addBox(0, 1.4, -4.4, 4.4, 0.22, 1.2, 0, body, 0);      // tailplane
-  b.addBox(0, 2.1, -4.4, 0.22, 1.6, 1.16, 0, accent, 0);   // vertical fin — a shade shorter than the tailplane so their edges don't share planes
-  b.addBox(-0.55, 0.35, 1.0, 0.14, 0.7, 0.14, 0, 0x0c0c10, 0);
-  b.addBox(0.55, 0.35, 1.0, 0.14, 0.7, 0.14, 0, 0x0c0c10, 0);
-  b.addBox(0, 0.4, -3.5, 0.12, 0.5, 0.12, 0, 0x0c0c10, 0);
-  var mesh = new THREE.Mesh(cachedGeo('plane|' + body + '|' + accent, b), sharedVertexLambert());
+  var mesh = new THREE.Mesh(cachedGeo('plane|' + body + '|' + accent, function (b) {
+    b.addBox(0, 1.2, 0, 1.5, 1.5, 9, 0, body, 0);            // fuselage
+    // the canopy rides proud of the fuselage: with both tops on the same plane
+    // (1.95) the dark glass and the body fought for depth and the roof flickered
+    b.addBox(0, 1.62, 3.0, 1.1, 0.9, 2.2, 0, 0x141824, 0);   // cockpit glass
+    b.addBox(0, 1.35, -0.4, 12, 0.28, 2.2, 0, body, 0);      // main wing
+    // the stripe stands clear of the wing on every face — flush tops shimmer
+    b.addBox(0, 1.35, -0.4, 12.1, 0.36, 0.36, 0, accent, 0); // wing stripe
+    b.addBox(0, 1.4, -4.4, 4.4, 0.22, 1.2, 0, body, 0);      // tailplane
+    b.addBox(0, 2.1, -4.4, 0.22, 1.6, 1.16, 0, accent, 0);   // vertical fin — a shade shorter than the tailplane so their edges don't share planes
+    b.addBox(-0.55, 0.35, 1.0, 0.14, 0.7, 0.14, 0, 0x0c0c10, 0);
+    b.addBox(0.55, 0.35, 1.0, 0.14, 0.7, 0.14, 0, 0x0c0c10, 0);
+    b.addBox(0, 0.4, -3.5, 0.12, 0.5, 0.12, 0, 0x0c0c10, 0);
+  }), sharedVertexLambert());
   g.add(mesh);
   // nose light + spinning prop
-  var pg = new GeoBatch();
-  // same trick as the rotor: crossed blades sit 2 cm apart in depth
-  pg.addBox(0, 0, 0, 0.24, 3.4, 0.14, 0, 0x1a1a20, 0);
-  pg.addBox(0, 0, 0.02, 3.4, 0.24, 0.14, 0, 0x1a1a20, 0);
-  var prop = new THREE.Mesh(cachedGeo('planeprop', pg), sharedVertexLambert());
+  var prop = new THREE.Mesh(cachedGeo('planeprop', function (pg) {
+    // same trick as the rotor: crossed blades sit 2 cm apart in depth
+    pg.addBox(0, 0, 0, 0.24, 3.4, 0.14, 0, 0x1a1a20, 0);
+    pg.addBox(0, 0, 0.02, 3.4, 0.24, 0.14, 0, 0x1a1a20, 0);
+  }), sharedVertexLambert());
   prop.position.set(0, 1.2, 4.7);
   g.add(prop);
   var hl = new THREE.Mesh(sharedBoxGeo(0.3, 0.16, 0.06), sharedBasic(0xfff2c0));
@@ -280,25 +286,25 @@ function buildPlaneMesh(colors) {
 
 function buildMonsterMesh(colorHex) {
   var g = new THREE.Group();
-  var b = new GeoBatch();
-  b.addBox(0, 1.85, 0, 2.3, 0.9, 4.6, 0, colorHex, 0);          // chassis
-  b.addBox(0, 2.65, -0.3, 1.9, 0.85, 2.2, 0, 0x141824, 0);      // cab
-  b.addBox(0, 1.25, 0, 0.5, 0.35, 4.0, 0, 0x22262e, 0);         // spine
-  b.addBox(0, 1.85, 2.35, 2.2, 0.5, 0.2, 0, 0x22262e, 0);       // bar
-  var wh = new GeoBatch();
-  // the tyre tops used to land on exactly the chassis top (both y=2.30) and the
-  // two coplanar faces fought for depth wherever they overlapped — tucked under
-  // it now, still sitting on the ground at y=0
-  [[1.25, 1.5], [-1.25, 1.5], [1.25, -1.5], [-1.25, -1.5]].forEach(function (w) {
-    wh.addBox(w[0], 1.06, w[1], 0.62, 2.12, 2.12, 0, 0x0c0c10, 0);
-  });
-  var body = new THREE.Mesh(cachedGeo('monster|' + colorHex, b), sharedVertexLambert());
+  var body = new THREE.Mesh(cachedGeo('monster|' + colorHex, function (b) {
+    b.addBox(0, 1.85, 0, 2.3, 0.9, 4.6, 0, colorHex, 0);          // chassis
+    b.addBox(0, 2.65, -0.3, 1.9, 0.85, 2.2, 0, 0x141824, 0);      // cab
+    b.addBox(0, 1.25, 0, 0.5, 0.35, 4.0, 0, 0x22262e, 0);         // spine
+    b.addBox(0, 1.85, 2.35, 2.2, 0.5, 0.2, 0, 0x22262e, 0);       // bar
+  }), sharedVertexLambert());
   g.add(body);
-  g.add(new THREE.Mesh(cachedGeo('monsterwheels', wh), sharedVertexLambert()));
-  var glow = new GeoBatch();
-  glow.addBox(0.7, 2.1, 2.32, 0.4, 0.2, 0.06, 0, 0xfff2c0, 0);
-  glow.addBox(-0.7, 2.1, 2.32, 0.4, 0.2, 0.06, 0, 0xfff2c0, 0);
-  g.add(new THREE.Mesh(cachedGeo('monsterglow', glow), sharedVertexBasic()));
+  g.add(new THREE.Mesh(cachedGeo('monsterwheels', function (wh) {
+    // the tyre tops used to land on exactly the chassis top (both y=2.30) and the
+    // two coplanar faces fought for depth wherever they overlapped — tucked under
+    // it now, still sitting on the ground at y=0
+    [[1.25, 1.5], [-1.25, 1.5], [1.25, -1.5], [-1.25, -1.5]].forEach(function (w) {
+      wh.addBox(w[0], 1.06, w[1], 0.62, 2.12, 2.12, 0, 0x0c0c10, 0);
+    });
+  }), sharedVertexLambert()));
+  g.add(new THREE.Mesh(cachedGeo('monsterglow', function (glow) {
+    glow.addBox(0.7, 2.1, 2.32, 0.4, 0.2, 0.06, 0, 0xfff2c0, 0);
+    glow.addBox(-0.7, 2.1, 2.32, 0.4, 0.2, 0.06, 0, 0xfff2c0, 0);
+  }), sharedVertexBasic()));
   g.userData.bodyMesh = body;
   return g;
 }
@@ -310,89 +316,89 @@ function buildCarMesh(type, colorHex) {
   if (s.heli) return buildHeliMesh(colorHex, s.gunship);
   if (s.bike) return buildBikeMesh(colorHex, s.trim);
   var g = new THREE.Group();
-  var b = new GeoBatch();
   var hl = s.l / 2, hw = s.w / 2;
-  b.addBox(0, 0.42, 0, s.w, s.bodyH, s.l, 0, colorHex, 0);
-  if (type === 'ambulance') {
-    // tall box body + red cross panels
-    b.addBox(0, 0.42 + s.bodyH / 2 + 0.5, -0.2, s.w, 1.0, s.l * 0.62, 0, colorHex, 0);
-    // the cross's two bars sit a centimetre apart in depth — sharing one
-    // plane, they fought where they crossed
-    b.addBox(hw + 0.01, 1.3, -0.2, 0.05, 0.5, 0.16, 0, 0xd83040, 0);
-    b.addBox(hw + 0.02, 1.3, -0.2, 0.05, 0.16, 0.5, 0, 0xd83040, 0);
-    b.addBox(-hw - 0.01, 1.3, -0.2, 0.05, 0.5, 0.16, 0, 0xd83040, 0);
-    b.addBox(-hw - 0.02, 1.3, -0.2, 0.05, 0.16, 0.5, 0, 0xd83040, 0);
-  }
-  if (type === 'icecream') {
-    // A tall, square, upright van: one slab of a body from the windscreen to
-    // the back doors, a stripe round it, a serving hatch with an awning on the
-    // kerb side, and a pair of cones on the roof you can see three streets
-    // away. The tall body stands 2 cm proud of the chassis slab underneath it:
-    // give them the same width and the two coplanar side faces fight for
-    // depth — that was the truck's flicker.
-    var boxTop = 2.55, bw = s.w + 0.04, bhw = bw / 2;
-    b.addBox(0, 1.5, -0.25, bw, 2.1, s.l * 0.78, 0, colorHex, 0);          // body
-    b.addBox(0, 1.02, hl - 0.42, s.w * 0.98, 0.92, 0.9, 0, colorHex, 0);   // stubby bonnet
-    b.addBox(0, 1.9, hl - 0.5, s.w * 0.84, 0.86, 0.14, 0, 0x141824, 0);    // windscreen
-    b.addBox(bhw - 0.02, 1.9, hl - 1.25, 0.1, 0.7, 1.0, 0, 0x141824, 0);   // cab windows
-    b.addBox(-bhw + 0.02, 1.9, hl - 1.25, 0.1, 0.7, 1.0, 0, 0x141824, 0);
-    // the livery: a pink band and a blue pinstripe wrapped round the van.
-    // Wider AND longer than the body — with the same length their end faces
-    // shared the body's front and rear planes, and the tail flickered
-    b.addBox(0, 1.28, -0.25, bw + 0.08, 0.34, s.l * 0.78 + 0.06, 0, 0xff7fb2, 0);
-    b.addBox(0, 1.02, -0.25, bw + 0.08, 0.1, s.l * 0.78 + 0.06, 0, 0x53c8ea, 0);
-    // serving hatch, awning and counter on the kerb side — the hatch sits
-    // clear of the stripe band's face rather than in the same plane as it
-    b.addBox(bhw + 0.07, 1.82, -0.5, 0.08, 0.9, 1.9, 0, 0x2a2230, 0);
-    b.addBox(bhw + 0.38, 2.36, -0.5, 0.72, 0.08, 2.1, 0, 0xff7fb2, 0);
-    b.addBox(bhw + 0.2, 1.3, -0.5, 0.34, 0.1, 2.0, 0, 0xf0e6d2, 0);
-    // roof cones, two abreast: both show from the front, and from the side
-    // they sit in the same slice so they read as one
-    [-0.5, 0.5].forEach(function (cx2) {
-      b.addBox(cx2, boxTop + 0.05, -0.3, 0.5, 0.5, 0.5, 0.7, 0xe0a860, 0);
-      b.addBox(cx2, boxTop + 0.42, -0.3, 0.66, 0.34, 0.66, 0.35, 0xffd7e4, 0);
-      b.addBox(cx2, boxTop + 0.72, -0.3, 0.5, 0.3, 0.5, 0.9, 0xfff0f4, 0);
-      b.addBox(cx2, boxTop + 0.94, -0.3, 0.28, 0.24, 0.28, 0, 0xffd7e4, 0);
+  var body = new THREE.Mesh(cachedGeo('car|' + type + '|' + colorHex, function (b) {
+    b.addBox(0, 0.42, 0, s.w, s.bodyH, s.l, 0, colorHex, 0);
+    if (type === 'ambulance') {
+      // tall box body + red cross panels
+      b.addBox(0, 0.42 + s.bodyH / 2 + 0.5, -0.2, s.w, 1.0, s.l * 0.62, 0, colorHex, 0);
+      // the cross's two bars sit a centimetre apart in depth — sharing one
+      // plane, they fought where they crossed
+      b.addBox(hw + 0.01, 1.3, -0.2, 0.05, 0.5, 0.16, 0, 0xd83040, 0);
+      b.addBox(hw + 0.02, 1.3, -0.2, 0.05, 0.16, 0.5, 0, 0xd83040, 0);
+      b.addBox(-hw - 0.01, 1.3, -0.2, 0.05, 0.5, 0.16, 0, 0xd83040, 0);
+      b.addBox(-hw - 0.02, 1.3, -0.2, 0.05, 0.16, 0.5, 0, 0xd83040, 0);
+    }
+    if (type === 'icecream') {
+      // A tall, square, upright van: one slab of a body from the windscreen to
+      // the back doors, a stripe round it, a serving hatch with an awning on the
+      // kerb side, and a pair of cones on the roof you can see three streets
+      // away. The tall body stands 2 cm proud of the chassis slab underneath it:
+      // give them the same width and the two coplanar side faces fight for
+      // depth — that was the truck's flicker.
+      var boxTop = 2.55, bw = s.w + 0.04, bhw = bw / 2;
+      b.addBox(0, 1.5, -0.25, bw, 2.1, s.l * 0.78, 0, colorHex, 0);          // body
+      b.addBox(0, 1.02, hl - 0.42, s.w * 0.98, 0.92, 0.9, 0, colorHex, 0);   // stubby bonnet
+      b.addBox(0, 1.9, hl - 0.5, s.w * 0.84, 0.86, 0.14, 0, 0x141824, 0);    // windscreen
+      b.addBox(bhw - 0.02, 1.9, hl - 1.25, 0.1, 0.7, 1.0, 0, 0x141824, 0);   // cab windows
+      b.addBox(-bhw + 0.02, 1.9, hl - 1.25, 0.1, 0.7, 1.0, 0, 0x141824, 0);
+      // the livery: a pink band and a blue pinstripe wrapped round the van.
+      // Wider AND longer than the body — with the same length their end faces
+      // shared the body's front and rear planes, and the tail flickered
+      b.addBox(0, 1.28, -0.25, bw + 0.08, 0.34, s.l * 0.78 + 0.06, 0, 0xff7fb2, 0);
+      b.addBox(0, 1.02, -0.25, bw + 0.08, 0.1, s.l * 0.78 + 0.06, 0, 0x53c8ea, 0);
+      // serving hatch, awning and counter on the kerb side — the hatch sits
+      // clear of the stripe band's face rather than in the same plane as it
+      b.addBox(bhw + 0.07, 1.82, -0.5, 0.08, 0.9, 1.9, 0, 0x2a2230, 0);
+      b.addBox(bhw + 0.38, 2.36, -0.5, 0.72, 0.08, 2.1, 0, 0xff7fb2, 0);
+      b.addBox(bhw + 0.2, 1.3, -0.5, 0.34, 0.1, 2.0, 0, 0xf0e6d2, 0);
+      // roof cones, two abreast: both show from the front, and from the side
+      // they sit in the same slice so they read as one
+      [-0.5, 0.5].forEach(function (cx2) {
+        b.addBox(cx2, boxTop + 0.05, -0.3, 0.5, 0.5, 0.5, 0.7, 0xe0a860, 0);
+        b.addBox(cx2, boxTop + 0.42, -0.3, 0.66, 0.34, 0.66, 0.35, 0xffd7e4, 0);
+        b.addBox(cx2, boxTop + 0.72, -0.3, 0.5, 0.3, 0.5, 0.9, 0xfff0f4, 0);
+        b.addBox(cx2, boxTop + 0.94, -0.3, 0.28, 0.24, 0.28, 0, 0xffd7e4, 0);
+      });
+      // a chime horn on the roof, because the chimes have to come from somewhere
+      b.addBox(-0.62, boxTop + 0.15, 0.9, 0.3, 0.3, 0.44, 0, 0xd8c47a, 0);
+    }
+    if (type === 'pickup') {
+      b.addBox(0, 0.42 + s.bodyH / 2 + 0.22, -1.05, s.w, 0.45, s.l * 0.44, 0, 0x2a2a34, 0);   // bed walls
+    }
+    var cabL = s.l * (type === 'van' ? 0.85 : type === 'icecream' ? 0.34 : type === 'limo' ? 0.72 : 0.5);
+    var cabZ = type === 'sports' ? -0.35 : type === 'van' ? -0.1
+      : type === 'icecream' ? s.l * 0.28 : type === 'pickup' ? 0.35 : -0.15;
+    if (s.buggy) {
+      // no cabin at all: a roll hoop over an open tub. The cross bar is wider
+      // than the posts — matching widths put their side faces in one plane
+      b.addBox(0, 1.05, -0.5, 0.12, 1.2, 0.12, 0, 0x2a2a34, 0);
+      b.addBox(0, 1.05, 0.5, 0.12, 1.2, 0.12, 0, 0x2a2a34, 0);
+      b.addBox(0, 1.6, 0, 0.16, 0.12, 1.1, 0, 0x2a2a34, 0);
+    }
+    if (s.cabinH > 0) {
+      b.addBox(0, 0.42 + s.bodyH / 2 + s.cabinH / 2 - 0.05, cabZ, s.w * 0.82, s.cabinH, cabL, 0, type === 'police' ? 0x20242e : 0x141824, 0);
+    }
+    b.addBox(0, 0.28, hl * 0.72, s.w * 0.9, 0.32, 0.55, 0, 0x22262e, 0);
+    b.addBox(0, 0.28, -hl * 0.72, s.w * 0.9, 0.32, 0.55, 0, 0x22262e, 0);
+    var wy = 0.32, wx = hw - 0.12, wz = hl * 0.56;
+    [[wx, wz], [-wx, wz], [wx, -wz], [-wx, -wz]].forEach(function (w) {
+      b.addBox(w[0], wy, w[1], 0.32, 0.64, 0.72, 0, 0x0c0c10, 0);
     });
-    // a chime horn on the roof, because the chimes have to come from somewhere
-    b.addBox(-0.62, boxTop + 0.15, 0.9, 0.3, 0.3, 0.44, 0, 0xd8c47a, 0);
-  }
-  if (type === 'pickup') {
-    b.addBox(0, 0.42 + s.bodyH / 2 + 0.22, -1.05, s.w, 0.45, s.l * 0.44, 0, 0x2a2a34, 0);   // bed walls
-  }
-  var cabL = s.l * (type === 'van' ? 0.85 : type === 'icecream' ? 0.34 : type === 'limo' ? 0.72 : 0.5);
-  var cabZ = type === 'sports' ? -0.35 : type === 'van' ? -0.1
-    : type === 'icecream' ? s.l * 0.28 : type === 'pickup' ? 0.35 : -0.15;
-  if (s.buggy) {
-    // no cabin at all: a roll hoop over an open tub. The cross bar is wider
-    // than the posts — matching widths put their side faces in one plane
-    b.addBox(0, 1.05, -0.5, 0.12, 1.2, 0.12, 0, 0x2a2a34, 0);
-    b.addBox(0, 1.05, 0.5, 0.12, 1.2, 0.12, 0, 0x2a2a34, 0);
-    b.addBox(0, 1.6, 0, 0.16, 0.12, 1.1, 0, 0x2a2a34, 0);
-  }
-  if (s.cabinH > 0) {
-    b.addBox(0, 0.42 + s.bodyH / 2 + s.cabinH / 2 - 0.05, cabZ, s.w * 0.82, s.cabinH, cabL, 0, type === 'police' ? 0x20242e : 0x141824, 0);
-  }
-  b.addBox(0, 0.28, hl * 0.72, s.w * 0.9, 0.32, 0.55, 0, 0x22262e, 0);
-  b.addBox(0, 0.28, -hl * 0.72, s.w * 0.9, 0.32, 0.55, 0, 0x22262e, 0);
-  var wy = 0.32, wx = hw - 0.12, wz = hl * 0.56;
-  [[wx, wz], [-wx, wz], [wx, -wz], [-wx, -wz]].forEach(function (w) {
-    b.addBox(w[0], wy, w[1], 0.32, 0.64, 0.72, 0, 0x0c0c10, 0);
-  });
-  if (type === 'police') {
-    // a centimetre up: its underside used to share the cabin's bottom plane
-    b.addBox(0, 0.42 + s.bodyH / 2 + 0.01, s.l * 0.28, s.w * 0.7, 0.1, 1.2, 0, 0x30405a, 0);
-  }
-  var body = new THREE.Mesh(cachedGeo('car|' + type + '|' + colorHex, b), sharedVertexLambert());
+    if (type === 'police') {
+      // a centimetre up: its underside used to share the cabin's bottom plane
+      b.addBox(0, 0.42 + s.bodyH / 2 + 0.01, s.l * 0.28, s.w * 0.7, 0.1, 1.2, 0, 0x30405a, 0);
+    }
+  }), sharedVertexLambert());
   g.add(body);
 
-  var glow = new GeoBatch();
-  glow.addBox(hw * 0.55, 0.5, hl + 0.02, 0.38, 0.16, 0.06, 0, 0xfff2c0, 0);
-  glow.addBox(-hw * 0.55, 0.5, hl + 0.02, 0.38, 0.16, 0.06, 0, 0xfff2c0, 0);
-  glow.addBox(hw * 0.55, 0.5, -hl - 0.02, 0.38, 0.14, 0.06, 0, 0xff3040, 0);
-  glow.addBox(-hw * 0.55, 0.5, -hl - 0.02, 0.38, 0.14, 0.06, 0, 0xff3040, 0);
-  if (type === 'taxi') glow.addBox(0, 1.35, -0.1, 0.7, 0.24, 0.34, 0, 0xffd040, 0);
-  var glowMesh = new THREE.Mesh(cachedGeo('carglow|' + type, glow), sharedVertexBasic());
+  var glowMesh = new THREE.Mesh(cachedGeo('carglow|' + type, function (glow) {
+    glow.addBox(hw * 0.55, 0.5, hl + 0.02, 0.38, 0.16, 0.06, 0, 0xfff2c0, 0);
+    glow.addBox(-hw * 0.55, 0.5, hl + 0.02, 0.38, 0.16, 0.06, 0, 0xfff2c0, 0);
+    glow.addBox(hw * 0.55, 0.5, -hl - 0.02, 0.38, 0.14, 0.06, 0, 0xff3040, 0);
+    glow.addBox(-hw * 0.55, 0.5, -hl - 0.02, 0.38, 0.14, 0.06, 0, 0xff3040, 0);
+    if (type === 'taxi') glow.addBox(0, 1.35, -0.1, 0.7, 0.24, 0.34, 0, 0xffd040, 0);
+  }), sharedVertexBasic());
   g.add(glowMesh);
 
   if (type === 'police') {
