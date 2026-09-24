@@ -1,6 +1,10 @@
 GAME.hud = (function () {
   var el = {};
-  var lastClock = '';
+  var lastClock = -1;
+  // what the per-tick readouts last wrote, so a tick that changes nothing
+  // builds no strings and touches no styles
+  var lastHealthW = -1, lastArmorW = -1, lastAirPct = -2, lastAirCol = '', vehicleLine;
+  var lastPoiHint = null;
   var shownCash = 0, targetCash = 0;
   var msgT = 0, countT = 0, zoneT = 0, lastZone = '';
   var radioT = 0;
@@ -267,9 +271,15 @@ GAME.hud = (function () {
   // cannot drift apart and a check standing on it cannot pass while either
   // one disagrees. A pad is treated exactly like the airport it shares a
   // legend row with: same family, same filter, same blip.
+  // (refilled, not rebuilt: the radar asks twenty times a second, and every
+  // caller reads the list straight away and keeps none of it)
+  var padBuf = [];
   function shownHelipads() {
-    if (!catVis('airport')) return [];
-    return [GAME.city.helipad, GAME.city.roofHelipad].filter(function (h) { return !!h; });
+    padBuf.length = 0;
+    if (!catVis('airport')) return padBuf;
+    if (GAME.city.helipad) padBuf.push(GAME.city.helipad);
+    if (GAME.city.roofHelipad) padBuf.push(GAME.city.roofHelipad);
+    return padBuf;
   }
   function pickupCat(t) { return t === 'health' ? 'health' : t === 'armor' ? 'armor' : 'weapon'; }
   function toggleCat(k) {
@@ -626,6 +636,25 @@ GAME.hud = (function () {
     return { mode: 'arrow', x: ux * lim, z: uz * lim, ux: ux, uz: uz, dist: rr };
   }
 
+  // The radar's two stamps. They were closures made afresh inside every draw,
+  // twenty draws a second; they read the draw's context, centre and zoom from
+  // here instead, set at the top of drawMinimap.
+  var mmG = null, mmPx = 0, mmPz = 0, mmZoom = 1;
+  function blip(x, z, color, size) {
+    var g = mmG;
+    g.fillStyle = color;
+    g.beginPath();
+    g.arc((x - mmPx) * MAP_S, (z - mmPz) * MAP_S, size, 0, Math.PI * 2);
+    g.fill();
+  }
+  // airport + helipad landmarks: a ringed cyan blip so they stand out on the radar
+  function landmark(x, z) {
+    var g = mmG, lx = (x - mmPx) * MAP_S, lz = (z - mmPz) * MAP_S;
+    g.fillStyle = '#8de0ff';
+    g.beginPath(); g.arc(lx, lz, 3.4 / mmZoom, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#ffffff'; g.lineWidth = 1.2 / mmZoom;
+    g.beginPath(); g.arc(lx, lz, 5.6 / mmZoom, 0, Math.PI * 2); g.stroke();
+  }
   function drawMinimap() {
     var cv = el.minimap, g = cv.getContext('2d');
     var P = GAME.player;
@@ -634,6 +663,7 @@ GAME.hud = (function () {
     var h = P.inCar && P.car ? P.car.heading : P.heading;
     g.clearRect(0, 0, 180, 180);
     var zoom = P.inCar ? 0.62 : 0.85;
+    mmG = g; mmPx = px; mmPz = pz; mmZoom = zoom;
     g.save();
     g.translate(90, 90);
     // heading-up radar: rotate so the player's forward direction points up
@@ -641,12 +671,6 @@ GAME.hud = (function () {
     g.scale(zoom, zoom);
     g.drawImage(mapBuffer, -(px + MAP_OX) * MAP_S, -(pz + MAP_OY) * MAP_S);
     // blips (drawn in the rotated frame so they track the map)
-    function blip(x, z, color, size) {
-      g.fillStyle = color;
-      g.beginPath();
-      g.arc((x - px) * MAP_S, (z - pz) * MAP_S, size, 0, Math.PI * 2);
-      g.fill();
-    }
     // weapon / health / armor pickups near the player
     var pk = GAME.world.pickups;
     for (var pu = 0; pu < pk.length; pu++) {
@@ -727,21 +751,15 @@ GAME.hud = (function () {
       if (mb[i].kind && !catVis(mb[i].kind)) continue;
       blip(mb[i].x, mb[i].z, mb[i].color, mb[i].size);
     }
-    // airport + helipad landmarks: a ringed cyan blip so they stand out on the radar
-    function landmark(x, z) {
-      var lx = (x - px) * MAP_S, lz = (z - pz) * MAP_S;
-      g.fillStyle = '#8de0ff';
-      g.beginPath(); g.arc(lx, lz, 3.4 / zoom, 0, Math.PI * 2); g.fill();
-      g.strokeStyle = '#ffffff'; g.lineWidth = 1.2 / zoom;
-      g.beginPath(); g.arc(lx, lz, 5.6 / zoom, 0, Math.PI * 2); g.stroke();
-    }
     // POI dots, live and legend-aware (they used to be baked into the base
     // image, where the legend couldn't touch them)
-    if (catVis('hospital')) GAME.city.pois.hospitals.forEach(function (H2) { blip(H2.x, H2.z, '#ff8aa8', 3); });
-    if (catVis('police')) GAME.city.pois.stations.forEach(function (st2) { blip(st2.x, st2.z, '#5aa0ff', 3); });
-    if (catVis('respray')) GAME.city.pois.resprays.forEach(function (r2) { blip(r2.door.x, r2.door.z, '#c86bff', 3); });
+    var pois = GAME.city.pois, pi;
+    if (catVis('hospital')) for (pi = 0; pi < pois.hospitals.length; pi++) blip(pois.hospitals[pi].x, pois.hospitals[pi].z, '#ff8aa8', 3);
+    if (catVis('police')) for (pi = 0; pi < pois.stations.length; pi++) blip(pois.stations[pi].x, pois.stations[pi].z, '#5aa0ff', 3);
+    if (catVis('respray')) for (pi = 0; pi < pois.resprays.length; pi++) blip(pois.resprays[pi].door.x, pois.resprays[pi].door.z, '#c86bff', 3);
     if (catVis('airport')) landmark(GAME.city.airport.apron.x, GAME.city.airport.apron.z);
-    shownHelipads().forEach(function (hp2) { landmark(hp2.x, hp2.z); });
+    var pads = shownHelipads();
+    for (pi = 0; pi < pads.length; pi++) landmark(pads[pi].x, pads[pi].z);
     if (catVis('icecream') && GAME.city.islaPois) landmark(GAME.city.islaPois.factory.x, GAME.city.islaPois.factory.z);
     var cars = GAME.world.cars;
     for (var c = 0; c < cars.length; c++) {
@@ -801,22 +819,34 @@ GAME.hud = (function () {
     // makes a raw minute hand a blur (9.6 game-minutes a second), so it
     // reads in ten-minute steps, ticking about once a real second.
     var cm = Math.floor(GAME.dayPhase * 144) * 10 % 1440;
-    var ct = (cm < 600 ? '0' : '') + Math.floor(cm / 60) + ':' + (cm % 60 === 0 ? '00' : cm % 60);
-    if (ct !== lastClock) { lastClock = ct; el.clock.textContent = ct; }
-    el['health-fill'].style.width = U.clamp(P.health, 0, 100) + '%';
-    el['armor-fill'].style.width = U.clamp(P.armor, 0, 100) + '%';
+    if (cm !== lastClock) {
+      lastClock = cm;
+      el.clock.textContent = (cm < 600 ? '0' : '') + Math.floor(cm / 60) + ':' + (cm % 60 === 0 ? '00' : cm % 60);
+    }
+    var hw = U.clamp(P.health, 0, 100), aw = U.clamp(P.armor, 0, 100);
+    if (hw !== lastHealthW) { lastHealthW = hw; el['health-fill'].style.width = hw + '%'; }
+    if (aw !== lastArmorW) { lastArmorW = aw; el['armor-fill'].style.width = aw + '%'; }
     // aircraft wear their condition on the HUD: their damage is otherwise
     // invisible until the explosion, and "wasted out of nowhere" was just a
     // dying airframe nobody could see
-    var vl = document.getElementById('vehicle-line');
+    if (vehicleLine === undefined) vehicleLine = document.getElementById('vehicle-line');
+    var vl = vehicleLine;
     if (vl) {
       var av = P.inCar && P.car && (P.car.spec.heli || P.car.spec.plane) ? P.car : null;
+      var apct = -1, acol = '';
       if (av) {
         var af = U.clamp(av.hp / av.spec.hp, 0, 1);
-        vl.textContent = 'AIRFRAME ' + Math.round(af * 100) + '%';
-        vl.style.color = af > 0.6 ? '#8dffd8' : af > 0.3 ? '#ffd24a' : '#ff5d7a';
-        vl.style.display = 'block';
-      } else vl.style.display = 'none';
+        apct = Math.round(af * 100);
+        acol = af > 0.6 ? '#8dffd8' : af > 0.3 ? '#ffd24a' : '#ff5d7a';
+      }
+      if (apct !== lastAirPct || acol !== lastAirCol) {
+        lastAirPct = apct; lastAirCol = acol;
+        if (av) {
+          vl.textContent = 'AIRFRAME ' + apct + '%';
+          vl.style.color = acol;
+          vl.style.display = 'block';
+        } else vl.style.display = 'none';
+      }
     }
     if (msgT > 0) { msgT -= dt; if (msgT <= 0) el['msg-line'].style.opacity = 0; }
     if (countT > 0) { countT -= dt; if (countT <= 0) el['count-big'].style.opacity = 0; }
@@ -962,7 +992,10 @@ GAME.hud = (function () {
     setPoiHint: function (text) {
       var e = el['poi-hint'];
       if (!e) return;
-      if (text) { if (e.textContent !== text) e.textContent = text; e.style.opacity = 1; }
+      // asked every tick, and nearly always with what it already shows
+      if (text === lastPoiHint) return;
+      lastPoiHint = text;
+      if (text) { e.textContent = text; e.style.opacity = 1; }
       else e.style.opacity = 0;
     },
     showBig: function (kind, sub) {

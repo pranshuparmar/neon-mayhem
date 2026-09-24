@@ -17,7 +17,14 @@ GAME.analytics = (function () {
   var ENDPOINT = 'https://neon-mayhem.goatcounter.com/count';
   var seen = {}, queue = [], timer = null, tries = 0, started = false;
 
+  // Where the page was opened from does not change while it is open, and
+  // track() is asked every tick in the air: the answer is worked out once.
+  var local = null;
   function isLocal() {
+    if (local === null) local = checkLocal();
+    return local;
+  }
+  function checkLocal() {
     try {
       if (location.protocol === 'file:') return true;
       var h = location.hostname;
@@ -53,7 +60,7 @@ GAME.analytics = (function () {
   }
 
   function track(name) {
-    if (!name || isLocal() || seen[name]) return;
+    if (!name || seen[name] || isLocal()) return;
     seen[name] = 1;
     queue.push(name);
     if (flush() || timer) return;

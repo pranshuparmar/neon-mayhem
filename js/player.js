@@ -578,7 +578,7 @@ function updateOnFoot(dt) {
       P.pos.z = rc.pos.z + oz * cs2 - ox * sn2;
       P.pos.y += rc.pos.y - pr.y;
       P.heading += dh2;
-      P.roofPrev = { x: rc.pos.x, z: rc.pos.z, y: rc.pos.y, h: rc.heading };
+      pr.x = rc.pos.x; pr.z = rc.pos.z; pr.y = rc.pos.y; pr.h = rc.heading;
     }
   }
   var mx = 0, mz = 0;
@@ -780,8 +780,7 @@ function updateDriving(dt) {
   var c = car.controls;
   if (GAME.autopilot) {
     if (!car.ai || car.ai.mode !== 'traffic') car.ai = { mode: 'traffic', desired: 13, laneX: 0, laneZ: 0 };
-    var tc = GAME.vehicles.trafficControls(car, dt);
-    c.throttle = tc.throttle; c.steer = tc.steer; c.handbrake = false;
+    GAME.vehicles.trafficControls(car, dt, c);
   } else {
     // steering: positive heading delta turns left in this parametrization, so D maps to -1
     var th = 0, st = 0;

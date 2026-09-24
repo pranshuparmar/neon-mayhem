@@ -1453,37 +1453,50 @@ GAME.shops = (function () {
   }
 
   // the nearest doormat's label for the shared POI hint line
+  // (asked every tick near a doormat: the nearest is found as a distance,
+  // and its words — a formatted price among them — are made again only when
+  // the doormat, its owner or the player's mode changes)
+  var hintOut = { d: 0, text: '' }, hintLoc = null, hintForSale = false, hintInCar = false;
   function nearHint(px, pz) {
     var unlocked = !GAME.isla || GAME.isla.isOpen();
-    var best = null;
+    var best = null, bd = 0;
     for (var i = 0; i < locations.length; i++) {
       var loc = locations[i];
       if (loc.isla && !unlocked) continue;
       var d = U.dist2(px, pz, loc.at.x, loc.at.z);
-      if (d < 30 * 30 && (!best || d < best.d)) {
-        var extra = loc.kind === 'safehouse' && !owns(loc.sh.id) ? ' · $' + loc.sh.price.toLocaleString() : '';
-        best = { d: d, text: loc.name + extra + ' — step onto the light' + (GAME.player.inCar ? ' (on foot)' : '') };
-      }
+      if (d < 30 * 30 && (!best || d < bd)) { best = loc; bd = d; }
     }
-    return best;
+    if (!best) return null;
+    var forSale = best.kind === 'safehouse' && !owns(best.sh.id), inCar = GAME.player.inCar;
+    if (best !== hintLoc || forSale !== hintForSale || inCar !== hintInCar) {
+      hintLoc = best; hintForSale = forSale; hintInCar = inCar;
+      hintOut.text = best.name + (forSale ? ' · $' + best.sh.price.toLocaleString() : '') +
+        ' — step onto the light' + (inCar ? ' (on foot)' : '');
+    }
+    hintOut.d = bd;
+    return hintOut;
   }
 
+  // (kept and rewritten rather than built new: the radar asks twenty times a
+  // second, and its callers read the list straight away and keep none of it)
+  var blipList = [], blipPool = [];
   function blips() {
-    var out = [];
+    blipList.length = 0;
     for (var i = 0; i < locations.length; i++) {
       var loc = locations[i];
       // the desk sergeant lives inside the police station — the P badge
       // already marks it, and a $ stacked on top just clutters the map
       if (loc.kind === 'bribe') continue;
       var home = loc.kind === 'safehouse' && owns(loc.sh.id);
-      out.push({
-        x: loc.at.x, z: loc.at.z,
-        color: home ? '#5dff9e' : '#' + loc.color.toString(16).padStart(6, '0'),
-        label: loc.kind === 'safehouse' ? (home ? '⌂' : '$') : '$',
-        home: home
-      });
+      if (!loc.blipColor) loc.blipColor = '#' + loc.color.toString(16).padStart(6, '0');
+      var b = blipPool[blipList.length] || (blipPool[blipList.length] = {});
+      b.x = loc.at.x; b.z = loc.at.z;
+      b.color = home ? '#5dff9e' : loc.blipColor;
+      b.label = loc.kind === 'safehouse' ? (home ? '⌂' : '$') : '$';
+      b.home = home;
+      blipList.push(b);
     }
-    return out;
+    return blipList;
   }
 
   return {

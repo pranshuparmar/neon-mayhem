@@ -1055,7 +1055,16 @@ GAME.vehicles = (function () {
     ai.laneZ = (-mx / ml) * 3.1;
   }
 
-  function trafficControls(car, dt) {
+  // Controls are written into the object they will be read from — the car's
+  // own, unless the caller hands another — never returned new: every AI car
+  // asks for them every tick, and a fresh object per ask was most of a
+  // thousand small allocations a second in ordinary traffic.
+  function setControls(c, throttle, steer, handbrake) {
+    c.throttle = throttle; c.steer = steer; c.handbrake = handbrake;
+    return c;
+  }
+  function trafficControls(car, dt, out) {
+    out = out || car.controls;
     var ai = car.ai;
     var city = GAME.city;
     if (!ai.node) {
@@ -1121,7 +1130,7 @@ GAME.vehicles = (function () {
     if (car.unstickT > 1.6) { car.reverseT = 1.1; car.unstickT = 0; }
     if (car.reverseT > 0) {
       car.reverseT -= dt;
-      return { throttle: -0.8, steer: dh > 0 ? -1 : 1, handbrake: false };
+      return setControls(out, -0.8, dh > 0 ? -1 : 1, false);
     }
 
     var desired = ai.desired || 11;
@@ -1165,7 +1174,7 @@ GAME.vehicles = (function () {
     if (hard) throttle = car.speed > 0.5 ? -1 : 0;
     else if (blocked) throttle = car.speed > desired * 0.4 ? -0.4 : 0.15;
     else throttle = car.speed < desired ? 0.55 : 0;
-    return { throttle: throttle, steer: steer, handbrake: false };
+    return setControls(out, throttle, steer, false);
   }
 
   function spawnTraffic() {
@@ -1266,6 +1275,14 @@ GAME.vehicles = (function () {
     }
   }
 
+  // Emitters that fire every tick — a wreck smoulders, a fire burns — hand
+  // fx.spawn the same settings each time, so they are made once here rather
+  // than as a fresh object per car per tick. fx.spawn only reads them.
+  var FX_WRECK_SMOKE = { count: 1, color: 0x222222, spread: 0.5, vy: 1.5, life: 1.4, grav: 0.2 };
+  var FX_FLAME = { count: 3, color: 0xff7020, spread: 0.8, vy: 2.6, life: 0.35, grav: 1.5 };
+  var FX_FLAME_CORE = { count: 2, color: 0xffc040, spread: 0.5, vy: 3.2, life: 0.25, grav: 1.5 };
+  var FX_FIRE_SMOKE = { count: 2, color: 0x2a2a2e, spread: 0.7, vy: 2.4, life: 1.3, grav: 0.6 };
+  var FX_ENGINE_SMOKE = { count: 3, color: 0x555560, spread: 0.7, vy: 2.2, life: 1.0, grav: 0.5 };
   function update(dt) {
     var P = GAME.player;
     var fc = GAME.focus();
@@ -1288,7 +1305,7 @@ GAME.vehicles = (function () {
       if (car.dead) {
         if (!car.deadT) car.deadT = 0;
         car.deadT += dt;
-        GAME.fx.spawn(car.pos.x, car.pos.y + 1.2, car.pos.z, { count: 1, color: 0x222222, spread: 0.5, vy: 1.5, life: 1.4, grav: 0.2 });
+        GAME.fx.spawn(car.pos.x, car.pos.y + 1.2, car.pos.z, FX_WRECK_SMOKE);
         if (car.deadT > 14 && car !== P.car) { removeCar(car); continue; }
         continue;
       }
@@ -1305,14 +1322,14 @@ GAME.vehicles = (function () {
           var bnX = car.pos.x + fwdX(car) * 1.4, bnZ = car.pos.z + fwdZ(car) * 1.4;
           if (car.stage >= 2) {
             car.smokeT = 0.09;
-            GAME.fx.spawn(bnX, bnY, bnZ, { count: 3, color: 0xff7020, spread: 0.8, vy: 2.6, life: 0.35, grav: 1.5 });
-            GAME.fx.spawn(bnX, bnY + 0.4, bnZ, { count: 2, color: 0xffc040, spread: 0.5, vy: 3.2, life: 0.25, grav: 1.5 });
-            GAME.fx.spawn(bnX, bnY + 0.8, bnZ, { count: 2, color: 0x2a2a2e, spread: 0.7, vy: 2.4, life: 1.3, grav: 0.6 });
+            GAME.fx.spawn(bnX, bnY, bnZ, FX_FLAME);
+            GAME.fx.spawn(bnX, bnY + 0.4, bnZ, FX_FLAME_CORE);
+            GAME.fx.spawn(bnX, bnY + 0.8, bnZ, FX_FIRE_SMOKE);
             car.fireGlowT = (car.fireGlowT || 0) - 0.09;
             if (car.fireGlowT <= 0) { car.fireGlowT = 0.4; GAME.fx.flash(bnX, bnY + 0.4, bnZ, 1.6); }
           } else {
             car.smokeT = 0.12;
-            GAME.fx.spawn(bnX, bnY, bnZ, { count: 3, color: 0x555560, spread: 0.7, vy: 2.2, life: 1.0, grav: 0.5 });
+            GAME.fx.spawn(bnX, bnY, bnZ, FX_ENGINE_SMOKE);
           }
         }
         if (car.stage >= 2) {
@@ -1353,7 +1370,7 @@ GAME.vehicles = (function () {
         // controls set by player.js
         stepPhysics(car, dt);
       } else if (car.ai && car.ai.mode === 'traffic' && car.occupied === 'ai') {
-        car.controls = trafficControls(car, dt);
+        trafficControls(car, dt, car.controls);
         stepPhysics(car, dt);
       } else if (car.ai && car.ai.mode === 'chase') {
         stepPhysics(car, dt); // controls written by police.js
@@ -1362,7 +1379,7 @@ GAME.vehicles = (function () {
       } else {
         // ownerless: coast to a stop
         if (Math.abs(car.speed) > 0.1 || Math.abs(car.lat) > 0.1) {
-          car.controls = { throttle: 0, steer: 0, handbrake: false };
+          setControls(car.controls, 0, 0, false);
           stepPhysics(car, dt);
         }
       }

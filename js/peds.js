@@ -77,19 +77,22 @@ function makeHair(style, colorHex) {
   return g;
 }
 
+// the town's wardrobe, drawn from for every stranger (built once, not per ped)
+var PED_SHIRTS = [0xf7a8c4, 0x9fe8d8, 0xf9d99a, 0x8fd0f0, 0xe86a8a, 0x8a6ae8, 0xf0f0e8, 0x60c890];
+var PED_PANTS = [0x3a4a68, 0x684a3a, 0x2a2a34, 0x8a4a5a, 0xd8d0c0];
+var PED_SKINS = [0xeac8a8, 0xc89878, 0x8a6848, 0x6a4c34, 0xf0d8c0];
+var PED_HAIR_COLORS = [0x1c1a18, 0x5a3c22, 0x2e2018, 0xd8b86a, 0xa8482a, 0x8a8a90];
+var PED_HAIR_STYLES = ['crew', 'crew', 'crew', 'flattop', 'flattop', 'pompadour', 'mullet', 'afro', 'ponytail', 'mohawk'];
+
 function buildPedMesh(opts) {
   opts = opts || {};
   var g = new THREE.Group();
-  var shirtColors = [0xf7a8c4, 0x9fe8d8, 0xf9d99a, 0x8fd0f0, 0xe86a8a, 0x8a6ae8, 0xf0f0e8, 0x60c890];
-  var pantColors = [0x3a4a68, 0x684a3a, 0x2a2a34, 0x8a4a5a, 0xd8d0c0];
-  var skins = [0xeac8a8, 0xc89878, 0x8a6848, 0x6a4c34, 0xf0d8c0];
-  var hairColors = [0x1c1a18, 0x5a3c22, 0x2e2018, 0xd8b86a, 0xa8482a, 0x8a8a90];
   // opts.look pins the whole appearance — the same person can step out of
   // the same car twice instead of a stranger wearing his job
   var look = opts.look || null;
-  var shirt = opts.cop ? 0x2a4a8a : look ? look.shirt : U.pick(Math.random, shirtColors);
-  var pants = opts.cop ? 0x1a2a4a : look ? look.pants : U.pick(Math.random, pantColors);
-  var skin = look ? look.skin : U.pick(Math.random, skins);
+  var shirt = opts.cop ? 0x2a4a8a : look ? look.shirt : U.pick(Math.random, PED_SHIRTS);
+  var pants = opts.cop ? 0x1a2a4a : look ? look.pants : U.pick(Math.random, PED_PANTS);
+  var skin = look ? look.skin : U.pick(Math.random, PED_SKINS);
   g.userData.look = { shirt: shirt, pants: pants, skin: skin };
   // The town shares its wardrobe: constant colors, constant box sizes, one
   // registry entry each — a ped spawn allocates wrappers, not buffers. The
@@ -118,9 +121,8 @@ function buildPedMesh(opts) {
   } else if (!opts.noHair) {
     // nobody in this town is bald unless they paid the barber for it
     // (the player's own hair is the wardrobe's business — see shops.js)
-    var styles = ['crew', 'crew', 'crew', 'flattop', 'flattop', 'pompadour', 'mullet', 'afro', 'ponytail', 'mohawk'];
-    var hairStyle = look ? look.hair : U.pick(Math.random, styles);
-    var hairCol = look ? look.hairCol : U.pick(Math.random, hairColors);
+    var hairStyle = look ? look.hair : U.pick(Math.random, PED_HAIR_STYLES);
+    var hairCol = look ? look.hairCol : U.pick(Math.random, PED_HAIR_COLORS);
     var hair = makeHair(hairStyle, hairCol);
     if (hair) { hair.position.y = 1.6; g.add(hair); }
     g.userData.look.hair = hairStyle;

@@ -223,7 +223,31 @@ GAME.missions = (function () {
   var resprayCooldown = 0;
 
   var MARKER_COLORS = { race: 0xff8a3d, courier: 0x38e8ff, rampage: 0xff4fa3 };
+  var MARKER_HEX = {};
+  Object.keys(MARKER_COLORS).forEach(function (k) { MARKER_HEX[k] = '#' + MARKER_COLORS[k].toString(16).padStart(6, '0'); });
+  // The radar asks for the blips twenty times a second, so the list and its
+  // entries are kept and rewritten instead of built new: a caller reads it
+  // straight away and never keeps it.
+  var blipList = [], blipPool = [];
+  function putBlip(x, z, color, size, kind) {
+    var b = blipPool[blipList.length] || (blipPool[blipList.length] = {});
+    b.x = x; b.z = z; b.color = color; b.size = size; b.kind = kind;
+    blipList.push(b);
+  }
   var TYPE_LABEL = { race: 'STREET RACE', courier: 'COURIER RUN', rampage: 'RAMPAGE' };
+  // the POI line's words for a marker (kind 1) or a respray door (kind 2),
+  // made again only when what is nearest, or its note, changes
+  var HINT_NOTES = ['', '   —   lose the heat first', '   —   come back in a vehicle',
+    '   —   not in an aircraft', '   —   starting…'];
+  var hintK = 0, hintO = null, hintN = -1, hintText = '';
+  function poiHintText(k, o, n) {
+    if (k !== hintK || o !== hintO || n !== hintN) {
+      hintK = k; hintO = o; hintN = n;
+      hintText = k === 1 ? TYPE_LABEL[o.type] + ' · ' + o.name + HINT_NOTES[n]
+        : 'RESPRAY · $100 — repairs your ride; fresh paint clears up to two stars' + (n ? '' : '   —   drive in');
+    }
+    return hintText;
+  }
 
   function makeMarkerMesh(color, r) {
     var m = new THREE.Mesh(
@@ -1339,7 +1363,11 @@ GAME.missions = (function () {
       // only at the ground plane, so flying over a marker reads as standing on
       // it. Set down first — a landed aircraft is close enough to count.
       if (py - GAME.city.groundY(px, pz) > 4) { GAME.hud.setPoiHint(''); return; }
-      var hint = null;
+      // The nearest thing worth naming, kept as a few numbers — what it is,
+      // which one, how far, and which note it carries — and put into words
+      // only when that changes (poiHintText). Every marker in range used to
+      // build its whole label every tick, shown or not.
+      var hk = 0, ho = null, hd = 0, hn = 0;
       for (var m = 0; m < markers.length; m++) {
         var d = markers[m].def;
         if (!defAvailable(d)) { markers[m].mesh.visible = false; continue; }
@@ -1349,13 +1377,9 @@ GAME.missions = (function () {
         var air = P.car && (P.car.spec.heli || P.car.spec.plane);
         var dd = U.dist2(px, pz, d.start.x, d.start.z);
         // name what the marker is (and what it wants) whenever you're standing near it
-        if (dd < 34 * 34) {
-          var label = TYPE_LABEL[d.type] + ' · ' + d.name;
-          if (hot) label += '   —   lose the heat first';
-          else if (need && !P.inCar) label += '   —   come back in a vehicle';
-          else if (d.type === 'race' && air) label += '   —   not in an aircraft';
-          else if (dd < (need ? 20 : 7)) label += '   —   starting…';
-          if (!hint || dd < hint.d) hint = { d: dd, text: label };
+        if (dd < 34 * 34 && (!hk || dd < hd)) {
+          hk = 1; ho = d; hd = dd;
+          hn = hot ? 1 : need && !P.inCar ? 2 : d.type === 'race' && air ? 3 : dd < (need ? 20 : 7) ? 4 : 0;
         }
         if (hot) continue;   // wanted stars close every start line
         if (need && !P.inCar) continue;
@@ -1363,7 +1387,7 @@ GAME.missions = (function () {
         if (d.type === 'race' && air) continue;
         if (dd < (need ? 20 : 7)) {
           start(d);
-          hint = null;
+          hk = 0;
           break;
         }
       }
@@ -1371,14 +1395,12 @@ GAME.missions = (function () {
       var doors = GAME.city.pois.resprays;
       for (var rg = 0; rg < doors.length; rg++) {
         var rd = U.dist2(px, pz, doors[rg].door.x, doors[rg].door.z);
-        if (rd < 34 * 34 && (!hint || rd < hint.d)) {
-          hint = { d: rd, text: 'RESPRAY · $100 — repairs your ride; fresh paint clears up to two stars' + (P.inCar ? '' : '   —   drive in') };
-        }
+        if (rd < 34 * 34 && (!hk || rd < hd)) { hk = 2; ho = doors[rg]; hd = rd; hn = P.inCar ? 1 : 0; }
       }
       // and the shops share the one readout instead of talking over it
       var sh = GAME.shops && GAME.shops.nearHint(px, pz);
-      if (sh && (!hint || sh.d < hint.d)) hint = sh;
-      GAME.hud.setPoiHint(hint ? hint.text : '');
+      if (sh && (!hk || sh.d < hd)) GAME.hud.setPoiHint(sh.text);
+      else GAME.hud.setPoiHint(hk ? poiHintText(hk, ho, hn) : '');
       return;
     }
     GAME.jobAvailable = null;
@@ -1685,27 +1707,26 @@ GAME.missions = (function () {
     getBlips: function () {
       // `kind` keys each blip to its legend entry, so the map legend can
       // hide and show marker families like a chart legend
-      var out = [];
-      GAME.city.pois.resprays.forEach(function (g) {
-        out.push({ x: g.door.x, z: g.door.z, color: '#c86bff', size: 4, kind: 'respray' });
-      });
+      blipList.length = 0;
+      var rs = GAME.city.pois.resprays;
+      for (var r = 0; r < rs.length; r++) putBlip(rs[r].door.x, rs[r].door.z, '#c86bff', 4, 'respray');
       if (!active) {
         for (var i = 0; i < markers.length; i++) {
           var d = markers[i].def;
           if (!defAvailable(d)) continue;
           var kind = d.type === 'race' ? 'race' : d.type === 'courier' ? 'courier' : 'rampage';
-          out.push({ x: d.start.x, z: d.start.z, color: '#' + MARKER_COLORS[d.type].toString(16).padStart(6, '0'), size: 4, kind: kind });
+          putBlip(d.start.x, d.start.z, MARKER_HEX[d.type], 4, kind);
         }
       } else {
         // every waiting fare/patient shows on the map, not just the nearest
         if (active.targets) {
           for (var t = 0; t < active.targets.length; t++) {
-            out.push({ x: active.targets[t].x, z: active.targets[t].z, color: '#ffe14f', size: 4, kind: 'objective' });
+            putBlip(active.targets[t].x, active.targets[t].z, '#ffe14f', 4, 'objective');
           }
         }
-        if (cpMarker.visible) out.push({ x: cpMarker.position.x, z: cpMarker.position.z, color: '#ffe14f', size: 5, kind: 'objective' });
+        if (cpMarker.visible) putBlip(cpMarker.position.x, cpMarker.position.z, '#ffe14f', 5, 'objective');
       }
-      return out;
+      return blipList;
     }
   };
 })();

@@ -155,8 +155,18 @@ GAME.police = (function () {
     spikes = [];
   }
 
+  // The pursuit's working lists are asked for every tick, so they are kept
+  // and refilled rather than built new each time: a caller reads one before
+  // the next tick asks again, and nobody holds on to it past that.
+  var copBuf = [], chaseBuf = [], pedBuf = [];
   function copCars() {
-    return GAME.world.cars.filter(function (c) { return c.isPolice && !c.dead && c.ai && (c.ai.mode === 'chase' || c.ai.mode === 'roadblock'); });
+    copBuf.length = 0;
+    var cars = GAME.world.cars;
+    for (var i = 0; i < cars.length; i++) {
+      var c = cars[i];
+      if (c.isPolice && !c.dead && c.ai && (c.ai.mode === 'chase' || c.ai.mode === 'roadblock')) copBuf.push(c);
+    }
+    return copBuf;
   }
 
   // ---------- the air unit ----------
@@ -215,7 +225,13 @@ GAME.police = (function () {
   function updateAirUnits(dt, s) {
     var P = GAME.player;
     var want = s >= 5 ? 2 : s >= 4 ? 1 : 0;
-    airUnits = airUnits.filter(function (h) { return !h.dead && GAME.world.cars.indexOf(h) >= 0; });
+    // compacted in place: this runs every tick, birds or no birds
+    var keep = 0;
+    for (var k = 0; k < airUnits.length; k++) {
+      var au = airUnits[k];
+      if (!au.dead && GAME.world.cars.indexOf(au) >= 0) airUnits[keep++] = au;
+    }
+    airUnits.length = keep;
     if (airUnits.length < want && GAME.frame % 90 === 0) spawnAirUnit();
     var f = GAME.focus();
     var fy = P.inCar && P.car ? P.car.pos.y : P.pos.y;
@@ -522,6 +538,12 @@ GAME.police = (function () {
     incidents.length = 0;
   }
 
+  // written into the car's own controls, never returned new — see
+  // trafficControls in vehicles.js, which every cruiser would otherwise be
+  // allocating alongside, one object per car per tick
+  function setControls(c, throttle, steer, handbrake) {
+    c.throttle = throttle; c.steer = steer; c.handbrake = handbrake;
+  }
   function chaseControls(car, dt, s) {
     var P = GAME.player;
     var pxr = P.inCar && P.car ? P.car.pos.x : P.pos.x;
@@ -544,7 +566,8 @@ GAME.police = (function () {
     if (car.unstickT > 1.4) { car.reverseT = 1.0; car.unstickT = 0; }
     if (car.reverseT > 0) {
       car.reverseT -= dt;
-      return { throttle: -1, steer: dh > 0 ? -1 : 1, handbrake: false };
+      setControls(car.controls, -1, dh > 0 ? -1 : 1, false);
+      return;
     }
 
     // gentler steering, eased frame-to-frame (no instant snap to your heading)
@@ -553,7 +576,7 @@ GAME.police = (function () {
     var steer = car.aiSteer;
 
     // pull up and stop near an on-foot target so officers can get out
-    if (!P.inCar && dist < 22) return { throttle: car.speed > 2 ? -0.7 : 0, steer: steer, handbrake: dist < 12 };
+    if (!P.inCar && dist < 22) { setControls(car.controls, car.speed > 2 ? -0.7 : 0, steer, dist < 12); return; }
 
     // keep a pursuit gap rather than gluing to the bumper
     var gap = s === 1 ? 22 : 9;
@@ -565,7 +588,7 @@ GAME.police = (function () {
     // can't corner flat out: lift or brake for hard turns at speed
     if (Math.abs(dh) > 0.7 && car.speed > 16) throttle = Math.min(throttle, -0.2);
     else if (Math.abs(dh) > 0.4 && car.speed > 24) throttle = Math.min(throttle, 0.2);
-    return { throttle: throttle, steer: steer, handbrake: false };
+    setControls(car.controls, throttle, steer, false);
   }
 
   function updateCopCar(car, dt, s) {
@@ -579,7 +602,7 @@ GAME.police = (function () {
       }
       return;
     }
-    car.controls = chaseControls(car, dt, s);
+    chaseControls(car, dt, s);
 
     // occupant fires from the car at 2 stars and up
     if (s >= 2 && !GAME.godMode) {
@@ -606,7 +629,8 @@ GAME.police = (function () {
       var f = GAME.focus();
       var d = U.dist(car.pos.x, car.pos.z, f.x, f.z);
       if (d < (onFoot ? 26 : 18)) {
-        var footCount = GAME.world.peds.filter(function (p) { return p.isCop && !p.dead; }).length;
+        var footCount = 0, wp = GAME.world.peds;
+        for (var fi = 0; fi < wp.length; fi++) if (wp[fi].isCop && !wp[fi].dead) footCount++;
         if (footCount < Math.min(2 + s, 7) && (car.deployT = (car.deployT || 0) + dt) > 0.5) {
           car.deployT = 0;
           var side = car.heading + Math.PI / 2 * (Math.random() < 0.5 ? 1 : -1);
@@ -760,7 +784,9 @@ GAME.police = (function () {
 
     // pursuit cars
     var active = copCars();
-    var chasing = active.filter(function (c) { return c.ai.mode === 'chase'; });
+    var chasing = chaseBuf;
+    chasing.length = 0;
+    for (var ch = 0; ch < active.length; ch++) if (active[ch].ai.mode === 'chase') chasing.push(active[ch]);
     if (!flownOff && chasing.length < CAR_CAP[s] && GAME.frame % 45 === 0) spawnCruiser();
     var pf = GAME.focus();
     for (var a = 0; a < active.length; a++) {
@@ -771,7 +797,10 @@ GAME.police = (function () {
     if (!flownOff) maintainFootCops(s, dt);
 
     // foot cops
-    var peds = GAME.world.peds.slice();
+    // a snapshot, because an officer's turn can add or remove people
+    var peds = pedBuf, wpeds = GAME.world.peds;
+    peds.length = 0;
+    for (var pi = 0; pi < wpeds.length; pi++) peds.push(wpeds[pi]);
     var anyGrab = false;
     for (var f = 0; f < peds.length; f++) {
       if (peds[f].isCop && !peds[f].dead) {

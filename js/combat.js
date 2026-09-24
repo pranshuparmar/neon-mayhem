@@ -10,6 +10,8 @@ var WEAPONS = {
   rifle: { name: 'RIFLE', slot: 5, damage: 68, range: 150, rate: 0.85, auto: false, spread: 0.002 }
 };
 var WEAPON_ORDER = ['fist', 'pistol', 'smg', 'shotgun', 'rifle'];
+// the number keys that pick them, spelled out once rather than every tick
+var WEAPON_KEYS = WEAPON_ORDER.map(function (w, i) { return 'Digit' + (i + 1); });
 
 GAME.combat = (function () {
   var aiming = false, lockTarget = null, lockIdx = 0;
@@ -237,7 +239,7 @@ GAME.combat = (function () {
 
     // weapon select
     for (var i = 0; i < WEAPON_ORDER.length; i++) {
-      if (GAME.keyPressed('Digit' + (i + 1))) selectWeapon(WEAPON_ORDER[i]);
+      if (GAME.keyPressed(WEAPON_KEYS[i])) selectWeapon(WEAPON_ORDER[i]);
     }
     if (T.weaponCycle) {
       T.weaponCycle = false;

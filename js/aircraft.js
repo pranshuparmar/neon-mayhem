@@ -5,9 +5,12 @@ GAME.aircraft = (function () {
   // While the bridges are shut the channel is restricted airspace: you can fly
   // out over the water and see the far shore, and that is as far as you get.
   var CLOSED_X = 560, warnT = 0, warnCount = 0;
+  // two fixed answers, handed out rather than built on every ask — everything
+  // that moves asks every tick, and nobody writes to them
+  var LIMIT_OPEN = { maxX: 1560, minZ: -600, maxZ: 600 };
+  var LIMIT_CLOSED = { maxX: CLOSED_X, minZ: -524, maxZ: 524 };
   function airLimit() {
-    if (GAME.isla && GAME.isla.isOpen()) return { maxX: 1560, minZ: -600, maxZ: 600 };
-    return { maxX: CLOSED_X, minZ: -524, maxZ: 524 };
+    return GAME.isla && GAME.isla.isOpen() ? LIMIT_OPEN : LIMIT_CLOSED;
   }
   // Three strikes, not one: pressing the line gets a warning, pressing it
   // again gets a final warning, and only the THIRD violation scrambles the
@@ -116,6 +119,8 @@ GAME.aircraft = (function () {
   // Chin gun rakes the ground ahead of the nose (hold fire), rockets thump
   // out on the right hand (or the AIM button) and detonate where they land.
   var rockets = [];
+  // a rocket's trail, laid every tick of its flight (made once; fx.spawn only reads it)
+  var FX_ROCKET_TRAIL = { count: 1, color: 0xffd080, spread: 0.12, life: 0.16 };
   function hitAt(x, z, rad, dmg, byPlayer) {
     var cars = GAME.world.cars, P = GAME.player;
     for (var i = 0; i < cars.length; i++) {
@@ -179,7 +184,7 @@ GAME.aircraft = (function () {
       r.t += dt;
       r.x += r.vx * dt; r.z += r.vz * dt; r.y += r.vy * dt;
       r.vy -= 9 * dt;
-      GAME.fx.spawn(r.x, r.y, r.z, { count: 1, color: 0xffd080, spread: 0.12, life: 0.16 });
+      GAME.fx.spawn(r.x, r.y, r.z, FX_ROCKET_TRAIL);
       var sy = GAME.city.surfaceY(r.x, r.z);
       var hitCar = null;
       if (r.t > 0.15) {
