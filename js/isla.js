@@ -348,22 +348,30 @@ GAME.isla = (function () {
     var f = seg > 1e-9 ? (d - s.cum[lo]) / seg : 0;
     return [U.lerp(s.pts[lo][0], s.pts[hi][0], f), U.lerp(s.pts[lo][1], s.pts[hi][1], f)];
   }
-  // distance from (x,z) to edge i of s, and the global parameter of the foot
+  // Distance from (x,z) to edge i of s; the global parameter of the foot is
+  // left in ecT. Both answers used to come back as a fresh {d, t} per edge,
+  // and this is asked a great deal: the island's ground height asks it of
+  // every road in its cell, and the bridges ask it for every wheel, car and
+  // pedestrian's height each tick, wherever on the map they are.
+  var ecT = 0, scT = 0;
   function edgeClosest(s, i, x, z) {
     var a = s.pts[i], b = s.pts[i + 1];
     var vx = b[0] - a[0], vz = b[1] - a[1];
     var l2 = vx * vx + vz * vz;
     var t = l2 > 1e-9 ? U.clamp(((x - a[0]) * vx + (z - a[1]) * vz) / l2, 0, 1) : 0;
     var px = a[0] + vx * t, pz = a[1] + vz * t;
-    return { d: U.dist(x, z, px, pz), t: (s.cum[i] + Math.sqrt(l2) * t) / s.len };
+    ecT = (s.cum[i] + Math.sqrt(l2) * t) / s.len;
+    return U.dist(x, z, px, pz);
   }
+  // distance from (x,z) to the whole of s; the foot's parameter is left in scT
   function segClosest(s, x, z) {
-    var best = { d: 1e9, t: 0 };
+    var bd = 1e9, bt = 0;
     for (var i = 0; i < s.pts.length - 1; i++) {
-      var c = edgeClosest(s, i, x, z);
-      if (c.d < best.d) best = c;
+      var d = edgeClosest(s, i, x, z);
+      if (d < bd) { bd = d; bt = ecT; }
     }
-    return best;
+    scT = bt;
+    return bd;
   }
 
   // ---------- grading ----------
@@ -549,10 +557,10 @@ GAME.isla = (function () {
     touched.length = 0;
     for (var i = 0; i < list.length; i += 2) {
       var si = list[i], s = NET[si];
-      var c = edgeClosest(s, list[i + 1], x, z);
+      var cd = edgeClosest(s, list[i + 1], x, z);
       if (sStamp[si] !== stampCtr) {
-        sStamp[si] = stampCtr; sBestD[si] = c.d; sBestT[si] = c.t; touched.push(si);
-      } else if (c.d < sBestD[si]) { sBestD[si] = c.d; sBestT[si] = c.t; }
+        sStamp[si] = stampCtr; sBestD[si] = cd; sBestT[si] = ecT; touched.push(si);
+      } else if (cd < sBestD[si]) { sBestD[si] = cd; sBestT[si] = ecT; }
     }
     var wsum = 0, ysum = 0;
     for (var t = 0; t < touched.length; t++) {
@@ -577,7 +585,7 @@ GAME.isla = (function () {
     if (!list) return false;
     for (var i = 0; i < list.length; i += 2) {
       var s = NET[list[i]];
-      if (edgeClosest(s, list[i + 1], x, z).d < s.w / 2 + (pad || 0)) return true;
+      if (edgeClosest(s, list[i + 1], x, z) < s.w / 2 + (pad || 0)) return true;
     }
     return false;
   }
@@ -588,14 +596,14 @@ GAME.isla = (function () {
     var list = cellAt(x, z);
     if (list) {
       for (i = 0; i < list.length; i += 2) {
-        var c = edgeClosest(NET[list[i]], list[i + 1], x, z);
-        if (c.d < bestD) { bestD = c.d; best = { s: NET[list[i]], t: c.t }; }
+        var cd = edgeClosest(NET[list[i]], list[i + 1], x, z);
+        if (cd < bestD) { bestD = cd; best = { s: NET[list[i]], t: ecT }; }
       }
     }
     if (!best) {
       for (i = 0; i < NET.length; i++) {
-        var c2 = segClosest(NET[i], x, z);
-        if (c2.d < bestD) { bestD = c2.d; best = { s: NET[i], t: c2.t }; }
+        var cd2 = segClosest(NET[i], x, z);
+        if (cd2 < bestD) { bestD = cd2; best = { s: NET[i], t: scT }; }
       }
     }
     var p = segPointAt(best.s, best.t);
@@ -611,7 +619,7 @@ GAME.isla = (function () {
     for (var i = 0; i < SPANS.length; i++) {
       var sp = SPANS[i];
       if (!sp.cum) continue;
-      if (segClosest(sp, x, z).d < sp.half + (pad || 0)) return true;
+      if (segClosest(sp, x, z) < sp.half + (pad || 0)) return true;
     }
     return false;
   }
@@ -629,16 +637,16 @@ GAME.isla = (function () {
       for (i = 0; i < NET.length; i++) {
         sg = NET[i]; c = segClosest(sg, px, pz);
         need = sg.w / 2 + half + gap;
-        if (c.d >= need) continue;
-        if (need - c.d > worstPush) { worstPush = need - c.d; worst = segPointAt(sg, c.t); }
+        if (c >= need) continue;
+        if (need - c > worstPush) { worstPush = need - c; worst = segPointAt(sg, scT); }
       }
       for (i = 0; i < SPANS.length; i++) {
         sg = SPANS[i];
         if (!sg.cum) continue;
         c = segClosest(sg, px, pz);
         need = sg.half + half + gap + 6;
-        if (c.d >= need) continue;
-        if (need - c.d > worstPush) { worstPush = need - c.d; worst = segPointAt(sg, c.t); }
+        if (c >= need) continue;
+        if (need - c > worstPush) { worstPush = need - c; worst = segPointAt(sg, scT); }
       }
       if (!worst) break;
       var dx = px - worst[0], dz = pz - worst[1], l = Math.hypot(dx, dz);
@@ -671,10 +679,21 @@ GAME.isla = (function () {
     // the bridge starts a little way off the junction rather than out of it
     s.flatIn = opts.flatIn || 0;
     s.startY = 0; s.endY = 0;
+    // The deck's bounds. Every height lookup anywhere on the map asks every
+    // bridge whether it is standing on it, and nearly always it is nowhere
+    // near: outside the centreline's box, pushed out by the deck's reach,
+    // nothing can be within reach of it, so the answer comes without walking
+    // the span's edges.
+    s.bx0 = Infinity; s.bx1 = -Infinity; s.bz0 = Infinity; s.bz1 = -Infinity;
+    s.pts.forEach(function (p) {
+      s.bx0 = Math.min(s.bx0, p[0]); s.bx1 = Math.max(s.bx1, p[0]);
+      s.bz0 = Math.min(s.bz0, p[1]); s.bz1 = Math.max(s.bz1, p[1]);
+    });
+    s.outside = function (x, z, r) { return x < s.bx0 - r || x > s.bx1 + r || z < s.bz0 - r || z > s.bz1 + r; };
     s.deckY = function (x, z) {
-      var c = segClosest(s, x, z);
-      if (c.d > s.half) return null;
-      var d = c.t * s.len;
+      if (s.outside(x, z, s.half)) return null;
+      if (segClosest(s, x, z) > s.half) return null;
+      var d = scT * s.len;
       if (d <= s.flatIn) return s.startY;
       if (d < s.flatIn + s.rampIn) return U.lerp(s.startY, s.h, ease((d - s.flatIn) / s.rampIn));
       if (d > s.len - s.rampOut) return U.lerp(s.endY, s.h, ease((s.len - d) / s.rampOut));
@@ -805,7 +824,10 @@ GAME.isla = (function () {
     });
     SPANS.forEach(function (s) {
       city.addCrossing({ id: s.id, name: s.name, deckY: s.deckY, span: s,
-        nearBy: function (x, z, pad) { return segClosest(s, x, z).d < s.half + (pad || 0); } });
+        nearBy: function (x, z, pad) {
+          var r = s.half + (pad || 0);
+          return !s.outside(x, z, r) && segClosest(s, x, z) < r;
+        } });
     });
     city.isla = { bounds: C, contains: contains, net: NET, hills: HILLS, spans: SPANS,
       terrainY: terrainY, groundY: groundY, onRoad: onRoad, inland: inland,

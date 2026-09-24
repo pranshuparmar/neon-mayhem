@@ -1,4 +1,5 @@
 GAME.police = (function () {
+  var pushOut = { x: 0, z: 0 };   // resolveCircle's answer for walking officers, reused
   var heat = 0, lastSeen = 0, pinTimer = 0, grabTimer = 0, lastCrime = -99;
   var crimeCooldown = {};
   var roadblockT = 0, spikes = [];
@@ -505,7 +506,7 @@ GAME.police = (function () {
     cop.pos.x += Math.sin(cop.heading) * cop.speed * dt;
     cop.pos.z += Math.cos(cop.heading) * cop.speed * dt;
     if (!GAME.city.canWalkTo(kx, kz, cop.pos.x, cop.pos.z)) { cop.pos.x = kx; cop.pos.z = kz; }
-    var rp = GAME.resolveCircle(cop.pos.x, cop.pos.z, 0.4);
+    var rp = GAME.resolveCircle(cop.pos.x, cop.pos.z, 0.4, undefined, pushOut);
     cop.pos.x = rp.x; cop.pos.z = rp.z;
     cop.pos.y = GAME.city.groundY(cop.pos.x, cop.pos.z);
     cop.mesh.rotation.y = cop.heading;
@@ -567,7 +568,7 @@ GAME.police = (function () {
     var aimZ = pzr + (P.inCar && P.car ? (P.car.vz || 0) * 0.3 : 0);
     // reaction lag: pursue a smoothed estimate of the target, so cruisers don't
     // mirror sharp turns the instant you make them
-    if (car.aiTX === undefined) { car.aiTX = aimX; car.aiTZ = aimZ; }
+    if (isNaN(car.aiTX)) { car.aiTX = aimX; car.aiTZ = aimZ; }
     car.aiTX = U.damp(car.aiTX, aimX, 4.5, dt);
     car.aiTZ = U.damp(car.aiTZ, aimZ, 4.5, dt);
     var dx = car.aiTX - car.pos.x, dz = car.aiTZ - car.pos.z;
@@ -672,9 +673,12 @@ GAME.police = (function () {
     cop.heading = U.angleLerp(cop.heading, th, Math.min(1, dt * 6));
     // fire at the player on foot, or at a slow/stopped car
     var playerSlow = !P.inCar || (P.car && Math.abs(P.car.speed) < 9);
-    var los = GAME.city.hash.segmentClear(cop.pos.x, cop.pos.z, f.x, f.z)
-      && Math.abs(f.y - cop.pos.y) < 3;   // not through a floor
-    var wantShoot = s >= 2 && dist < 28 && playerSlow && los;
+    // line of sight last: it walks the grid, and every officer asked it
+    // every tick even when the stars, the range or your speed had already
+    // ruled a shot out
+    var wantShoot = s >= 2 && dist < 28 && playerSlow
+      && Math.abs(f.y - cop.pos.y) < 3   // not through a floor
+      && GAME.city.hash.segmentClear(cop.pos.x, cop.pos.z, f.x, f.z);
     var chaseSpeed = 6.8;   // 0.85x the player's 8 sprint — outrunnable, barely
     cop.speed = U.damp(cop.speed, wantShoot && dist < 14 ? 0 : chaseSpeed, 5, dt);
     var cx0 = cop.pos.x, cz0 = cop.pos.z;
@@ -685,7 +689,7 @@ GAME.police = (function () {
     if (!GAME.city.canWalkTo(cx0, cz0, cop.pos.x, cop.pos.z)) {
       cop.pos.x = cx0; cop.pos.z = cz0;
     }
-    var rp = GAME.resolveCircle(cop.pos.x, cop.pos.z, 0.4);
+    var rp = GAME.resolveCircle(cop.pos.x, cop.pos.z, 0.4, undefined, pushOut);
     cop.pos.x = rp.x; cop.pos.z = rp.z;
     cop.pos.y = GAME.city.groundY(cop.pos.x, cop.pos.z);
     cop.mesh.rotation.y = cop.heading;

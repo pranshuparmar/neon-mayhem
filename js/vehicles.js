@@ -9,7 +9,13 @@ GAME.fx = (function () {
   function init(sc) {
     scene = sc;
     var pos = new Float32Array(MAXP * 3), col = new Float32Array(MAXP * 3);
-    for (var i = 0; i < MAXP; i++) { pos[i * 3 + 1] = -1000; parts.push({ life: 0 }); }
+    // every field a particle ever carries, from the start: added as it was
+    // first spawned, a particle had one shape before its first life and
+    // another after, and the update loop saw both
+    for (var i = 0; i < MAXP; i++) {
+      pos[i * 3 + 1] = -1000;
+      parts.push({ life: 0, maxLife: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, grav: 0, color: 0 });
+    }
     pGeo = new THREE.BufferGeometry();
     pGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     pGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
@@ -22,7 +28,7 @@ GAME.fx = (function () {
     tGeo.setAttribute('position', new THREE.BufferAttribute(tpos, 3));
     tLines = new THREE.LineSegments(tGeo, new THREE.LineBasicMaterial({ color: 0xffe9a0, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
     tLines.frustumCulled = false;
-    for (var t = 0; t < MAXT; t++) tracers.push({ life: 0 });
+    for (var t = 0; t < MAXT; t++) tracers.push({ life: 0, i: 0 });
     scene.add(tLines);
 
     for (var f = 0; f < 4; f++) {
@@ -447,7 +453,28 @@ GAME.vehicles = (function () {
       parkedSpot: opts.parkedSpot || null,
       mission: opts.mission || false,
       smokeT: 0, unstickT: 0, reverseT: 0,
-      radius: spec.l * 0.42
+      radius: spec.l * 0.42,
+      // Everything else a vehicle can come to carry, declared here in one
+      // order — added as they came up, the traffic ended up in two dozen
+      // shapes and the physics kept being thrown out of its optimised code
+      // (see spawnPed in peds.js). Each starts as what the missing field used
+      // to read as: 0 where it is read as `x || 0`, false or null where it is
+      // only tested, and NaN for a number the code asks whether it has been
+      // set yet, or counts down from without setting (NaN fails every
+      // comparison and survives arithmetic, as undefined did: a patrol car
+      // turned chaser still never fires or sends officers out). airVX/airVZ
+      // stay undefined because code elsewhere clears them to that.
+      gone: false, byPlayer: false, sinking: false, spiked: false, stalled: false,
+      stageWarn: 0, airframeWarn: 0, boostPing: false, capPing: false,
+      hitCd: 0, boostT: 0, abandonT: 0, deadT: 0, fireGlowT: 0,
+      vx: 0, vy: 0, vz: 0, air: 0, airVX: undefined, airVZ: undefined,
+      jumpRamp: null, onRampIdx: null, jumpX: 0, jumpZ: 0, jumpSpin: 0, lastHeading: 0,
+      bodyPitch: NaN, susp: null, suspSpeed: NaN,
+      raceEdge: 0, cpIndex: 0, path: null, pathT: 0,
+      lastDriver: null, riderMesh: null, fromSpot: null,
+      aiSteer: 0, aiTX: NaN, aiTZ: NaN, aiAir: false, airLights: null,
+      copsOut: NaN, shootT: NaN, aimSkill: NaN, deployT: 0, fireT: 0,
+      heliSpeed: 0, rotorSpin: 0, mgT: 0, rkT: 0, pitch: 0, roll: 0, sinkV: 0
     };
     // AI-ridden bikes get a visible rider (empty motorbikes look abandoned)
     if (spec.bike && car.occupied === 'ai') {
@@ -630,7 +657,7 @@ GAME.vehicles = (function () {
     // back off the mesh. What the body does ON TOP of it is load transfer,
     // and adding the two is what lets a car climbing a ramp still squat under
     // power instead of one angle overwriting the other.
-    car.bodyPitch = justLanded || car.bodyPitch === undefined
+    car.bodyPitch = justLanded || isNaN(car.bodyPitch)
       ? pitch : U.lerp(car.bodyPitch, pitch, Math.min(1, dt * 22));
 
     // Weight moves when speed does: open the throttle and it goes to the back
@@ -642,7 +669,7 @@ GAME.vehicles = (function () {
     // there and the body simply hangs at its flight pose.
     var susp = car.susp || (car.susp = { p: 0, v: 0 });
     var airborne = (car.air || 0) > 0.05;
-    var accel = (car.speed - (car.suspSpeed === undefined ? car.speed : car.suspSpeed)) / Math.max(dt, 1e-4);
+    var accel = (car.speed - (isNaN(car.suspSpeed) ? car.speed : car.suspSpeed)) / Math.max(dt, 1e-4);
     car.suspSpeed = car.speed;
     // bikes lean, they do not sit on a body that pitches on its springs, and
     // the rider code owns their attitude anyway
@@ -729,6 +756,7 @@ GAME.vehicles = (function () {
   // The reversing AWAY from the wall is the part that was wrong.
   var REST_WALL = 0.4, MAX_BOUNCE = 3.5;
 
+  var wallBoxes = [];   // collideStatic's list of nearby boxes, refilled per car
   function collideStatic(car, dt) {
     var fx = fwdX(car), fz = fwdZ(car);
     var sxv = fz, szv = -fx;
@@ -737,7 +765,7 @@ GAME.vehicles = (function () {
     // not sample points. Sampling always had gaps: a thin post could pass
     // between samples, and a BUILDING CORNER could poke through the body
     // between two of them — you could clip through the corner of a block.
-    var boxes = GAME.city.hash.query(car.pos.x, car.pos.z, car.spec.l);
+    var boxes = GAME.city.hash.queryInto(car.pos.x, car.pos.z, car.spec.l, wallBoxes);
     if (!boxes.length) return;
     var afx = Math.abs(fx), afz = Math.abs(fz);
     for (var bi = 0; bi < boxes.length; bi++) {

@@ -232,9 +232,12 @@ GAME.city = (function () {
   // height y. A roof only counts once you're actually up at its level, so
   // street traffic never snaps onto a building — but a car that clears a roof
   // on a jump can land on it and drive around up there.
+  // (both keep a list of boxes and refill it — three height asks a tick for
+  // every car used to build three fresh lists; see SpatialHash.queryInto)
+  var driveBoxes = [], surfBoxes = [];
   city.driveSurfaceY = function (x, z, y) {
     var best = city.groundY(x, z, y);
-    var boxes = city.hash.query(x, z, 1);
+    var boxes = city.hash.queryInto(x, z, 1, driveBoxes);
     for (var i = 0; i < boxes.length; i++) {
       var b = boxes[i];
       if (b.tag !== 'building' || b.h === undefined) continue;
@@ -247,7 +250,7 @@ GAME.city = (function () {
   // else the terrain height. Used so aircraft can set down on rooftops.
   city.surfaceY = function (x, z, atY) {
     var y = city.groundY(x, z, atY);
-    var boxes = city.hash.query(x, z, 1);
+    var boxes = city.hash.queryInto(x, z, 1, surfBoxes);
     for (var i = 0; i < boxes.length; i++) {
       var b = boxes[i];
       if (b.tag !== 'building') continue; // land on buildings, not props/fences

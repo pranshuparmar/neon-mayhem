@@ -35,11 +35,19 @@ GAME.combat = (function () {
     var wd = WEAPONS[GAME.player.currentWeapon];
     return wd && wd.range >= 100 ? wd.range * 0.85 : 44;
   }
-  function candidates() {
+  // Everything the lock could take, in range and in the cone, with a score
+  // (lower is better) — but not yet asked whether it can be seen. Kept in a
+  // reused list of reused entries; gather() returns the eye height to test
+  // sight lines from.
+  var scored = [], scoredN = 0;
+  function score(t, sc) {
+    var e = scored[scoredN] || (scored[scoredN] = { t: null, score: 0 });
+    e.t = t; e.score = sc; scoredN++;
+  }
+  function gather() {
     var P = GAME.player, cam = GAME.cam;
-    var list = [];
     var range = lockRange();
-    var eye = P.pos.y + 1.35;
+    scoredN = 0;
     var peds = GAME.world.peds;
     for (var i = 0; i < peds.length; i++) {
       var t = peds[i];
@@ -49,8 +57,7 @@ GAME.combat = (function () {
       if (d > range || d < 0.5) continue;
       var ang = Math.abs(U.wrapPI(Math.atan2(dx, dz) - cam.yaw));
       if (ang > 0.75) continue;
-      if (!GAME.city.hash.segmentClear(P.pos.x, P.pos.z, t.pos.x, t.pos.z, eye)) continue;
-      list.push({ t: t, score: ang * 30 + d });
+      score(t, ang * 30 + d);
     }
     // vehicles are lockable too (pursuing cruisers etc.), weighted after people
     var cars = GAME.world.cars;
@@ -62,19 +69,46 @@ GAME.combat = (function () {
       if (cd > range || cd < 0.5) continue;
       var cang = Math.abs(U.wrapPI(Math.atan2(cdx, cdz) - cam.yaw));
       if (cang > 0.7) continue;
-      if (!GAME.city.hash.segmentClear(P.pos.x, P.pos.z, car.pos.x, car.pos.z, eye)) continue;
-      list.push({ t: car, score: cang * 30 + cd + 14 });
+      score(car, cang * 30 + cd + 14);
+    }
+    return P.pos.y + 1.35;
+  }
+  // every target in view, best first: what Q/E and the wheel step through
+  function candidates() {
+    var P = GAME.player, eye = gather(), list = [];
+    for (var i = 0; i < scoredN; i++) {
+      var e = scored[i];
+      if (GAME.city.hash.segmentClear(P.pos.x, P.pos.z, e.t.pos.x, e.t.pos.z, eye)) list.push({ t: e.t, score: e.score });
+      e.t = null;
     }
     list.sort(function (a, b) { return a.score - b.score; });
     return list.map(function (e) { return e.t; });
+  }
+  // candidates()[0] — the same target, ties and all — without building the
+  // list or looking along a sight line at anything that could not win: the
+  // best-scored is tested first, and the first one in view is the answer.
+  // Swinging the camera while aiming asks this up to sixty times a second.
+  function bestCandidate() {
+    var P = GAME.player, eye = gather(), found = null;
+    while (!found) {
+      var bi = -1;
+      for (var i = 0; i < scoredN; i++) {
+        if (scored[i].t && (bi < 0 || scored[i].score < scored[bi].score)) bi = i;
+      }
+      if (bi < 0) break;
+      var t = scored[bi].t;
+      scored[bi].t = null;
+      if (GAME.city.hash.segmentClear(P.pos.x, P.pos.z, t.pos.x, t.pos.z, eye)) found = t;
+    }
+    for (var k = 0; k < scoredN; k++) scored[k].t = null;
+    return found;
   }
 
   function setAiming(on) {
     if (on === aiming) return;
     aiming = on;
     if (on) {
-      var c = candidates();
-      lockTarget = c.length ? c[0] : null;
+      lockTarget = bestCandidate();
       lockIdx = 0;
       aimYawRef = GAME.cam.yaw;
     } else {
@@ -99,6 +133,7 @@ GAME.combat = (function () {
   }
 
   // hitscan against peds, cars, buildings; returns nearest hit
+  var shotBoxes = [];   // raycast's list of boxes along the shot, refilled per shot
   function raycast(ox, oy, oz, dirX, dirZ, maxRange, ignoreCar) {
     var bestT = maxRange, hit = null;
     var peds = GAME.world.peds;
@@ -115,7 +150,7 @@ GAME.combat = (function () {
       var tc = rayCircle(ox, oz, dirX, dirZ, car.pos.x, car.pos.z, car.radius * 0.9);
       if (tc >= 0 && tc < bestT) { bestT = tc; hit = { kind: 'car', obj: car, t: tc }; }
     }
-    var boxes = GAME.city.hash.query(ox + dirX * bestT / 2, oz + dirZ * bestT / 2, bestT / 2 + 15);
+    var boxes = GAME.city.hash.queryInto(ox + dirX * bestT / 2, oz + dirZ * bestT / 2, bestT / 2 + 15, shotBoxes);
     for (var b = 0; b < boxes.length; b++) {
       var bx = boxes[b];
       if (bx.noLOS) continue;
@@ -270,18 +305,14 @@ GAME.combat = (function () {
       // until the camera genuinely moves again.
       if (Math.abs(U.wrapPI(GAME.cam.yaw - aimYawRef)) > 0.055) {
         aimYawRef = GAME.cam.yaw;
-        var cams = candidates();
-        if (cams.length) lockTarget = cams[0];
+        var best = bestCandidate();
+        if (best) lockTarget = best;
       }
       var keep = lockRange() + 8;
       if (lockTarget && (lockTarget.dead || lockTarget.gone || U.dist2(lockTarget.pos.x, lockTarget.pos.z, P.pos.x, P.pos.z) > keep * keep)) {
-        var c = candidates();
-        lockTarget = c.length ? c[0] : null;
+        lockTarget = bestCandidate();
       }
-      if (!lockTarget && GAME.frame % 20 === 0) {
-        var c2 = candidates();
-        if (c2.length) lockTarget = c2[0];
-      }
+      if (!lockTarget && GAME.frame % 20 === 0) lockTarget = bestCandidate();
     } else {
       inp.wheel = 0;
     }
@@ -585,7 +616,7 @@ GAME.combat = (function () {
     // Officers are individuals. One spawns a better shot than the next and
     // stays that way for the whole chase, rather than being re-rolled at every
     // trigger pull — without it a roadblock is four copies of the same machine.
-    if (shooter && shooter.aimSkill === undefined) shooter.aimSkill = 0.78 + Math.random() * 0.5;
+    if (shooter && isNaN(shooter.aimSkill)) shooter.aimSkill = 0.78 + Math.random() * 0.5;
     var skill = (shooter ? shooter.aimSkill : 1) * (1.35 - U.clamp(accuracy, 0, 1));
     // brought the gun up just now, or has been firing at you for a while?
     var fresh = !shooter || GAME.time - (shooter.lastShotT || -99) > 2.5;

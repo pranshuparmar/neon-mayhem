@@ -272,19 +272,30 @@ GeoBatch.prototype.build = function () {
 };
 
 // Uniform-grid broadphase for static AABBs {minX,maxX,minZ,maxZ,h,tag}.
+//
+// Queried constantly — three times a tick for every car's height, again for
+// its walls, once for every pedestrian and for the camera — so a query
+// allocates nothing: cells are keyed by a number rather than an "i,j" string,
+// a box already collected is recognised by a stamp on it rather than a Set,
+// and the answer goes into an array the caller keeps (queryInto).
 function SpatialHash(cell) {
   this.cell = cell || 25;
-  this.map = {};
+  this.map = new Map();
   this.all = [];
+  this.stamp = 0;
 }
+// a cell's key: i and j packed into one exact integer (|i|, |j| < 32768)
+function hashCell(i, j) { return (i + 32768) * 65536 + (j + 32768); }
 SpatialHash.prototype.insert = function (box) {
   this.all.push(box);
+  box._q = 0; box._s = 0;   // query and line-of-sight stamps, set up front so every box keeps one shape
   var c = this.cell;
   var i0 = Math.floor(box.minX / c), i1 = Math.floor(box.maxX / c);
   var j0 = Math.floor(box.minZ / c), j1 = Math.floor(box.maxZ / c);
   for (var i = i0; i <= i1; i++) for (var j = j0; j <= j1; j++) {
-    var k = i + ',' + j;
-    (this.map[k] || (this.map[k] = [])).push(box);
+    var k = hashCell(i, j), arr = this.map.get(k);
+    if (!arr) this.map.set(k, arr = []);
+    arr.push(box);
   }
 };
 // A non-finite lookup is a bug wherever it came from, but it must not take
@@ -296,29 +307,42 @@ SpatialHash.prototype.insert = function (box) {
 //
 // NaN needs no guard and never did: NaN <= NaN is false, so those loops run
 // zero times and return nothing. Infinity is the case that hangs.
-SpatialHash.prototype.query = function (x, z, r) {
-  var c = this.cell, out = [], seen = null;
-  if (!isFinite(x) || !isFinite(z) || !isFinite(r)) return out;
-  var i0 = Math.floor((x - r) / c), i1 = Math.floor((x + r) / c);
-  var j0 = Math.floor((z - r) / c), j1 = Math.floor((z + r) / c);
-  var multi = (i1 > i0 || j1 > j0);
-  if (multi) seen = new Set();
-  for (var i = i0; i <= i1; i++) for (var j = j0; j <= j1; j++) {
-    var arr = this.map[i + ',' + j];
-    if (!arr) continue;
-    for (var k = 0; k < arr.length; k++) {
-      var b = arr[k];
-      if (multi) { if (seen.has(b)) continue; seen.add(b); }
-      if (x + r < b.minX || x - r > b.maxX || z + r < b.minZ || z - r > b.maxZ) continue;
-      out.push(b);
+//
+// The boxes overlapping the square of half-size r round (x, z), each once, in
+// the order they are met, written into `out` (which is returned). A caller
+// that keeps its own `out` and reads it before asking again allocates nothing.
+SpatialHash.prototype.queryInto = function (x, z, r, out) {
+  var n = 0;
+  if (isFinite(x) && isFinite(z) && isFinite(r)) {
+    var c = this.cell, st = ++this.stamp;
+    var i0 = Math.floor((x - r) / c), i1 = Math.floor((x + r) / c);
+    var j0 = Math.floor((z - r) / c), j1 = Math.floor((z + r) / c);
+    for (var i = i0; i <= i1; i++) for (var j = j0; j <= j1; j++) {
+      var arr = this.map.get(hashCell(i, j));
+      if (!arr) continue;
+      for (var k = 0; k < arr.length; k++) {
+        var b = arr[k];
+        if (b._q === st) continue;
+        b._q = st;
+        if (x + r < b.minX || x - r > b.maxX || z + r < b.minZ || z - r > b.maxZ) continue;
+        out[n++] = b;
+      }
     }
   }
+  out.length = n;
   return out;
+};
+// the same answer in an array of its own, for callers that keep it
+SpatialHash.prototype.query = function (x, z, r) {
+  return this.queryInto(x, z, r, []);
 };
 // Segment LOS test: returns true if segment is clear of all boxes.
 // `aboveY`, when given, is the viewer's eye height: anything topping out below
 // it is seen over (a parapet, a kerb), and anything that only STARTS above it
 // (a bridge deck overhead) is seen under. Without it the check stays flat-2D.
+//
+// It walks the segment in steps and looks at the boxes round each step, each
+// box tested once however many steps find it (the line-of-sight stamp).
 SpatialHash.prototype.segmentClear = function (x0, z0, x1, z1, aboveY) {
   // the same trap one level up: an infinite endpoint makes `len` infinite,
   // `steps` infinite, and `for (s = 0; s <= steps; s++)` never ends. Answer
@@ -326,21 +350,30 @@ SpatialHash.prototype.segmentClear = function (x0, z0, x1, z1, aboveY) {
   if (!isFinite(x0) || !isFinite(z0) || !isFinite(x1) || !isFinite(z1)) return true;
   var dx = x1 - x0, dz = z1 - z0;
   var len = Math.sqrt(dx * dx + dz * dz);
-  var steps = Math.max(1, Math.ceil(len / (this.cell * 0.8)));
-  var checked = new Set();
+  var c = this.cell, r = c * 0.6;
+  var steps = Math.max(1, Math.ceil(len / (c * 0.8)));
+  var st = ++this.stamp;
   for (var s = 0; s <= steps; s++) {
-    var t = s / steps;
-    var arr = this.query(x0 + dx * t, z0 + dz * t, this.cell * 0.6);
-    for (var k = 0; k < arr.length; k++) {
-      var b = arr[k];
-      if (checked.has(b)) continue;
-      checked.add(b);
-      if (b.noLOS) continue;
-      if (aboveY !== undefined) {
-        if (b.h !== undefined && b.h < aboveY - 0.4) continue;
-        if (b.minY !== undefined && b.minY > aboveY + 0.6) continue;
+    var t = s / steps, x = x0 + dx * t, z = z0 + dz * t;
+    var i0 = Math.floor((x - r) / c), i1 = Math.floor((x + r) / c);
+    var j0 = Math.floor((z - r) / c), j1 = Math.floor((z + r) / c);
+    for (var i = i0; i <= i1; i++) for (var j = j0; j <= j1; j++) {
+      var arr = this.map.get(hashCell(i, j));
+      if (!arr) continue;
+      for (var k = 0; k < arr.length; k++) {
+        var b = arr[k];
+        if (b._s === st) continue;
+        // only a box this step's square reaches counts as looked at; one it
+        // misses may still be reached by a later step
+        if (x + r < b.minX || x - r > b.maxX || z + r < b.minZ || z - r > b.maxZ) continue;
+        b._s = st;
+        if (b.noLOS) continue;
+        if (aboveY !== undefined) {
+          if (b.h !== undefined && b.h < aboveY - 0.4) continue;
+          if (b.minY !== undefined && b.minY > aboveY + 0.6) continue;
+        }
+        if (segIntersectsAABB(x0, z0, x1, z1, b)) return false;
       }
-      if (segIntersectsAABB(x0, z0, x1, z1, b)) return false;
     }
   }
   return true;

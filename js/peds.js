@@ -1,29 +1,37 @@
-GAME.resolveCircle = function (x, z, r, feetY) {
-  var boxes = GAME.city.hash.query(x, z, r + 1);
-  for (var i = 0; i < boxes.length; i++) {
-    var b = boxes[i];
-    // if the entity is standing on top of this box (a rooftop), don't shove it off
-    if (feetY !== undefined && b.h !== undefined && b.h <= feetY + 0.2) continue;
-    // nor if the box belongs to a deck overhead — you walk under a bridge
-    if (feetY !== undefined && b.minY !== undefined && feetY < b.minY - 1) continue;
-    var cx = U.clamp(x, b.minX, b.maxX), cz = U.clamp(z, b.minZ, b.maxZ);
-    var dx = x - cx, dz = z - cz;
-    var d2 = dx * dx + dz * dz;
-    if (d2 < r * r) {
-      if (d2 < 0.0001) {
-        // center inside the box: push out along smallest penetration
-        var pl = x - b.minX, pr = b.maxX - x, pt = z - b.minZ, pb = b.maxZ - z;
-        var m = Math.min(pl, pr, pt, pb);
-        if (m === pl) x = b.minX - r; else if (m === pr) x = b.maxX + r;
-        else if (m === pt) z = b.minZ - r; else z = b.maxZ + r;
-      } else {
-        var d = Math.sqrt(d2);
-        x = cx + dx / d * r; z = cz + dz / d * r;
+// Pushes a circle out of the static boxes round it. Every ped, officer and
+// the player on foot asks this every tick, so it reuses one list of boxes
+// (see SpatialHash.queryInto), and a caller that hands in `out` gets the
+// answer written there rather than in a new object.
+GAME.resolveCircle = (function () {
+  var near = [];
+  return function (x, z, r, feetY, out) {
+    var boxes = GAME.city.hash.queryInto(x, z, r + 1, near);
+    for (var i = 0; i < boxes.length; i++) {
+      var b = boxes[i];
+      // if the entity is standing on top of this box (a rooftop), don't shove it off
+      if (feetY !== undefined && b.h !== undefined && b.h <= feetY + 0.2) continue;
+      // nor if the box belongs to a deck overhead — you walk under a bridge
+      if (feetY !== undefined && b.minY !== undefined && feetY < b.minY - 1) continue;
+      var cx = U.clamp(x, b.minX, b.maxX), cz = U.clamp(z, b.minZ, b.maxZ);
+      var dx = x - cx, dz = z - cz;
+      var d2 = dx * dx + dz * dz;
+      if (d2 < r * r) {
+        if (d2 < 0.0001) {
+          // center inside the box: push out along smallest penetration
+          var pl = x - b.minX, pr = b.maxX - x, pt = z - b.minZ, pb = b.maxZ - z;
+          var m = Math.min(pl, pr, pt, pb);
+          if (m === pl) x = b.minX - r; else if (m === pr) x = b.maxX + r;
+          else if (m === pt) z = b.minZ - r; else z = b.maxZ + r;
+        } else {
+          var d = Math.sqrt(d2);
+          x = cx + dx / d * r; z = cz + dz / d * r;
+        }
       }
     }
-  }
-  return { x: x, z: z };
-};
+    if (out) { out.x = x; out.z = z; return out; }
+    return { x: x, z: z };
+  };
+})();
 
 // hair, built around the head's origin, and every style its own silhouette —
 // when a flattop and a crew cut differ by six centimetres nobody can tell
@@ -147,6 +155,7 @@ function buildPedMesh(opts) {
 
 GAME.peds = (function () {
   var world = GAME.world;
+  var pushOut = { x: 0, z: 0 };   // resolveCircle's answer for the walkers, reused
 
   function spawnPed(x, z, opts) {
     opts = opts || {};
@@ -169,9 +178,29 @@ GAME.peds = (function () {
       dodgeSkill: Math.random(),
       reactDelay: U.randRange(Math.random, 0.15, 0.45), reactT: 0,
       wpX: x, wpZ: z, wpT: 0,
-      shootT: U.randRange(Math.random, 0.5, 1.5)
+      shootT: U.randRange(Math.random, 0.5, 1.5),
+      look: mesh.userData.look,   // so a car can remember who drives it
+      // Everything else a ped can come to carry, declared here in one order.
+      // These used to be added as they came up, in whatever order a life
+      // happened to go, and the street's peds ended up in some ninety
+      // different shapes — too many for the engine to keep update() below
+      // optimised, so for much of the time it ran unoptimised and boxed every
+      // number it touched: that was most of the garbage the city made. Each
+      // starts as what the missing field used to read as: 0 where it is read
+      // as `x || 0`, false or null where it is only tested, NaN for a number
+      // the code asks whether it has been set yet, and undefined for anything
+      // else it asks that of.
+      dead: false, gone: false, killedBy: null,
+      foe: null, aimPose: false, punchArm: false, poseT: 0, bangT: 0, bumpCd: 0,
+      fleeX: 0, fleeZ: 0,
+      diveX: 0, diveY: 0, diveZ: 0, diveDur: 0,
+      knockX: 0, knockY: NaN, knockZ: 0, knockSpin: 0,
+      prevX2: NaN, prevZ2: NaN, stuckT: 0,
+      stolenCar: null, hadDriver: undefined, yankT: 0, yankWarned: false, leftCar: false,
+      jobPed: false, iceServed: false, carrying: undefined,
+      patrol: false, onCase: null, beatX: 0, beatZ: 0, beatT: 0, grabbing: false,
+      aimSkill: NaN, lastShotT: 0
     };
-    ped.look = mesh.userData.look;   // so a car can remember who drives it
     world.peds.push(ped);
     return ped;
   }
@@ -316,7 +345,7 @@ GAME.peds = (function () {
       if (ped.dead) {
         ped.deadT += dt;
         // carry through a knock-back from a vehicle: tumble, then settle
-        if (ped.knockY !== undefined) {
+        if (!isNaN(ped.knockY)) {
           var gy0 = GAME.city.groundY(ped.pos.x, ped.pos.z);
           ped.knockY -= 18 * dt;
           ped.pos.x += ped.knockX * dt;
@@ -327,7 +356,7 @@ GAME.peds = (function () {
           ped.knockZ *= Math.exp(-2.2 * dt);
           if (ped.pos.y <= gy0 + 0.35) {
             ped.pos.y = gy0 + 0.35;
-            ped.knockY = undefined; // come to rest
+            ped.knockY = NaN; // come to rest
           }
         }
         if (ped.deadT > 12 || d2p > 190 * 190) removePed(ped);
@@ -676,13 +705,13 @@ GAME.peds = (function () {
       if (!GAME.city.canWalkTo(fx0, fz0, ped.pos.x, ped.pos.z)) {
         ped.pos.x = fx0; ped.pos.z = fz0;
       }
-      var rp2 = GAME.resolveCircle(ped.pos.x, ped.pos.z, 0.4);
+      var rp2 = GAME.resolveCircle(ped.pos.x, ped.pos.z, 0.4, undefined, pushOut);
       // walking into a palm tree forever is not a plan: when the legs move
       // but the body doesn't, sidestep and pick a new line. (Job peds are
       // steered by their mission every frame; leave them to it.)
       if (!ped.jobPed && ped.speed > 0.3 && ped.state !== 'dive') {
         var bdx = rp2.x - ped.prevX2, bdz = rp2.z - ped.prevZ2;
-        if (ped.prevX2 !== undefined && bdx * bdx + bdz * bdz < Math.pow(ped.speed * dt * 0.25, 2)) {
+        if (!isNaN(ped.prevX2) && bdx * bdx + bdz * bdz < Math.pow(ped.speed * dt * 0.25, 2)) {
           ped.stuckT = (ped.stuckT || 0) + dt;
           if (ped.stuckT > 1.1) {
             ped.stuckT = 0;
