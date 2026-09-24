@@ -376,6 +376,9 @@ GAME.city = (function () {
     tex.onUpdate = function () {
       tex.onUpdate = null;
       var im = tex.image;
+      // what went up, for anyone counting texture memory after the fact
+      // (an r128 texture has no userData of its own)
+      if (im) { tex.userData = tex.userData || {}; tex.userData.w = im.width; tex.userData.h = im.height; }
       if (im && im.getContext) im.width = im.height = 1;
     };
     return tex;

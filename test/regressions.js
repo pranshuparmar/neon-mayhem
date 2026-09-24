@@ -89,6 +89,11 @@
 //      are on, and settles back to it.
 //  13. TOUCH STICK    — a viewport change mid-drag must let the stick go
 //      rather than keep steering from an origin on the old screen.
+//  13b. MEMORY      — what the memory work took off stays off: spike strips
+//      are capped, the result card, the map and uploaded textures let their
+//      canvases go, the ocean moves on the GPU, batches and static meshes
+//      drop their arrays, the island is instanced and indexed, entities keep
+//      one shape, and a shop's preview renderer goes when the shop closes.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -4123,6 +4128,204 @@ function withTimeout(p, ms) {
     JSON.stringify(hand.back));
   check('touch: zero page errors on the touch layer', touchErrors.length === 0, touchErrors[0]);
   await tctx.close();
+
+  // ---------- 13b: memory — what the memory work took off stays off ----------
+  // One check per fix, each measured when it was made. Every one of these
+  // reads something the old code got wrong, not merely that the new code runs.
+  var mem = await page.evaluate(function () {
+    var out = {}, P = GAME.player, W = GAME.world;
+    GAME.godMode = true;
+    if (P.inCar) GAME.exitCar();
+    // Spike strips: every roadblock at four stars lays one, and nothing took
+    // them up, so a long chase left dozens across the city. Now the oldest
+    // goes when a new one is laid.
+    function strips() {
+      var n = 0;
+      GAME.scene.traverse(function (o) {
+        var g = o.geometry;
+        if (o.isMesh && g && g.parameters && g.parameters.width === 11 && g.parameters.height === 0.12) n++;
+      });
+      return n;
+    }
+    var node = GAME.city.nearestNode(0, -300);
+    GAME.test.teleport(node.x, node.z);
+    var carsBefore = W.cars.slice(), pedsBefore = W.peds.slice();
+    var car = GAME.test.spawnCar('sedan', 4, 0);
+    GAME.test.enterNearestCar(car);
+    GAME.test.fastForward(1.5);               // climbing in takes a moment
+    var copsBefore = W.cars.filter(function (c) { return c.isPolice; }).length;
+    out.laid = 0;
+    if (GAME.police._roadblock && P.inCar) {
+      for (var r = 0; r < 12 && out.laid < 6; r++) {
+        P.car.vx = 0; P.car.vz = 20;       // heading south at speed, as the roadblock wants
+        var n0 = W.cars.length;
+        GAME.police._roadblock(5);
+        if (W.cars.length > n0) out.laid++;
+      }
+    }
+    out.strips = strips();
+    out.copsAdded = W.cars.filter(function (c) { return c.isPolice; }).length - copsBefore;
+    if (P.inCar) GAME.exitCar();
+    W.cars.filter(function (c) { return carsBefore.indexOf(c) < 0; }).forEach(function (c) { GAME.vehicles.removeCar(c); });
+    W.peds.filter(function (p) { return pedsBefore.indexOf(p) < 0; }).forEach(function (p) { GAME.peds.removePed(p); });
+    GAME.police.clearWanted();
+
+    // The result card and the full map each kept a canvas the size of the
+    // screen for the rest of the session after their first showing.
+    GAME.share.show({ slug: 'memory-check', eyebrow: 'check', title: 'CHECK', subtitle: 'check', accent: '#ffffff', stats: [] });
+    var sc = document.getElementById('share-canvas');
+    out.shareShown = sc ? sc.width * sc.height : -1;
+    GAME.share.hide();
+    out.shareHidden = sc ? sc.width * sc.height : -1;
+    GAME.hud.toggleMap(true);
+    var bm = document.getElementById('bigmap');
+    out.mapShown = bm ? bm.width * bm.height : -1;
+    GAME.hud.toggleMap(false);
+    out.mapHidden = bm ? bm.width * bm.height : -1;
+
+    // A texture drawn on a canvas once, uploaded and never redrawn: the
+    // canvas went on holding the pixels the GPU already had.
+    var st = GAME.city.signTex;
+    out.signCanvas = st && st.image ? st.image.width * st.image.height : -1;
+    out.signUploaded = st && st.userData && st.userData.w ? st.userData.w * st.userData.h : 0;
+
+    // The ocean's swell was worked out on the CPU and the whole plane sent up
+    // again every frame; now the shader moves it and the buffer stays put.
+    var ocean = null;
+    GAME.scene.traverse(function (o) {
+      var g = o.geometry;
+      if (o.isMesh && g && g.parameters && g.parameters.width === 3600) ocean = o;
+    });
+    out.ocean = !!ocean;
+    if (ocean) {
+      var v0 = ocean.geometry.attributes.position.version;
+      for (var u = 0; u < 30; u++) GAME.city.update(1 / 60, 50 + u / 60);
+      out.oceanUploads = ocean.geometry.attributes.position.version - v0;
+    }
+
+    // A batch held its working arrays after handing the geometry over, so
+    // the world was built twice over in memory.
+    var gb = new GeoBatch();
+    gb.addBox(0, 0, 0, 1, 1, 1, 0, 0xffffff, 0);
+    var gg = gb.build();
+    out.batchBuilt = gg.attributes.position.count;
+    out.batchKept = gb.pos.length;
+
+    // The broadphase built a fresh list (and a Set, and a string per cell)
+    // for every query; a caller now hands in the list it keeps.
+    var keep = [];
+    out.queryInto = typeof GAME.city.hash.queryInto === 'function' &&
+      GAME.city.hash.queryInto(P.pos.x, P.pos.z, 40, keep) === keep && keep.length > 0;
+
+    // The island's trees and lamps were thousands of boxes baked into one
+    // batch; they are copies of one box now.
+    out.biggestInstanced = 0;
+    GAME.scene.traverse(function (o) { if (o.isInstancedMesh && o.instanceColor) out.biggestInstanced = Math.max(out.biggestInstanced, o.count); });
+
+    // The land was 258,000 separate triangles with every corner stored in
+    // full; it is indexed wedges now, each small enough for 16-bit indices.
+    var land = [];
+    GAME.scene.traverse(function (o) { if (o.userData && o.userData.land) land.push(o); });
+    out.landMeshes = land.length;
+    out.landShared = land.length > 0 && land.every(function (m) {
+      var g = m.geometry;
+      return g.index && g.index.count > 4 * g.attributes.position.count && g.attributes.position.count <= 65536;
+    });
+
+    // Static meshes carried position, normal, colour and uv as floats whatever
+    // their material read, and kept every array after it was on the GPU.
+    var blocks = GAME.city.blockMeshes, packed = 0, loose = 0, released = 0, heldStatic = 0, blocksHeld = 0, bounded = true;
+    GAME.scene.traverse(function (o) {
+      if (!o.isMesh || !o.geometry || !o.material || Array.isArray(o.material)) return;
+      var g = o.geometry, m = o.material;
+      if (blocks.indexOf(o) >= 0) { if (g.attributes.position.array) blocksHeld++; return; }
+      if (!g.userData.released || !m.vertexColors || m.map || !g.attributes.color) return;
+      if (g.attributes.color.normalized && !g.attributes.uv) packed++; else loose++;
+    });
+    GAME.scene.traverse(function (o) {
+      if (!o.isMesh || !o.geometry || !o.geometry.userData.released) return;
+      var g = o.geometry;
+      if (g.attributes.position.array) heldStatic++; else released++;
+      if (!g.boundingSphere) bounded = false;
+    });
+    out.packed = packed; out.loose = loose;
+    out.released = released; out.heldStatic = heldStatic; out.blocksHeld = blocksHeld; out.blocks = blocks.length;
+    out.bounded = bounded;
+
+    // Peds and cars picked up their fields as their lives went, and the
+    // street held some ninety shapes of one and two dozen of the other — too
+    // many for the engine to keep their update loops optimised, which boxed
+    // every number they touched. Fresh ones, a stretch of ordinary play and a
+    // chase later, all share one.
+    var oldCars = W.cars.slice(), oldPeds = W.peds.slice();
+    GAME.test.teleport(-150, -150);
+    GAME.test.setWanted(3);
+    for (var t = 0; t < 60 * 20; t++) { P.health = 100; GAME.tick(1 / 60); }
+    GAME.police.clearWanted();
+    var carShapes = {}, pedShapes = {}, nc = 0, np = 0;
+    W.cars.forEach(function (c) { if (oldCars.indexOf(c) < 0) { carShapes[Object.keys(c).join()] = 1; nc++; } });
+    W.peds.forEach(function (p) { if (oldPeds.indexOf(p) < 0) { pedShapes[Object.keys(p).join()] = 1; np++; } });
+    out.freshCars = nc; out.freshPeds = np;
+    out.carShapes = Object.keys(carShapes).length; out.pedShapes = Object.keys(pedShapes).length;
+    GAME.godMode = false;
+    return out;
+  });
+
+  // The preview in the showroom, the tailor and the hardware store is a
+  // second WebGL renderer. Closing the shop left it — and the scene it drew
+  // from, holding the city's shared meshes — alive for the rest of the
+  // session. The context it draws with while the shop is open must be gone
+  // once the shop closes, every visit.
+  var pvVisits = [];
+  for (var pc = 0; pc < 3; pc++) {
+    await page.evaluate(function (pc) {
+      var ls = GAME.shops.locations().filter(function (x) { return x.kind === 'showroom' || x.kind === 'dress' || x.kind === 'hardware'; });
+      GAME.shops.open(ls[pc % ls.length]);
+    }, pc);
+    await page.evaluate(function () { return new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); }); });
+    pvVisits.push(await page.evaluate(function () {
+      var cv = document.getElementById('shop-preview');
+      // asking a canvas for the kind of context it already has returns that one
+      var gl = cv && (cv.getContext('webgl2') || cv.getContext('webgl'));
+      var live = !!gl && !gl.isContextLost();
+      GAME.shops.close();
+      return { live: live, lost: !!gl && gl.isContextLost() };
+    }));
+  }
+
+  check('memory: roadblocks were laid (anchor sanity)', mem.laid >= 4 && mem.copsAdded >= 8,
+    mem.laid + ' roadblocks, ' + mem.copsAdded + ' cruisers');
+  check('memory: and no more than three spike strips lie about', mem.strips <= 3, mem.strips + ' strips');
+  check('memory: the result card has a canvas while it shows (anchor sanity)', mem.shareShown > 0, mem.shareShown + ' px');
+  check('memory: and lets it go when it closes', mem.shareHidden === 0, mem.shareHidden + ' px');
+  check('memory: the full map has a canvas while it is open (anchor sanity)', mem.mapShown > 0, mem.mapShown + ' px');
+  check('memory: and lets it go when it shuts', mem.mapHidden === 0, mem.mapHidden + ' px');
+  check('memory: the sign atlas went up at full size (anchor sanity)', mem.signUploaded >= 512 * 512, mem.signUploaded + ' px uploaded');
+  check('memory: and its canvas no longer holds the pixels', mem.signCanvas <= 1, mem.signCanvas + ' px held');
+  check('memory: the ocean is there (anchor sanity)', mem.ocean);
+  check('memory: and its swell no longer re-sends the plane every frame', mem.oceanUploads === 0,
+    mem.oceanUploads + ' uploads in 30 frames');
+  check('memory: a batch builds (anchor sanity)', mem.batchBuilt === 36, mem.batchBuilt + ' vertices');
+  check('memory: and keeps nothing once it has', mem.batchKept === 0, mem.batchKept + ' floats kept');
+  check('memory: the broadphase answers into the list its caller keeps', mem.queryInto);
+  check('memory: the island’s trees and lamps are copies of one box', mem.biggestInstanced >= 1000,
+    'largest instanced set ' + mem.biggestInstanced);
+  check('memory: the island’s land is indexed wedges sharing their points', mem.landMeshes >= 2 && mem.landShared,
+    mem.landMeshes + ' wedges');
+  check('memory: vertex-coloured static meshes store colour as bytes and no unused uv', mem.packed > 10 && mem.loose === 0,
+    mem.packed + ' packed, ' + mem.loose + ' not');
+  check('memory: static geometry is gone from JS once it is on the GPU', mem.released > 50 && mem.heldStatic === 0 && mem.bounded,
+    mem.released + ' released, ' + mem.heldStatic + ' still held' + (mem.bounded ? '' : ', some without bounds'));
+  check('memory: while the blocks, which the facade checks read, keep theirs (anchor sanity)', mem.blocks > 0 && mem.blocksHeld === mem.blocks,
+    mem.blocksHeld + ' of ' + mem.blocks);
+  check('memory: fresh traffic and walkers were made (anchor sanity)', mem.freshCars >= 5 && mem.freshPeds >= 5,
+    mem.freshCars + ' cars, ' + mem.freshPeds + ' peds');
+  check('memory: and every car has the same shape', mem.carShapes === 1, mem.carShapes + ' shapes');
+  check('memory: and every ped has the same shape', mem.pedShapes === 1, mem.pedShapes + ' shapes');
+  check('memory: the shop preview draws with a live context while open (anchor sanity)',
+    pvVisits.every(function (v) { return v.live; }), JSON.stringify(pvVisits));
+  check('memory: and it is let go each time the shop closes', pvVisits.every(function (v) { return v.lost; }),
+    JSON.stringify(pvVisits));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the

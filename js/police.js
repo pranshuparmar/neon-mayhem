@@ -936,6 +936,8 @@ GAME.police = (function () {
     get airUnitCount() { return airUnits.length; },
     setWanted: setWanted,
     clearWanted: clearWanted,
-    update: update
+    update: update,
+    // test-only: lay a roadblock ahead of the player now (see the spike cap)
+    _roadblock: placeRoadblock
   };
 })();

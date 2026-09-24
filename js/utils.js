@@ -364,8 +364,11 @@ function releaseStatic(root, keep) {
     g.userData.released = true;
     if (!g.boundingSphere) g.computeBoundingSphere();
     if (!g.boundingBox) g.computeBoundingBox();
-    for (var k in g.attributes) g.attributes[k].onUpload(dropArray);
+    // what it takes on the GPU, for anyone counting once the arrays are gone
+    var bytes = g.index ? g.index.array.byteLength : 0;
+    for (var k in g.attributes) { bytes += g.attributes[k].array.byteLength; g.attributes[k].onUpload(dropArray); }
     if (g.index) g.index.onUpload(dropArray);
+    g.userData.bytes = bytes;
   });
 }
 function dropArray() { this.array = null; }
