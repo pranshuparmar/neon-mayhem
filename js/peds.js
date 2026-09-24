@@ -288,7 +288,7 @@ GAME.peds = (function () {
     }
     if (foe && foe.kind === 'car') {
       var c = foe.car;
-      var cok = !!c && !c.dead;
+      var cok = !!c && !c.dead && !c.gone;
       return { valid: cok, kind: 'car', car: c, ped: null,
         x: cok ? c.pos.x : ped.pos.x, z: cok ? c.pos.z : ped.pos.z,
         y: cok ? c.pos.y : ped.pos.y, speed: cok ? Math.abs(c.speed || 0) : 0 };
@@ -419,6 +419,7 @@ GAME.peds = (function () {
         // pavement, a driver hauling a stranger out of his own car, and the
         // original case of somebody deciding they have had enough of you.
         ped.attackT -= dt;
+        if (ped.stolenCar && ped.stolenCar.gone) ped.stolenCar = null;   // despawned: nothing to take back
         var myCar = ped.stolenCar && !ped.stolenCar.dead && ped.stolenCar.occupied !== 'ai' ? ped.stolenCar : null;
         var chaseCar = myCar && U.dist2(ped.pos.x, ped.pos.z, myCar.pos.x, myCar.pos.z) < 55 * 55;
         var F = foeState(ped, chaseCar ? myCar : null);

@@ -371,6 +371,7 @@
     GAME.vehicles.update(dt);
     GAME.peds.update(dt);
     GAME.updatePlayer(dt);
+    GAME.aircraft.updateRockets(dt);
     GAME.combat.update(dt);
     GAME.combat.updatePickups(dt);
     GAME.police.update(dt);

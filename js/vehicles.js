@@ -50,10 +50,10 @@ GAME.fx = (function () {
     }
   }
   function tracer(x0, y0, z0, x1, y1, z1) {
-    var t = tracers[tCursor];
+    var slot = tCursor, t = tracers[slot];
     tCursor = (tCursor + 1) % MAXT;
     t.life = 0.07;
-    var a = tGeo.attributes.position.array, i = t.i = tracers.indexOf(t) * 6;
+    var a = tGeo.attributes.position.array, i = t.i = slot * 6;
     a[i] = x0; a[i + 1] = y0; a[i + 2] = z0; a[i + 3] = x1; a[i + 4] = y1; a[i + 5] = z1;
     tGeo.attributes.position.needsUpdate = true;
   }
@@ -72,9 +72,14 @@ GAME.fx = (function () {
   function update(dt) {
     if (!pGeo) return;
     var pa = pGeo.attributes.position.array, ca = pGeo.attributes.color.array;
+    // The buffers go to the GPU only when something in them moved: all 360
+    // slots were re-uploaded every tick, 520 KB a second, with not a spark
+    // in the air.
+    var moved = false, hid = false;
     for (var i = 0; i < MAXP; i++) {
       var p = parts[i];
       if (p.life > 0) {
+        moved = true;
         p.life -= dt;
         p.vy += p.grav * dt;
         p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
@@ -84,10 +89,10 @@ GAME.fx = (function () {
         ca[i * 3] = ((c >> 16 & 255) / 255) * fade;
         ca[i * 3 + 1] = ((c >> 8 & 255) / 255) * fade;
         ca[i * 3 + 2] = ((c & 255) / 255) * fade;
-      } else if (pa[i * 3 + 1] > -999) pa[i * 3 + 1] = -1000;
+      } else if (pa[i * 3 + 1] > -999) { pa[i * 3 + 1] = -1000; hid = true; }
     }
-    pGeo.attributes.position.needsUpdate = true;
-    pGeo.attributes.color.needsUpdate = true;
+    if (moved || hid) pGeo.attributes.position.needsUpdate = true;
+    if (moved) pGeo.attributes.color.needsUpdate = true;
     var ta = tGeo.attributes.position.array;
     for (var t = 0; t < MAXT; t++) {
       var tr = tracers[t];
@@ -451,6 +456,10 @@ GAME.vehicles = (function () {
   function removeCar(car) {
     var i = world.cars.indexOf(car);
     if (i >= 0) world.cars.splice(i, 1);
+    // said out loud, as a ped's `gone` is: a despawned car is not dead, and
+    // anything still holding one (a stranger's grudge, a stolen-car chase, a
+    // lock-on) must let go of it rather than keep chasing where it last stood
+    car.gone = true;
     if (car.parkedSpot) car.parkedSpot.live = null;
     GAME.scene.remove(car.mesh);
     disposeTree(car.mesh);

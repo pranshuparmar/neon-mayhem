@@ -179,6 +179,13 @@ GAME.aircraft = (function () {
         vx: ddx / dl * 55, vy: ddy / dl * 55, vz: ddz / dl * 55, t: 0, from: car });
       GAME.police.noteGunfire(car.pos);
     }
+  }
+
+  // Rockets fly on whatever the player does next. They used to be advanced
+  // only inside the gunship's own update, so bailing out left any in flight
+  // frozen in the air — each holding the TALON it came from — until the next
+  // flight picked them up mid-air. The tick advances them now, flown or not.
+  function updateRockets(dt) {
     for (var i = rockets.length - 1; i >= 0; i--) {
       var r = rockets[i];
       r.t += dt;
@@ -469,6 +476,7 @@ GAME.aircraft = (function () {
   return {
     updateHeli: updateHeli,
     updatePlane: updatePlane,
+    updateRockets: updateRockets,
     startParachute: startParachute,
     updateParachute: updateParachute,
     land: land,

@@ -274,7 +274,7 @@ GAME.combat = (function () {
         if (cams.length) lockTarget = cams[0];
       }
       var keep = lockRange() + 8;
-      if (lockTarget && (lockTarget.dead || U.dist2(lockTarget.pos.x, lockTarget.pos.z, P.pos.x, P.pos.z) > keep * keep)) {
+      if (lockTarget && (lockTarget.dead || lockTarget.gone || U.dist2(lockTarget.pos.x, lockTarget.pos.z, P.pos.x, P.pos.z) > keep * keep)) {
         var c = candidates();
         lockTarget = c.length ? c[0] : null;
       }

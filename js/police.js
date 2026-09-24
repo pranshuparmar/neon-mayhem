@@ -154,6 +154,17 @@ GAME.police = (function () {
     for (var i = 0; i < spikes.length; i++) { GAME.scene.remove(spikes[i].mesh); disposeTree(spikes[i].mesh); }
     spikes = [];
   }
+  // A long chase at four stars lays a strip at every roadblock, and nothing
+  // took them up again until the stars ran out: twenty minutes in, a hundred
+  // of them across the city. Only the newest few are ever ahead of anyone, so
+  // the oldest goes when a new one is laid, and any the chase has left far
+  // behind are taken up (the same range at which a cruiser is sent home).
+  var MAX_SPIKES = 3, SPIKE_KEEP_R = 260;
+  function dropSpike(i) {
+    GAME.scene.remove(spikes[i].mesh);
+    disposeTree(spikes[i].mesh);
+    spikes.splice(i, 1);
+  }
 
   // The pursuit's working lists are asked for every tick, so they are kept
   // and refilled rather than built new each time: a caller reads one before
@@ -719,6 +730,7 @@ GAME.police = (function () {
       mesh.position.set(sx, 0.1, sz);
       mesh.rotation.y = perp;
       GAME.scene.add(mesh);
+      if (spikes.length >= MAX_SPIKES) dropSpike(0);
       spikes.push({ mesh: mesh, x: sx, z: sz });
     }
   }
@@ -822,6 +834,10 @@ GAME.police = (function () {
       }
     }
     // spike strips
+    var sf = GAME.focus();
+    for (var so = spikes.length - 1; so >= 0; so--) {
+      if (U.dist2(spikes[so].x, spikes[so].z, sf.x, sf.z) > SPIKE_KEEP_R * SPIKE_KEEP_R) dropSpike(so);
+    }
     if (P.inCar && P.car && !P.car.spiked) {
       for (var sp = 0; sp < spikes.length; sp++) {
         if (U.dist2(P.car.pos.x, P.car.pos.z, spikes[sp].x, spikes[sp].z) < 27) {
