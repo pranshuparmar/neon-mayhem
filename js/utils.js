@@ -301,6 +301,55 @@ GeoBatch.prototype.build = function () {
   return g;
 };
 
+// Pack the static meshes under `root` down to what their materials read.
+// Every batch comes out with position, normal, colour and uv as 32-bit
+// floats, 44 bytes a vertex, whatever wears it. Unlit materials never look
+// at a normal and untextured ones never look at a uv, so those go; colours
+// (always a whole number of 255ths) are stored as bytes, exactly, and normals
+// as signed bytes padded to four — the shaders renormalise them, and a
+// hundred-and-twenty-seventh is well under anything the light can show.
+// Colours stay three bytes: a fourth would make r128 read it as alpha.
+// A geometry is left alone if it is shared (a vehicle may wear it with a
+// different material) or listed in `keep` (read back as floats elsewhere).
+function packStatic(root, keep) {
+  var need = new Map();
+  root.traverse(function (o) {
+    if (!o.isMesh || !o.geometry || !o.geometry.isBufferGeometry) return;
+    var n = need.get(o.geometry) || { uv: false, normal: false, color: false };
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach(function (m) {
+      if (!m) return;
+      if (m.map || m.emissiveMap || m.alphaMap || m.bumpMap || m.normalMap || m.specularMap ||
+          m.lightMap || m.aoMap || m.displacementMap) n.uv = true;
+      if (!m.isMeshBasicMaterial) n.normal = true;
+      if (m.vertexColors) n.color = true;
+    });
+    need.set(o.geometry, n);
+  });
+  need.forEach(function (n, g) {
+    if (g.userData.shared || (keep && keep.has(g))) return;
+    var at = g.attributes;
+    if (at.uv && !n.uv) g.deleteAttribute('uv');
+    if (at.normal && !n.normal) g.deleteAttribute('normal');
+    if (at.color && !n.color) g.deleteAttribute('color');
+    var c = g.attributes.color;
+    if (c && c.array instanceof Float32Array && c.itemSize === 3) {
+      var cb = new Uint8Array(c.count * 3);
+      for (var i = 0; i < cb.length; i++) cb[i] = Math.round(Math.min(1, Math.max(0, c.array[i])) * 255);
+      g.setAttribute('color', new THREE.BufferAttribute(cb, 3, true));
+    }
+    var nr = g.attributes.normal;
+    if (nr && nr.array instanceof Float32Array && nr.itemSize === 3) {
+      var nb = new Int8Array(nr.count * 4);
+      for (var v = 0; v < nr.count; v++) {
+        nb[v * 4] = Math.round(nr.array[v * 3] * 127);
+        nb[v * 4 + 1] = Math.round(nr.array[v * 3 + 1] * 127);
+        nb[v * 4 + 2] = Math.round(nr.array[v * 3 + 2] * 127);
+      }
+      g.setAttribute('normal', new THREE.BufferAttribute(nb, 4, true));
+    }
+  });
+}
+
 // Boxes drawn as copies of one unit cube: GeoBatch.addBox's arguments, less
 // the texture. Baked into a batch a box is 36 vertices of position, normal,
 // colour and uv — 1,584 bytes in memory and as much again on the GPU; as an

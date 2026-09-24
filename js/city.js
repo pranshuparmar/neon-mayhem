@@ -901,6 +901,9 @@ GAME.city = (function () {
     buildRamps(scene);
     buildLaneGraph();
     buildSpots();
+    // down to what each material reads (see packStatic); the blocks stay as
+    // built, since their colours, uvs and window light are read back
+    packStatic(scene, new Set(city.blockMeshes.map(function (m) { return m.geometry; })));
   };
 
   function addSign(batch, slotIdx, x, y, z, rotY, w, h, tint) {
