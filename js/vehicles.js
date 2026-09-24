@@ -820,7 +820,9 @@ GAME.vehicles = (function () {
     car.controls = { throttle: 0, steer: 0, handbrake: true };
     car.speed = 0; car.lat = 0;
     if (car.riderMesh) { car.mesh.remove(car.riderMesh); disposeTree(car.riderMesh); car.riderMesh = null; }
-    d.leftCar = car;
+    // a flag, not the car: holding the car here kept a despawned car's whole
+    // object graph alive for as long as its old driver walked about
+    d.leftCar = true;
     return d;
   }
 

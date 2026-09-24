@@ -624,9 +624,7 @@ GAME.city = (function () {
       ground: new GeoBatch(),
       marks: new GeoBatch(),
       downtown: new GeoBatch(),
-      strip: new GeoBatch(),
       generic: new GeoBatch(),
-      harbor: new GeoBatch(),
       // The ordinary blocks draw from their own batches so they can have a
       // material of their own. Everything already designed — the hospitals,
       // the stations, the shops, the tower, the island — shares the batches
@@ -638,7 +636,6 @@ GAME.city = (function () {
       blkGeneric: new GeoBatch(),
       blkHarbor: new GeoBatch(),
       wood: new GeoBatch(),
-      glow: new GeoBatch(),
       signs: new GeoBatch()
     };
     // How much of an ordinary block is lit after dark on average, and how
@@ -698,7 +695,12 @@ GAME.city = (function () {
     var texDowntown = windowTexture('#101322', ['#ffe9a8', '#a8e8ff', '#ffd0e8', '#c8ffe0'], 10, 8, 0.5);
     var texStrip = windowTexture('#241a2e', ['#ffe9a8', '#ffd0e8'], 8, 5, 0.4, 'rgba(90,60,90,0.8)');
     var texGeneric = windowTexture('#181420', ['#ffe0a0', '#d8c8ff'], 9, 7, 0.3);
-    var texHarbor = windowTexture('#1a1a20', ['#ffd890'], 6, 3, 0.15, 'rgba(60,62,70,0.9)');
+    // The harbour's dark-walled texture has nothing left to wear it — every
+    // harbour block paints from the pale set below — but it is still drawn and
+    // thrown away: it takes its rolls from the shared stream, and skipping them
+    // would move every ramp, prop and parking spot generated after it. Unworn,
+    // it never reaches the GPU.
+    windowTexture('#1a1a20', ['#ffd890'], 6, 3, 0.15, 'rgba(60,62,70,0.9)');
 
     // The same windows over a wall pale enough that the building's own colour
     // is what you see. Only the block batches use these.
@@ -719,7 +721,7 @@ GAME.city = (function () {
     }
     // the second landmass draws its own meshes but shares the city's window
     // textures and sign atlas, so the two read as one world
-    city.tex = { downtown: texDowntown, strip: texStrip, generic: texGeneric, harbor: texHarbor };
+    city.tex = { downtown: texDowntown, strip: texStrip, generic: texGeneric };
     city.signTex = atlas.tex;
     city.lam = lam;
     function addMesh(batch, mat) {
@@ -733,10 +735,11 @@ GAME.city = (function () {
     // road paint always wins its tie against the asphalt beneath it — a
     // depth-only nudge toward the camera, so no altitude can blur the two
     addMesh(batches.marks, new THREE.MeshBasicMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }));
+    // (the Strip's dark-walled texture has no mesh here either: its blocks
+    // paint from the pale set, and the only thing still wearing it is the
+    // showroom in shops.js, which reaches it through city.tex)
     addMesh(batches.downtown, lam(texDowntown));
-    addMesh(batches.strip, lam(texStrip));
     addMesh(batches.generic, lam(texGeneric));
-    addMesh(batches.harbor, lam(texHarbor));
     var blockMeshes = [
       addMesh(batches.blkDowntown, lamBlock(blkDowntown)),
       addMesh(batches.blkStrip, lamBlock(blkStrip)),
@@ -839,8 +842,6 @@ GAME.city = (function () {
     };
     addMesh(batches.wood, new THREE.MeshLambertMaterial({ vertexColors: true }));
     city.signMesh = addMesh(batches.signs, new THREE.MeshBasicMaterial({ map: atlas.tex, transparent: true, vertexColors: true, side: THREE.DoubleSide }));
-    var glowMat = new THREE.MeshBasicMaterial({ map: radialGlowTexture('rgba(255,176,102,0.55)'), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
-    addMesh(batches.glow, glowMat);
 
     buildInstancedProps(scene);
     buildLandmarks(scene);
@@ -1668,7 +1669,6 @@ GAME.city = (function () {
     var headGeo = new THREE.BoxGeometry(0.7, 0.22, 0.3);
     headGeo.translate(1.8, 5.8, 0);
     var headMesh = new THREE.InstancedMesh(headGeo, new THREE.MeshBasicMaterial({ color: 0xffc88a }), lightSpots.length);
-    var glowB = new GeoBatch();
     for (var L = 0; L < lightSpots.length; L++) {
       var ls = lightSpots[L];
       dummy.position.set(ls.x, 0, ls.z);

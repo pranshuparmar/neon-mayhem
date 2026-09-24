@@ -1361,18 +1361,26 @@ function withTimeout(p, ms) {
   // a third darker at night and a sixth at noon, measured against the build
   // before. Every paint check passed, because none of them looks at anything
   // but the blocks. So: whatever is not a block glows from its own map.
+  //
+  // Only meshes with something in them count. The anchor used to be six, and
+  // two of the six were the Strip's and the harbour's dark-walled meshes,
+  // which nothing had been built into since the blocks moved to the pale set:
+  // empty, drawn every frame for nothing, and removed. The four that are left
+  // are the whole list — downtown's and the generic stock's designed
+  // buildings, the tower, and the showroom.
   var dressed = await page.evaluate(function () {
     var blocks = GAME.city.blockMeshes || [], out = { own: 0, apart: 0 };
     GAME.scene.traverse(function (o) {
       var m = o.material;
       if (!o.isMesh || !m || Array.isArray(m) || !m.map || !m.emissiveMap) return;
       if (blocks.indexOf(o) >= 0) return;
+      if (!o.geometry.attributes.position || !o.geometry.attributes.position.count) return;
       if (m.emissiveMap === m.map) out.own++; else out.apart++;
     });
     return out;
   });
   check('paint: the buildings with windows of their own design are found (anchor sanity)',
-    dressed.own + dressed.apart >= 6, (dressed.own + dressed.apart) + ' textured materials besides the blocks');
+    dressed.own + dressed.apart >= 4, (dressed.own + dressed.apart) + ' textured materials besides the blocks');
   check('paint: and they still glow from their own walls, as before the blocks were painted',
     dressed.apart === 0, dressed.apart + ' of ' + (dressed.own + dressed.apart) + ' given a glow apart from their map');
 
