@@ -67,6 +67,10 @@
 //      frozen 999 the stopped decrement leaves behind.
 //   5. STEREO IMAGE   — a sound's pan must agree with the direction the
 //      player actually moves, so the field can never end up mirrored.
+//   5b. THE RADIO'S OWN TAP — every voice a station plays goes through the
+//       radio's bus, so none of it ticks on through the car door or past
+//       MUSIC: OFF; and a radio nobody can hear builds no voices at all, yet
+//       comes back on the beat it left.
 //   6. RIDING A ROOF  — a chassis that pitches has to carry its passenger
 //      with it, rather than leaving them on the roof it would have had
 //      sitting still.
@@ -2600,6 +2604,122 @@ function withTimeout(p, ms) {
     !!siren.seen && isFinite(siren.seen.x) && isFinite(siren.seen.z),
     'wanted=' + siren.wanted + ' got=' + JSON.stringify(siren.seen) +
     ' after ' + (siren.waited / 60).toFixed(1) + 's');
+
+  // ---------- 5b: the radio plays through the radio's own tap ----------
+  // The stations' hi-hats and snares were handed to the effects bus instead
+  // of the radio's, and the effects bus is behind neither the car door nor
+  // MUSIC: OFF — so they ticked on after you got out, and through the
+  // setting. Both buses are private, so find the effects bus the way a sound
+  // does: it is the one place a centred UI blip drains to. Then stop the sim,
+  // so the radio's own clock is the only thing left making sound, and count
+  // what it wires up. That clock is a setInterval against the audio clock,
+  // which no fastForward can hurry, so these windows are real time.
+  var tap = await page.evaluate(async function () {
+    var a = GAME.audio, ac = a.ctx;
+    if (!ac || ac.state !== 'running') return { running: false, state: ac ? ac.state : 'none' };
+    var edges = null, starts = null, voices = 0;
+    var connect0 = AudioNode.prototype.connect;
+    var osc0 = ac.createOscillator, src0 = ac.createBufferSource;
+    AudioNode.prototype.connect = function (dst) {
+      if (edges) edges.push([this, dst]);
+      return connect0.apply(this, arguments);
+    };
+    // both kinds of voice: a buffer source declares a start() of its own
+    var unspy = [OscillatorNode.prototype, AudioBufferSourceNode.prototype].map(function (p) {
+      var own = p.hasOwnProperty('start'), f = p.start;
+      p.start = function (when) { if (starts) starts.push(when); return f.apply(this, arguments); };
+      return function () { if (own) p.start = f; else delete p.start; };
+    });
+    ac.createOscillator = function () { voices++; return osc0.apply(ac, arguments); };
+    ac.createBufferSource = function () { voices++; return src0.apply(ac, arguments); };
+    function wait(ms) { return new Promise(function (res) { setTimeout(res, ms); }); }
+    var sfx = null;
+    async function listen(ms) {
+      edges = []; starts = []; voices = 0;
+      await wait(ms);
+      var w = { voices: voices, intoSfx: edges.filter(function (e) { return e[1] === sfx; }).length, starts: starts };
+      edges = starts = null;
+      return w;
+    }
+    var ts0 = GAME.timeScale, music0 = a.musicOn, mute0 = a.muted;
+    var out = { running: true, state: ac.state };
+    try {
+      // the sink of a blip: the one node its edges end at and never leave
+      edges = [];
+      a.cashTick();
+      var from = edges.map(function (e) { return e[0]; });
+      var sinks = edges.map(function (e) { return e[1]; }).filter(function (d) { return from.indexOf(d) < 0; });
+      edges = null;
+      out.sinks = sinks.length;
+      sfx = sinks.length === 1 ? sinks[0] : null;
+
+      a.setMusicOn(true);
+      if (a.muted) a.toggleMute();
+      var car = GAME.test.spawnCar('sedan', 4, 0);
+      GAME.test.fastForward(0.2);
+      if (car) GAME.test.enterNearestCar(car);
+      GAME.test.fastForward(1.2);           // boarding is a walk to the door first
+      out.inCar = GAME.player.inCar === true;
+      GAME.timeScale = 0;                   // the loop ticks nothing from here
+      var st = a.radio.stations.filter(function (s) { return s.name === a.radio.name; })[0];
+      var spb = 60 / st.bpm / 4;
+      out.driving = await listen(1200);
+      a.setMusicOn(false);
+      out.musicOff = await listen(1200);
+      a.setMusicOn(true);
+      a.toggleMute();
+      out.muted = await listen(1200);
+      a.toggleMute();
+      out.back = await listen(1200);
+      // Every note a station plays starts on a step, so a radio that kept
+      // counting through the silence starts its first note back on the grid
+      // it left — one that restarted the bar would land anywhere on it.
+      var t0 = out.driving.starts[0], off = 0;
+      out.back.starts.forEach(function (t) {
+        var k = (t - t0) / spb;
+        off = Math.max(off, Math.abs(k - Math.round(k)));
+      });
+      out.offBeat = t0 === undefined ? 1 : off;
+      // and out of the car: the fade down is played into on purpose, so let
+      // it finish before listening for what is left
+      GAME.test.exitCar();
+      await wait(3000);
+      out.foot = await listen(1500);
+      out.onFoot = !GAME.player.inCar;
+    } finally {
+      AudioNode.prototype.connect = connect0;
+      unspy.forEach(function (undo) { undo(); });
+      delete ac.createOscillator;
+      delete ac.createBufferSource;
+      GAME.timeScale = ts0;
+      a.setMusicOn(music0);
+      if (a.muted !== mute0) a.toggleMute();
+      if (GAME.player.inCar) GAME.test.exitCar();
+      if (car) GAME.vehicles.removeCar(car);
+    }
+    ['driving', 'musicOff', 'muted', 'back', 'foot'].forEach(function (k) { if (out[k]) delete out[k].starts; });
+    return out;
+  });
+  function windows(key) {
+    return ['driving', 'musicOff', 'muted', 'back', 'foot'].map(function (k) {
+      return k + '=' + (tap[k] ? tap[k][key] : '?');
+    }).join(' ');
+  }
+  check('radio: the audio clock is running (anchor sanity)', tap.running, 'state=' + tap.state);
+  check('radio: a UI blip drains to exactly one bus (anchor sanity)', tap.running && tap.sinks === 1, 'sinks=' + tap.sinks);
+  check('radio: behind the wheel it plays (anchor sanity)',
+    tap.running && tap.inCar && tap.driving.voices > 0, 'in car=' + tap.inCar + ' ' + windows('voices'));
+  check('radio: nothing a station plays reaches the effects bus',
+    tap.running && ['driving', 'musicOff', 'muted', 'back', 'foot'].every(function (k) { return tap[k].intoSfx === 0; }),
+    windows('intoSfx'));
+  check('radio: out of the car it builds no voices at all',
+    tap.running && tap.onFoot && tap.foot.voices === 0, 'on foot=' + tap.onFoot + ' voices=' + (tap.foot && tap.foot.voices));
+  check('radio: MUSIC: OFF and mute build none either',
+    tap.running && tap.musicOff.voices === 0 && tap.muted.voices === 0, windows('voices'));
+  // the guard on the fix rather than the bug: silence must not cost the beat
+  check('radio: heard again, it plays on the beat it left',
+    tap.running && tap.back.voices > 0 && tap.offBeat < 1e-4,
+    'voices=' + (tap.back && tap.back.voices) + ' off by ' + tap.offBeat + ' of a step');
 
   // ---------- 6: a rider follows the deck when it tilts ----------
   // vehicles.js pitches a chassis over a ramp (negative rotation.x lifts the
