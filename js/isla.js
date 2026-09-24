@@ -865,7 +865,12 @@ GAME.isla = (function () {
   // land mesh resolution — module scope so the grass-over-road audit can
   // replicate the exact triangles the land is made of
   var LAND_RINGS = 52, LAND_SECT = 192;
-  function buildLand(b) {
+  // The land's colours, by cell (see buildLand), and the wedges it is drawn
+  // in: this many sectors across, the rings split into an outer and an inner
+  // half — each well under the 65,536 vertices a 16-bit index can reach.
+  var LAND_COLS = [0x6a6048, 0x2a3526, 0x22301f, 0x1b2620];
+  var LAND_CHUNK_SECT = 24;
+  function buildLand(scene) {
     // Fine enough that a road cutting always catches mesh vertices: at the
     // old 128x34 a ~20m coast cell could straddle a shallow 14m-wide cut
     // completely, and the grass roofed over the road — the north bridge
@@ -914,7 +919,8 @@ GAME.isla = (function () {
         f0 = 1 - r / RINGS; f1 = 1 - (r + 1) / RINGS;
         var cm = ringPt((a0 + a1) / 2, (f0 + f1) / 2);
         var my = groundY(cm[0], cm[1]);
-        var col = f0 > 0.965 ? 0x6a6048 : my > 16 ? 0x2a3526 : my > 6 ? 0x22301f : 0x1b2620;
+        var ci = f0 > 0.965 ? 0 : my > 16 ? 1 : my > 6 ? 2 : 3;
+        var chunk = Math.floor(s / LAND_CHUNK_SECT) * 2 + (r < RINGS / 2 ? 0 : 1);
         var sub = subs[s * RINGS + r];
         // sample the cell as a (sub+1)^2 grid of groundY points
         var G = [];
@@ -946,12 +952,130 @@ GAME.isla = (function () {
         }
         for (si = 0; si < sub; si++) {
           for (ri = 0; ri < sub; ri++) {
-            b.addQuad(G[si][ri], G[si + 1][ri], G[si + 1][ri + 1], G[si][ri + 1], col, [0, 1, 0]);
+            land.quad(G[si][ri], G[si + 1][ri], G[si + 1][ri + 1], G[si][ri + 1], ci, chunk);
           }
         }
       }
     }
+    land.build(scene, Math.ceil(SECT / LAND_CHUNK_SECT) * 2);
   }
+
+  // The land as indexed meshes. Laid down as separate quads it came to
+  // 775,000 vertices and 34 MB for some 133,000 distinct points: a point was
+  // stored again for every triangle that touched it. Here a point is kept
+  // once per colour patch it borders (so the patches keep their hard edges),
+  // its normal is the area-weighted mean of the faces round it — the land is
+  // shaded smooth, where every quad used to be lit flat — and the land is
+  // cut into wedges small enough for 16-bit indices, which the renderer can
+  // also skip when they are out of view. The triangles are the ones the
+  // quads always made, wound the same way.
+  var land = (function () {
+    var ptOf, P, N, np, Q, QC, QK, nq;
+    function reset() {
+      ptOf = new Map(); np = 0; nq = 0;
+      P = new Float32Array(3 * 65536); N = new Float64Array(3 * 65536);
+      Q = new Int32Array(4 * 65536); QC = new Uint8Array(65536); QK = new Uint16Array(65536);
+    }
+    function grown(a, len) { var b = new a.constructor(len); b.set(a); return b; }
+    // the point at v, to the millimetre — an edge sampled from both of its
+    // cells can come out a rounding step apart, and is one edge all the same
+    function point(v) {
+      var qx = Math.round(v[0] * 1000), qz = Math.round(v[2] * 1000);
+      var key = (qx + 16777216) * 33554432 + (qz + 16777216);
+      var i = ptOf.get(key);
+      if (i !== undefined) {
+        if (Math.abs(P[i * 3 + 1] - v[1]) < 1e-3) return i;
+        // two heights on one spot, which the land never has: keep both apart
+        key = qx + ',' + Math.round(v[1] * 1000) + ',' + qz;
+        i = ptOf.get(key);
+        if (i !== undefined) return i;
+      }
+      if (np * 3 + 3 > P.length) { P = grown(P, P.length * 2); N = grown(N, N.length * 2); }
+      P[np * 3] = v[0]; P[np * 3 + 1] = v[1]; P[np * 3 + 2] = v[2];
+      ptOf.set(key, np);
+      return np++;
+    }
+    // add triangle (a, b, c)'s area-weighted normal, turned to agree with its
+    // quad's (nx, ny, nz), to each of its corners
+    function shade(a, b, c, ia, ib, ic, nx, ny, nz) {
+      var ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+      var vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+      var cx = uy * vz - uz * vy, cy = uz * vx - ux * vz, cz = ux * vy - uy * vx;
+      if (cx * nx + cy * ny + cz * nz < 0) { cx = -cx; cy = -cy; cz = -cz; }
+      N[ia * 3] += cx; N[ia * 3 + 1] += cy; N[ia * 3 + 2] += cz;
+      N[ib * 3] += cx; N[ib * 3 + 1] += cy; N[ib * 3 + 2] += cz;
+      N[ic * 3] += cx; N[ic * 3 + 1] += cy; N[ic * 3 + 2] += cz;
+    }
+    function quad(a, b, c, d, ci, chunk) {
+      // wound to face up, as GeoBatch.addQuad lays a quad given [0, 1, 0]
+      var ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+      var vx = d[0] - a[0], vy = d[1] - a[1], vz = d[2] - a[2];
+      var nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      if (ny < 0) { var t = b; b = d; d = t; nx = -nx; ny = -ny; nz = -nz; }
+      var ia = point(a), ib = point(b), ic = point(c), id = point(d);
+      shade(a, b, c, ia, ib, ic, nx, ny, nz);
+      shade(a, c, d, ia, ic, id, nx, ny, nz);
+      if (nq * 4 + 4 > Q.length) { Q = grown(Q, Q.length * 2); QC = grown(QC, QC.length * 2); QK = grown(QK, QK.length * 2); }
+      Q[nq * 4] = ia; Q[nq * 4 + 1] = ib; Q[nq * 4 + 2] = ic; Q[nq * 4 + 3] = id;
+      QC[nq] = ci; QK[nq] = chunk; nq++;
+    }
+    function build(scene, chunks) {
+      var i, k, q;
+      for (i = 0; i < np; i++) {
+        var l = Math.hypot(N[i * 3], N[i * 3 + 1], N[i * 3 + 2]) || 1;
+        N[i * 3] /= l; N[i * 3 + 1] /= l; N[i * 3 + 2] /= l;
+      }
+      var rgb = [];
+      LAND_COLS.forEach(function (c) { rgb.push((c >> 16 & 255) / 255, (c >> 8 & 255) / 255, (c & 255) / 255); });
+      // the quads by wedge, in the order they were laid
+      var first = new Int32Array(chunks + 1), order = new Int32Array(nq);
+      for (q = 0; q < nq; q++) first[QK[q] + 1]++;
+      for (k = 0; k < chunks; k++) first[k + 1] += first[k];
+      var fill = first.slice(0, chunks);
+      for (q = 0; q < nq; q++) order[fill[QK[q]]++] = q;
+      // a wedge's vertex for (point, colour), numbered as first met
+      var local = new Int32Array(np * LAND_COLS.length), seenIn = new Int32Array(np * LAND_COLS.length);
+      var verts = new Int32Array(65536);
+      for (k = 0; k < chunks; k++) {
+        var q0 = first[k], q1 = first[k + 1];
+        if (q1 === q0) continue;
+        var nv = 0;
+        if (verts.length < (q1 - q0) * 4) verts = new Int32Array((q1 - q0) * 4);
+        var index = new Uint32Array((q1 - q0) * 6);
+        var corner = [0, 0, 0, 0];
+        for (var o = q0; o < q1; o++) {
+          q = order[o];
+          for (var j = 0; j < 4; j++) {
+            var key = Q[q * 4 + j] * LAND_COLS.length + QC[q];
+            if (seenIn[key] !== k + 1) { seenIn[key] = k + 1; local[key] = nv; verts[nv++] = key; }
+            corner[j] = local[key];
+          }
+          var w = (o - q0) * 6;
+          index[w] = corner[0]; index[w + 1] = corner[1]; index[w + 2] = corner[2];
+          index[w + 3] = corner[0]; index[w + 4] = corner[2]; index[w + 5] = corner[3];
+        }
+        if (nv <= 65536) index = Uint16Array.from(index);
+        var pos = new Float32Array(nv * 3), nrm = new Float32Array(nv * 3), col = new Float32Array(nv * 3);
+        for (i = 0; i < nv; i++) {
+          var pt = Math.floor(verts[i] / LAND_COLS.length), cc = verts[i] - pt * LAND_COLS.length;
+          pos[i * 3] = P[pt * 3]; pos[i * 3 + 1] = P[pt * 3 + 1]; pos[i * 3 + 2] = P[pt * 3 + 2];
+          nrm[i * 3] = N[pt * 3]; nrm[i * 3 + 1] = N[pt * 3 + 1]; nrm[i * 3 + 2] = N[pt * 3 + 2];
+          col[i * 3] = rgb[cc * 3]; col[i * 3 + 1] = rgb[cc * 3 + 1]; col[i * 3 + 2] = rgb[cc * 3 + 2];
+        }
+        var g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+        g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        g.setIndex(new THREE.BufferAttribute(index, 1));
+        var mesh = new THREE.Mesh(g, sharedVertexLambert());
+        mesh.matrixAutoUpdate = false;
+        mesh.userData.land = true;
+        scene.add(mesh);
+      }
+      ptOf = P = N = Q = QC = QK = null;
+    }
+    return { quad: quad, build: build, reset: reset };
+  })();
   // lay this cell's boundary row at ff (ri 0 or sub) along the nb-resolution
   // polyline the coarser ring-neighbour draws for the same edge
   function snapRingEdge(G, sub, nb, a0, a1, ff, ri) {
@@ -1973,7 +2097,8 @@ GAME.isla = (function () {
     batches.strip.light = { lit: BL.strip.lit, warm: 0.6 };
     batches.downtown.light = { lit: BL.downtown.lit, warm: 0.35 };
     buildCache = new Map();   // see groundY: the build asks the same corners over and over
-    buildLand(batches.plain);
+    land.reset();
+    buildLand(scene);
     buildRoads(batches.plain);
     buildLandmarks(batches, scene);
     buildBlocks(batches, rng);
