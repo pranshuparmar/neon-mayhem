@@ -1509,20 +1509,31 @@ GAME.city = (function () {
     var og = new THREE.PlaneGeometry(3600, 3000, 72, 60);
     og.rotateX(-Math.PI / 2);
     og.translate(450, -0.35, 0);
-    city.oceanGeo = og;
-    city.oceanBase = og.attributes.position.array.slice();
     // the ocean plane spans the whole map, so its inland vertices sit just under
     // the streets. Sink those and never animate them — otherwise wave crests rise
     // through the asphalt as flickering blue patches.
-    var ob = city.oceanBase, mask = new Uint8Array(ob.length / 3);
-    for (var vi = 0, m = 0; vi < ob.length; vi += 3, m++) {
-      var vx = ob[vi], vz = ob[vi + 2];
-      mask[m] = city.isInWater(vx, vz) ? 1 : 0;
-      if (!mask[m]) og.attributes.position.array[vi + 1] = -4;
+    var op = og.attributes.position.array;
+    for (var vi = 0; vi < op.length; vi += 3) {
+      if (!city.isInWater(op[vi], op[vi + 2])) op[vi + 1] = -4;
     }
-    city.oceanMask = mask;
-    og.attributes.position.needsUpdate = true;
     var om = new THREE.MeshPhongMaterial({ color: 0x0d2242, shininess: 120, specular: 0x8899cc, transparent: true, opacity: 0.93 });
+    // The swell is worked out on the GPU. It used to be a loop over all 4,453
+    // vertices on every frame, and the whole position buffer sent up again
+    // after it, which also meant keeping a second copy of the plane to work
+    // from. The sea's own vertices lie at -0.35 and the sunk ones at -4, so
+    // the shader tells them apart by height and needs no mask. The two phases
+    // are wrapped here, in double precision, so a long session never runs
+    // the GPU's single-precision sine out of digits.
+    var wave = { value: new THREE.Vector2() };
+    om.onBeforeCompile = function (sh) {
+      sh.uniforms.uWave = wave;
+      if (sh.vertexShader.indexOf('#include <begin_vertex>') < 0) console.error('ocean: the shader chunk it hooks is missing');
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nuniform vec2 uWave;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n' +
+          'if (position.y > -1.0) transformed.y += sin(position.x * 0.045 + uWave.x) * 0.28 + sin(position.z * 0.06 + uWave.y) * 0.22;');
+    };
+    city.oceanWave = wave.value;
     var ocean = new THREE.Mesh(og, om);
     scene.add(ocean);
 
@@ -2490,16 +2501,8 @@ GAME.city = (function () {
   }
 
   city.update = function (dt, t) {
-    if (city.oceanGeo) {
-      var pos = city.oceanGeo.attributes.position;
-      var arr = pos.array, base = city.oceanBase, mask = city.oceanMask;
-      for (var i = 0, mi = 0; i < arr.length; i += 3, mi++) {
-        if (mask && !mask[mi]) continue; // inland vertex: stays sunk under the streets
-        var x = base[i], z = base[i + 2];
-        arr[i + 1] = base[i + 1] + Math.sin(x * 0.045 + t * 1.1) * 0.28 + Math.sin(z * 0.06 + t * 0.7) * 0.22;
-      }
-      pos.needsUpdate = true;
-    }
+    // the swell's two phases (see the ocean in buildBeach)
+    if (city.oceanWave) city.oceanWave.set((t * 1.1) % (Math.PI * 2), (t * 0.7) % (Math.PI * 2));
     if (city.wheelSpin) {
       city.wheelSpin.rotation.z += dt * 0.15; // spin about the hub axis
       if (!city.cabsSet) {
