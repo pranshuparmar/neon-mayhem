@@ -74,6 +74,9 @@
 //   6. RIDING A ROOF  — a chassis that pitches has to carry its passenger
 //      with it, rather than leaving them on the roof it would have had
 //      sitting still.
+//   6b. WHOEVER IS ABOARD — a rider is a person to a round, a fist and a
+//       blast, not the bike under them; nobody sits in a burning vehicle of
+//       any kind, and whoever is still aboard when one goes up dies with it.
 //   7. HAPTICS        — a buzz per knock, rationed, silenceable, and safe on
 //      a browser with no motor at all. Then the vocabulary on top of that: no
 //      two kinds may feel the same, the tiers must preempt in one direction
@@ -2773,6 +2776,131 @@ function withTimeout(p, ms) {
     deck.lift > 0.35 && Math.abs(deck.noseUp - deck.expect) < 0.05,
     'level=' + (deck.level || 0).toFixed(3) + ' noseUp=' + (deck.noseUp || 0).toFixed(3) +
     ' expected=' + (deck.expect || 0).toFixed(3) + ' lift=' + (deck.lift || 0).toFixed(3));
+
+  // ---------- 6b: whoever is aboard ----------
+  // An AI vehicle's driver is a flag on the car, and a bike's rider a figure
+  // riding its mesh: neither is a ped, so nothing aimed at people reached
+  // them. A round or a fist landed on the bike under a rider in plain view, a
+  // burning car kept its driver right up to the blast, and the blast killed
+  // the flag and left the rider sitting on the burnt-out frame. Each check
+  // here drives the real path — the trigger, the fist, the fuse, the blast —
+  // at vehicles that hold still ('hold' is no mode the traffic AI drives).
+  var aboard = await page.evaluate(function () {
+    var P = GAME.player, V = GAME.vehicles, w0 = P.currentWeapon;
+    GAME.test.teleport(350, 300);
+    function clearAround() {
+      GAME.world.peds.slice().forEach(function (p) {
+        if (U.dist2(p.pos.x, p.pos.z, P.pos.x, P.pos.z) < 45 * 45) GAME.peds.removePed(p);
+      });
+      GAME.world.cars.slice().forEach(function (c) {
+        if (U.dist2(c.pos.x, c.pos.z, P.pos.x, P.pos.z) < 45 * 45) V.removeCar(c);
+      });
+      P.roofCar = null;
+    }
+    function ridden(type, dx, dz) {
+      return V.spawnCar(type, P.pos.x + dx, P.pos.z + dz, 0, { occupied: 'ai', ai: { mode: 'hold' } });
+    }
+    // whoever has come out of this vehicle as a person (leftCar is what the
+    // way out stamps on them)
+    function outOf(car) {
+      return GAME.world.peds.filter(function (p) { return p.leftCar === car && !p.gone; });
+    }
+    function fire() { GAME.input.lmbPressed = true; GAME.test.fastForward(1 / 60); }
+    var out = {};
+
+    // a round at a rider, square through the seat (the bike points away)
+    clearAround();
+    GAME.test.fastForward(0.3);
+    GAME.combat.giveWeapon('pistol', 20);
+    GAME.combat.selectWeapon('pistol');
+    var shotAt = ridden('motorcycle', 0, 7);
+    var hp0 = shotAt.hp;
+    GAME.cam.yaw = P.heading = Math.atan2(shotAt.pos.x - P.pos.x, shotAt.pos.z - P.pos.z);
+    fire();
+    var hit = outOf(shotAt);
+    out.shot = { stillOn: !!shotAt.riderMesh, people: hit.length,
+      hurt: hit.length === 1 && (hit[0].dead || hit[0].hp < 30), bikeHp: hp0 - shotAt.hp };
+    GAME.test.fastForward(0.5);              // the trigger's cooldown
+
+    // a fist, at arm's length of a rider stopped beside you
+    clearAround();
+    GAME.combat.selectWeapon('fist');
+    GAME.cam.yaw = P.heading = 0;
+    var punched = ridden('motorcycle', 0, 1.6);
+    hp0 = punched.hp;
+    out.fist = P.currentWeapon;
+    fire();
+    var hitF = outOf(punched);
+    out.punch = { stillOn: !!punched.riderMesh, people: hitF.length,
+      hurt: hitF.length === 1 && (hitF[0].dead || hitF[0].hp < 30), bikeHp: hp0 - punched.hp };
+    GAME.test.fastForward(0.5);
+
+    // a fire, in a car, on a bike and in a cruiser: out, and clear of it
+    // (at no stars, so the officer runs like everybody else rather than
+    // coming for the gunman from the checks above)
+    GAME.police.clearWanted();
+    clearAround();
+    var burning = [ridden('sedan', -7, 10), ridden('motorcycle', 0, 10), ridden('police', 7, 10)];
+    burning.forEach(function (c) { V.damageCar(c, c.hp - c.spec.hp * 0.1, 'test'); });
+    out.lit = burning.every(function (c) { return c.stage >= 2 && !c.dead; });
+    GAME.test.fastForward(2);
+    out.fire = burning.map(function (c) {
+      return { type: c.type, aboard: c.occupied === 'ai', stillOn: !!c.riderMesh, out: outOf(c).length };
+    });
+    var fled = [].concat.apply([], burning.map(outOf));
+    GAME.test.fastForward(5);                // the fuse runs out
+    out.blown = burning.every(function (c) { return c.dead; });
+    out.fled = fled.length;
+    out.fledAlive = fled.filter(function (p) { return !p.dead; }).length;
+
+    // a blast with somebody still aboard, car and bike alike
+    clearAround();
+    var car = ridden('sedan', -5, 8), bike = ridden('motorcycle', 5, 8);
+    V.explodeCar(car, 'test');
+    V.explodeCar(bike, 'test');
+    function bodies(c) { return outOf(c).filter(function (p) { return p.dead; }).length; }
+    out.blast = { stillOn: !!bike.riderMesh, carBodies: bodies(car), bikeBodies: bodies(bike) };
+
+    // and a rider going past somebody else's: out in the open like anyone
+    clearAround();
+    var wreck = V.spawnCar('sedan', P.pos.x - 4, P.pos.z + 12, 0, {});
+    var passing = ridden('motorcycle', 0, 12);
+    V.explodeCar(wreck, 'test');
+    out.passing = { stillOn: !!passing.riderMesh, bodies: bodies(passing) };
+
+    // an owner who takes their bike back is seen riding it
+    clearAround();
+    var theirs = V.spawnCar('motorcycle', P.pos.x + 4, P.pos.z + 4, 0, {});
+    var owner = GAME.peds.spawnPed(theirs.pos.x + 1.2, theirs.pos.z);
+    owner.state = 'attack'; owner.attackT = 12; owner.temper = 0.9; owner.stolenCar = theirs;
+    var waited = 0;
+    while (theirs.occupied !== 'ai' && waited < 60 * 8) { GAME.test.fastForward(1 / 60); waited++; }
+    out.reclaim = { aboard: theirs.occupied === 'ai', rider: !!theirs.riderMesh, after: waited / 60 };
+
+    clearAround();
+    GAME.combat.selectWeapon(w0);
+    GAME.police.clearWanted();
+    GAME.player.health = 100;
+    return out;
+  });
+  check('aboard: a round through a rider knocks them off the bike',
+    !aboard.shot.stillOn && aboard.shot.people === 1 && aboard.shot.hurt, JSON.stringify(aboard.shot));
+  check('aboard: and the bike under them takes none of it', aboard.shot.bikeHp === 0, 'bike lost ' + aboard.shot.bikeHp + ' hp');
+  check('aboard: a fist reaches a rider too',
+    aboard.fist === 'fist' && !aboard.punch.stillOn && aboard.punch.hurt && aboard.punch.bikeHp === 0,
+    'swung ' + aboard.fist + ' ' + JSON.stringify(aboard.punch));
+  check('aboard: a fire was lit under all three (anchor sanity)', aboard.lit);
+  check('aboard: nobody sits in a burning car, bike or cruiser',
+    aboard.fire.every(function (f) { return !f.aboard && !f.stillOn && f.out === 1; }), JSON.stringify(aboard.fire));
+  check('aboard: and all three were clear when it went up',
+    aboard.blown && aboard.fled === 3 && aboard.fledAlive === 3,
+    'blown=' + aboard.blown + ' out=' + aboard.fled + ' alive=' + aboard.fledAlive);
+  check('aboard: a blast kills whoever is still aboard, car and bike alike',
+    !aboard.blast.stillOn && aboard.blast.carBodies === 1 && aboard.blast.bikeBodies === 1, JSON.stringify(aboard.blast));
+  check('aboard: a rider passing a blast is caught in it like anyone on foot',
+    !aboard.passing.stillOn && aboard.passing.bodies === 1, JSON.stringify(aboard.passing));
+  check('aboard: an owner takes their bike back (anchor sanity)', aboard.reclaim.aboard, JSON.stringify(aboard.reclaim));
+  check('aboard: and is seen riding it', aboard.reclaim.rider, JSON.stringify(aboard.reclaim));
 
   // ---------- nothing broke on the way through ----------
   await page.evaluate(function () { GAME.test.fastForward(5); });

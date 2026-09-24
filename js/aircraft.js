@@ -118,9 +118,13 @@ GAME.aircraft = (function () {
   var rockets = [];
   function hitAt(x, z, rad, dmg, byPlayer) {
     var cars = GAME.world.cars, P = GAME.player;
+    var pr = rad * 0.7;
     for (var i = 0; i < cars.length; i++) {
       var c = cars[i];
       if (c.dead || (P.inCar && c === P.car)) continue;
+      // a rider is as out in the open as anyone on the pavement: knocked
+      // off here, and caught with the people by the loop below
+      if (U.dist2(c.pos.x, c.pos.z, x, z) < pr * pr) GAME.vehicles.throwRider(c);
       if (U.dist2(c.pos.x, c.pos.z, x, z) < rad * rad) {
         // 'shot' is the NPC-fire source, which attribution deliberately
         // ignores — without the explicit flag the TALON's guns were
@@ -135,7 +139,6 @@ GAME.aircraft = (function () {
       }
     }
     var peds = GAME.world.peds;
-    var pr = rad * 0.7;
     for (var j = 0; j < peds.length; j++) {
       var pd = peds[j];
       if (pd.dead) continue;
