@@ -350,6 +350,26 @@ function packStatic(root, keep) {
   });
 }
 
+// Once a static mesh's vertices are on the GPU nothing here reads them
+// again, but three.js keeps the arrays it uploaded from: the world was held
+// twice, once on each side. This lets each attribute go as soon as it is
+// uploaded. The bounds are worked out first, since culling asks for them
+// later and would otherwise go looking for the vertices. The price, accepted:
+// a lost WebGL context cannot re-upload them. Same exemptions as packStatic.
+function releaseStatic(root, keep) {
+  root.traverse(function (o) {
+    if (!o.isMesh || !o.geometry || !o.geometry.isBufferGeometry) return;
+    var g = o.geometry;
+    if (g.userData.shared || g.userData.released || (keep && keep.has(g))) return;
+    g.userData.released = true;
+    if (!g.boundingSphere) g.computeBoundingSphere();
+    if (!g.boundingBox) g.computeBoundingBox();
+    for (var k in g.attributes) g.attributes[k].onUpload(dropArray);
+    if (g.index) g.index.onUpload(dropArray);
+  });
+}
+function dropArray() { this.array = null; }
+
 // Boxes drawn as copies of one unit cube: GeoBatch.addBox's arguments, less
 // the texture. Baked into a batch a box is 36 vertices of position, normal,
 // colour and uv — 1,584 bytes in memory and as much again on the GPU; as an
