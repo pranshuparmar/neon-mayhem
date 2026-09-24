@@ -271,6 +271,52 @@ GeoBatch.prototype.build = function () {
   return g;
 };
 
+// Boxes drawn as copies of one unit cube: GeoBatch.addBox's arguments, less
+// the texture. Baked into a batch a box is 36 vertices of position, normal,
+// colour and uv — 1,584 bytes in memory and as much again on the GPU; as an
+// instance it is a matrix and a colour, 76. That is the whole difference for
+// the scatter the world has hundreds of: fence posts, trees, lamp standards.
+// Lambert lights per vertex from the normal, and the instance matrix turns
+// the cube's normals exactly as addBox turns its own, so a box looks the
+// same either way.
+function BoxSet() { this.m = []; this.c = []; }
+BoxSet.prototype.addBox = function (cx, cy, cz, sx, sy, sz, rotY, color) {
+  var c = Math.cos(rotY || 0), s = Math.sin(rotY || 0);
+  // column by column: scale, turn about y (addBox's own sense), then place
+  this.m.push(c * sx, 0, -s * sx, 0, 0, sy, 0, 0, s * sz, 0, c * sz, 0, cx, cy, cz, 1);
+  this.c.push((color >> 16 & 255) / 255, (color >> 8 & 255) / 255, (color & 255) / 255);
+};
+// One mesh for the lot, or null if nothing was added. The material colours by
+// instance (see sharedInstanceLambert), not by vertex: the cube has none.
+BoxSet.prototype.build = function (material) {
+  var n = this.c.length / 3;
+  if (!n) return null;
+  var geo = SHARED.geo.unitBox;
+  if (!geo) {
+    var b = new GeoBatch();
+    b.addBox(0, 0, 0, 1, 1, 1, 0, 0xffffff, 0);
+    geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(b.pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(b.nrm, 3));
+    geo.userData.shared = true;
+    SHARED.geo.unitBox = geo;
+  }
+  var mesh = new THREE.InstancedMesh(geo, material, n);
+  mesh.instanceMatrix.array.set(this.m);
+  mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.c), 3);
+  mesh.matrixAutoUpdate = false;
+  this.m = this.c = null;
+  return mesh;
+};
+// The material for a BoxSet. Its own, not sharedVertexLambert: r128 keeps one
+// program per material, and instanced and plain meshes wearing the same one
+// swap it back and forth as the draw order alternates.
+function sharedInstanceLambert() {
+  var m = SHARED.mat.IL;
+  if (!m) { m = new THREE.MeshLambertMaterial(); m.userData.shared = true; SHARED.mat.IL = m; }
+  return m;
+}
+
 // Uniform-grid broadphase for static AABBs {minX,maxX,minZ,maxZ,h,tag}.
 //
 // Queried constantly — three times a tick for every car's height, again for

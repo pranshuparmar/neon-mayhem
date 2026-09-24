@@ -726,6 +726,9 @@ GAME.city = (function () {
     // boulevard east sidewalk
     batches.ground.addBox(358, 0.09, 0, 4, 0.18, 960, 0, 0x2c2838, 0);
 
+    // the boardwalk's railing posts and the airport's fence posts: several
+    // hundred identical boxes, drawn as copies of one (see BoxSet)
+    postSet = new BoxSet();
     buildBlocks(batches, atlas);
     buildPOIs(batches, atlas);
     buildBeach(scene, batches);
@@ -888,6 +891,8 @@ GAME.city = (function () {
     buildInstancedProps(scene);
     buildLandmarks(scene);
     buildAirport(scene);
+    scene.add(postSet.build(sharedInstanceLambert()));
+    postSet = null;
     // last, so its clearance tests can see every structure in the world — the
     // terminal, the hospitals, the station, the tower and the bridges all
     // register after the streets do, and a ramp placed before them can end up
@@ -1322,6 +1327,7 @@ GAME.city = (function () {
   };
 
   var containerData = [];
+  var postSet = null;   // the fence posts, while the city is being built
 
   function buildBeach(scene, batches) {
     // Boardwalk planks and railing, in lengths with a gap wherever a bridge
@@ -1357,7 +1363,7 @@ GAME.city = (function () {
       if ((z / 6 | 0) % 2 === 0 && !crossed(z)) batches.wood.addBox(365, 0.32, z, 10, 0.04, 3, 0, 0x6a4c34, 0);
     }
     for (var zr = -486; zr < 488; zr += 4) {
-      if (!crossed(zr)) batches.wood.addBox(370.2, 0.52, zr, 0.18, 1.04, 0.18, 0, 0x9a7a58, 0);
+      if (!crossed(zr)) postSet.addBox(370.2, 0.52, zr, 0.18, 1.04, 0.18, 0, 0x9a7a58);
     }
     // Each pier's mouth gets a threshold apron: the boardwalk SLAB continues
     // across the band to the deck. The crossed() gap exists for the RAILING —
@@ -1950,7 +1956,7 @@ GAME.city = (function () {
       var len = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(len / 5));
       for (var k = 0; k <= n; k++) {
         var t = k / n, px = x0 + (x1 - x0) * t, pz = z0 + (z1 - z0) * t;
-        b.addBox(px, 1.4, pz, 0.24, 2.8, 0.24, 0, postColor, 0);
+        postSet.addBox(px, 1.4, pz, 0.24, 2.8, 0.24, 0, postColor);
       }
       var mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, ang = Math.atan2(x1 - x0, z1 - z0);
       b.addBox(mx, 2.5, mz, 0.1, 0.16, len, ang, railColor, 0);

@@ -1977,8 +1977,12 @@ GAME.isla = (function () {
     buildRoads(batches.plain);
     buildLandmarks(batches, scene);
     buildBlocks(batches, rng);
-    buildPlanting(batches.plain, rng);
-    buildLights(batches.plain, batches.glow);
+    // The trees, lamp standards and lamp heads are boxes by the thousand and
+    // go in as copies of one (see BoxSet); the builders are unchanged and
+    // roll exactly what they rolled.
+    var props = new BoxSet(), heads = new BoxSet();
+    buildPlanting(props, rng);
+    buildLights(props, heads);
     buildSpans(batches, scene);
     buildSpots(rng);
     buildCache = null;        // gameplay queries run uncached
@@ -2003,6 +2007,9 @@ GAME.isla = (function () {
     city.facadeWalls['isla-tower'] = TB.downtown;
     city.facadeWalls['isla-villa'] = null;       // no window texture: its colour is its colour
     addMesh(batches.glow, new THREE.MeshBasicMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }));
+    scene.add(props.build(sharedInstanceLambert()));
+    // the heads in the glow's own terms, coloured by instance
+    scene.add(heads.build(new THREE.MeshBasicMaterial({ polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 })));
     addMesh(batches.signs, new THREE.MeshBasicMaterial({
       map: city.signTex, transparent: true, vertexColors: true, side: THREE.DoubleSide
     }));
