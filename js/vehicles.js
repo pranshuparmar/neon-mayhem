@@ -863,6 +863,39 @@ GAME.vehicles = (function () {
     return exposedRider(car) ? occupantOut(car, seatPos(car)) : null;
   }
 
+  // Rammed off. A rider sits on top of the machine with nothing around them,
+  // so a hit that only dents a car puts them on the road — over the same
+  // 4 m/s at which bodywork runs down anybody on foot. A real hit (10 m/s
+  // closing) kills and throws them clear the way a run-over does; anything
+  // less leaves them hurt in proportion, landed clear of what hit them, and
+  // back on their feet. `other` is whatever they were hit by, or hit.
+  var RIDER_KNOCK = 4, RIDER_KILL = 10;
+  function knockOffRider(bike, other, rel) {
+    var d = throwRider(bike);
+    if (!d) return;
+    var P = GAME.player, byPlayer = other === P.car && P.inCar;
+    var kx = bike.pos.x - other.pos.x, kz = bike.pos.z - other.pos.z;
+    var kl = Math.sqrt(kx * kx + kz * kz) || 1;
+    kx /= kl; kz /= kl;
+    if (byPlayer) GAME.police.reportCrime('hit_ped', d.pos);
+    if (rel >= RIDER_KILL) {
+      GAME.peds.kill(d, 'car', byPlayer);
+      var kf = Math.min(1, rel / 26);
+      d.knockX = kx * (4 + rel * 0.35);
+      d.knockZ = kz * (4 + rel * 0.35);
+      d.knockY = 2.2 + kf * 3.2;
+      d.knockSpin = (Math.random() < 0.5 ? -1 : 1) * (4 + kf * 7);
+      if (byPlayer) GAME.haptics.splat(kf);
+      return;
+    }
+    if (GAME.city.canWalkTo(d.pos.x, d.pos.z, d.pos.x + kx * 1.2, d.pos.z + kz * 1.2)) {
+      d.pos.x += kx * 1.2; d.pos.z += kz * 1.2;
+    }
+    // the player who did it may get a fight out of it; anyone else, a runner
+    GAME.peds.damage(d, rel * 3, byPlayer);
+    if (!byPlayer && !d.dead) GAME.peds.startFlee(d, other.pos.x, other.pos.z, 6);
+  }
+
   // Nobody sits in a fire. Out and away from it before it goes up — an
   // officer back to the chase on foot if there is one, otherwise off duty
   // the way a stand-down releases them, and running like everybody else.
@@ -928,6 +961,12 @@ GAME.vehicles = (function () {
         b.pos.x += nx * overlap / 2; b.pos.z += nz * overlap / 2;
         var avx = a.vx || 0, avz = a.vz || 0, bvx = b.vx || 0, bvz = b.vz || 0;
         var rel = (avx - bvx) * nx + (avz - bvz) * nz;
+        // a rider takes the hit in person, whichever side of it they were on
+        // — before the damage below, which can blow the bike up under them
+        if (rel > RIDER_KNOCK) {
+          if (exposedRider(a)) knockOffRider(a, b, rel);
+          if (exposedRider(b)) knockOffRider(b, a, rel);
+        }
         if (rel > 3 && (a.hitCd || 0) <= 0 && (b.hitCd || 0) <= 0) {
           a.hitCd = 0.25; b.hitCd = 0.25;
           var dmg = Math.min(26, rel * 1.3);

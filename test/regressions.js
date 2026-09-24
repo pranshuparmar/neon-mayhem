@@ -74,9 +74,10 @@
 //   6. RIDING A ROOF  — a chassis that pitches has to carry its passenger
 //      with it, rather than leaving them on the roof it would have had
 //      sitting still.
-//   6b. WHOEVER IS ABOARD — a rider is a person to a round, a fist and a
-//       blast, not the bike under them; nobody sits in a burning vehicle of
-//       any kind, and whoever is still aboard when one goes up dies with it.
+//   6b. WHOEVER IS ABOARD — a rider is a person to a round, a fist, a blast
+//       and a car driven into them, not the bike under them; nobody sits in
+//       a burning vehicle of any kind, and whoever is still aboard when one
+//       goes up dies with it.
 //   7. HAPTICS        — a buzz per knock, rationed, silenceable, and safe on
 //      a browser with no motor at all. Then the vocabulary on top of that: no
 //      two kinds may feel the same, the tiers must preempt in one direction
@@ -2780,10 +2781,11 @@ function withTimeout(p, ms) {
   // ---------- 6b: whoever is aboard ----------
   // An AI vehicle's driver is a flag on the car, and a bike's rider a figure
   // riding its mesh: neither is a ped, so nothing aimed at people reached
-  // them. A round or a fist landed on the bike under a rider in plain view, a
-  // burning car kept its driver right up to the blast, and the blast killed
-  // the flag and left the rider sitting on the burnt-out frame. Each check
-  // here drives the real path — the trigger, the fist, the fuse, the blast —
+  // them. A round, a fist or a car landed on the bike under a rider in plain
+  // view, a burning car kept its driver right up to the blast, and the blast
+  // killed the flag and left the rider sitting on the burnt-out frame. Each
+  // check here drives the real path — the trigger, the fist, the ram, the
+  // fuse, the blast —
   // at vehicles that hold still ('hold' is no mode the traffic AI drives).
   var aboard = await page.evaluate(function () {
     var P = GAME.player, V = GAME.vehicles, w0 = P.currentWeapon;
@@ -2868,6 +2870,40 @@ function withTimeout(p, ms) {
     V.explodeCar(wreck, 'test');
     out.passing = { stillOn: !!passing.riderMesh, bodies: bodies(passing) };
 
+    // A car driven into a rider: rolling with nobody at the wheel, square up
+    // the bike's back. The knock is stepped a frame at a time so the car can
+    // be stopped the moment it lands — what happens to somebody lying in
+    // front of a car that keeps coming is the run-over rule's business.
+    function ram(speed, strikerIsPlayers) {
+      clearAround();
+      var striker, bike;
+      if (strikerIsPlayers) {
+        striker = GAME.test.spawnCar('sedan', 4, 0);
+        GAME.test.enterNearestCar(striker);
+        GAME.test.fastForward(1.2);
+        striker.speed = 0;
+      } else striker = V.spawnCar('sedan', P.pos.x, P.pos.z + 6, 0, {});
+      var fx = Math.sin(striker.heading), fz = Math.cos(striker.heading);
+      bike = V.spawnCar('motorcycle', striker.pos.x + fx * 4, striker.pos.z + fz * 4, striker.heading,
+        { occupied: 'ai', ai: { mode: 'hold' } });
+      var h0 = GAME.police.heat;
+      striker.speed = speed;
+      for (var f = 0; f < 90 && bike.riderMesh; f++) GAME.test.fastForward(1 / 60);
+      striker.speed = 0;
+      var r = { inCar: !strikerIsPlayers || P.car === striker, stillOn: !!bike.riderMesh, people: outOf(bike) };
+      r.dead = r.people.filter(function (p) { return p.dead; }).length;
+      r.hurt = r.people.filter(function (p) { return !p.dead && p.hp < 30; }).length;
+      r.people = r.people.length;
+      r.heat = GAME.police.heat - h0;         // before a clean record cools it
+      GAME.test.fastForward(0.5);
+      if (strikerIsPlayers) GAME.test.exitCar();
+      GAME.police.clearWanted();
+      return r;
+    }
+    out.rammed = ram(15);
+    out.nudged = ram(6);
+    out.playerRam = ram(15, true);
+
     // an owner who takes their bike back is seen riding it
     clearAround();
     var theirs = V.spawnCar('motorcycle', P.pos.x + 4, P.pos.z + 4, 0, {});
@@ -2899,6 +2935,15 @@ function withTimeout(p, ms) {
     !aboard.blast.stillOn && aboard.blast.carBodies === 1 && aboard.blast.bikeBodies === 1, JSON.stringify(aboard.blast));
   check('aboard: a rider passing a blast is caught in it like anyone on foot',
     !aboard.passing.stillOn && aboard.passing.bodies === 1, JSON.stringify(aboard.passing));
+  check('aboard: a car driven into a rider throws them off, killed',
+    !aboard.rammed.stillOn && aboard.rammed.people === 1 && aboard.rammed.dead === 1, JSON.stringify(aboard.rammed));
+  check('aboard: a nudge puts them on the road hurt, not dead',
+    !aboard.nudged.stillOn && aboard.nudged.people === 1 && aboard.nudged.hurt === 1, JSON.stringify(aboard.nudged));
+  check('aboard: and a stranger\'s ram is not put on the player',
+    aboard.rammed.heat === 0 && aboard.nudged.heat === 0, 'heat ' + aboard.rammed.heat + ' / ' + aboard.nudged.heat);
+  check('aboard: running a rider down is on the player\'s record',
+    aboard.playerRam.inCar && !aboard.playerRam.stillOn && aboard.playerRam.dead === 1 && aboard.playerRam.heat > 0,
+    JSON.stringify(aboard.playerRam));
   check('aboard: an owner takes their bike back (anchor sanity)', aboard.reclaim.aboard, JSON.stringify(aboard.reclaim));
   check('aboard: and is seen riding it', aboard.reclaim.rider, JSON.stringify(aboard.reclaim));
 
