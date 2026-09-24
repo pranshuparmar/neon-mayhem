@@ -400,10 +400,32 @@ GAME.combat = (function () {
     cash: { color: 0x8dffd8, label: 'CASH' }
   };
 
-  // each pickup reads as the thing it gives: a pistol/SMG/shotgun silhouette,
-  // a medical cross, a shield, or a cash bundle — instead of a generic cube
+  // A shape, its halo and their materials are fixed by type and colour, so
+  // every pickup of a kind wears the same ones instead of building four GPU
+  // objects of its own — and pickups come and go: every downed cop drops one,
+  // and so do a third of the civilians. Marked shared, so disposeTree leaves
+  // them be.
+  var pickupGeos = {}, pickupMats = {}, haloGeo = null, haloMats = {};
   function pickupShape(type, color) {
     color = color || (PICKUP_DEFS[type] ? PICKUP_DEFS[type].color : 0xd8d8e8);
+    var key = type + '|' + color;
+    var geo = pickupGeos[key];
+    if (!geo) {
+      geo = buildPickupGeo(type, color);
+      geo.userData.shared = true;
+      pickupGeos[key] = geo;
+    }
+    var mat = pickupMats[color];
+    if (!mat) {
+      mat = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: color, emissiveIntensity: 0.55 });
+      mat.userData.shared = true;
+      pickupMats[color] = mat;
+    }
+    return new THREE.Mesh(geo, mat);
+  }
+  // each pickup reads as the thing it gives: a pistol/SMG/shotgun silhouette,
+  // a medical cross, a shield, or a cash bundle — instead of a generic cube
+  function buildPickupGeo(type, color) {
     var b = new GeoBatch();
     if (type === 'pistol') {
       b.addBox(0, 0.10, 0.06, 0.09, 0.13, 0.46, 0, color, 0);   // slide
@@ -436,7 +458,7 @@ GAME.combat = (function () {
       b.addBox(0, 0.17, 0, 0.50, 0.09, 0.28, 0.16, color, 0);
       b.addBox(0, 0.12, 0, 0.14, 0.24, 0.32, 0, 0x2a6a52, 0);      // paper band
     }
-    return new THREE.Mesh(b.build(), new THREE.MeshLambertMaterial({ vertexColors: true, emissive: color, emissiveIntensity: 0.55 }));
+    return b.build();
   }
 
   function pickupMesh(type) {
@@ -446,7 +468,14 @@ GAME.combat = (function () {
     core.position.y = 0.1;
     g.add(core);
     g.userData.core = core;
-    var halo = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.62, 16), new THREE.MeshBasicMaterial({ color: def.color, transparent: true, opacity: 0.5, side: THREE.DoubleSide }));
+    if (!haloGeo) { haloGeo = new THREE.RingGeometry(0.5, 0.62, 16); haloGeo.userData.shared = true; }
+    var haloMat = haloMats[def.color];
+    if (!haloMat) {
+      haloMat = new THREE.MeshBasicMaterial({ color: def.color, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+      haloMat.userData.shared = true;
+      haloMats[def.color] = haloMat;
+    }
+    var halo = new THREE.Mesh(haloGeo, haloMat);
     halo.rotation.x = -Math.PI / 2;
     halo.position.y = -0.5;
     g.add(halo);

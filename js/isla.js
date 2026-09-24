@@ -1275,9 +1275,9 @@ GAME.isla = (function () {
       new THREE.MeshLambertMaterial({ color: 0xe8e4dc }));
     tower.position.set(POI.lighthouse.x, y + 13, POI.lighthouse.z);
     scene.add(tower);
+    var bandMat = new THREE.MeshLambertMaterial({ color: 0xe0604e });
     [[5, 4.2], [11, 3.8], [17, 3.4]].forEach(function (st) {
-      var band = new THREE.Mesh(new THREE.CylinderGeometry(st[1], st[1] + 0.14, 2.4, 12),
-        new THREE.MeshLambertMaterial({ color: 0xe0604e }));
+      var band = new THREE.Mesh(new THREE.CylinderGeometry(st[1], st[1] + 0.14, 2.4, 12), bandMat);
       band.position.set(POI.lighthouse.x, y + st[0], POI.lighthouse.z);
       scene.add(band);
     });
@@ -1798,7 +1798,7 @@ GAME.isla = (function () {
       g1.gateH = gy2 + 2.6;
       gates.push(g1);
     });
-    var gm = new THREE.Mesh(gateBatch.build(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    var gm = new THREE.Mesh(gateBatch.build(), sharedVertexLambert());
     gm.matrixAutoUpdate = false;
     scene.add(gm);
     city.islaGateMesh = gm;
@@ -1967,7 +1967,7 @@ GAME.isla = (function () {
       scene.add(m);
       return m;
     }
-    addMesh(batches.plain, new THREE.MeshLambertMaterial({ vertexColors: true }));
+    addMesh(batches.plain, sharedVertexLambert());
     // Only buildBlocks writes into these three — the island's landmarks all
     // build into `plain` — so they can take the pale walls wholesale, with no
     // designed building caught underneath.

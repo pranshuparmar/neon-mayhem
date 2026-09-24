@@ -585,14 +585,19 @@ GAME.city = (function () {
     }
     return { tex: new THREE.CanvasTexture(cv), slots: slots };
   }
+  // One canvas per colour: the city, the island and the shops each ask for the
+  // same soft pool, and each ask used to draw and upload a copy of its own.
+  // Callers share what they are handed, so none may change it.
+  var glowTexCache = {};
   function radialGlowTexture(color) {
+    if (glowTexCache[color]) return glowTexCache[color];
     var cv = document.createElement('canvas');
     cv.width = 128; cv.height = 128;
     var g = cv.getContext('2d');
     var gr = g.createRadialGradient(64, 64, 4, 64, 64, 62);
     gr.addColorStop(0, color); gr.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
-    return new THREE.CanvasTexture(cv);
+    return (glowTexCache[color] = new THREE.CanvasTexture(cv));
   }
   city.glowTexture = radialGlowTexture;
 
@@ -602,9 +607,17 @@ GAME.city = (function () {
   // that make a landmark read as switched on.
   city.kinetics = [];
   function kmesh(w, h, d, color, x, y, z, k, matOpts) {
-    var mo = { color: color };
-    if (matOpts) for (var mk in matOpts) mo[mk] = matOpts[mk];
-    var m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshBasicMaterial(mo));
+    // A blinker or a spinner changes `visible` or its rotation, never its
+    // material, so it wears the shared box and colour. Anything that pulses
+    // writes its material's opacity every frame, and options make it more
+    // than a colour — those two still get a private material.
+    var mat;
+    if (matOpts || (k && k.pulse)) {
+      var mo = { color: color };
+      if (matOpts) for (var mk in matOpts) mo[mk] = matOpts[mk];
+      mat = new THREE.MeshBasicMaterial(mo);
+    } else mat = sharedBasic(color);
+    var m = new THREE.Mesh(sharedBoxGeo(w, h, d), mat);
     m.position.set(x, y, z);
     city.scene.add(m);
     if (k) { k.m = m; city.kinetics.push(k); }
@@ -730,7 +743,7 @@ GAME.city = (function () {
       scene.add(m);
       return m;
     }
-    addMesh(batches.ground, new THREE.MeshLambertMaterial({ vertexColors: true }));
+    addMesh(batches.ground, sharedVertexLambert());
     addMesh(asphalt, new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 70, specular: 0x232e42 }));
     // road paint always wins its tie against the asphalt beneath it — a
     // depth-only nudge toward the camera, so no altitude can blur the two
@@ -840,7 +853,7 @@ GAME.city = (function () {
       }
       return { verts: n, distinct: Object.keys(seen).length, hash: h };
     };
-    addMesh(batches.wood, new THREE.MeshLambertMaterial({ vertexColors: true }));
+    addMesh(batches.wood, sharedVertexLambert());
     city.signMesh = addMesh(batches.signs, new THREE.MeshBasicMaterial({ map: atlas.tex, transparent: true, vertexColors: true, side: THREE.DoubleSide }));
 
     buildInstancedProps(scene);
@@ -1415,7 +1428,7 @@ GAME.city = (function () {
       sand.addGroundQuad(fx + 10, 0.46 + ((sIdx + 1) % 2) * 0.06, ssh - 6, 20.5, 26, 0, U.pick(rng, sandShades));
       sIdx++;
     }
-    var sandMesh = new THREE.Mesh(sand.build(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    var sandMesh = new THREE.Mesh(sand.build(), sharedVertexLambert());
     sandMesh.matrixAutoUpdate = false;
     scene.add(sandMesh);
 
@@ -1447,7 +1460,7 @@ GAME.city = (function () {
         pier.addBox((x0 + endX) / 2, 1.35, pz + 6.8, endX - x0, 0.12, 0.2, 0, 0xb08a60, 0);
       }
     });
-    var pierMesh = new THREE.Mesh(pier.build(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    var pierMesh = new THREE.Mesh(pier.build(), sharedVertexLambert());
     pierMesh.matrixAutoUpdate = false;
     scene.add(pierMesh);
     // the pier's name board arches OVER the mouth now — it used to hang low
@@ -1602,6 +1615,11 @@ GAME.city = (function () {
 
   function buildInstancedProps(scene) {
     var dummy = new THREE.Object3D();
+    // The vertex-coloured props below share one material. It is not the
+    // shared workhorse the static meshes wear: r128 keeps one program per
+    // material, and a material worn by instanced and plain meshes alike
+    // swaps its program every time the draw order alternates between them.
+    var instLam = new THREE.MeshLambertMaterial({ vertexColors: true });
 
     // palms
     // extra palms scattered on boulevard sidewalks
@@ -1628,7 +1646,7 @@ GAME.city = (function () {
     }
     var frondGeo = frondB.build();
     // tilt fronds downward by shifting outer edge: cheap visual, skip exact droop
-    var frondMesh = new THREE.InstancedMesh(frondGeo, new THREE.MeshLambertMaterial({ vertexColors: true }), palms.length);
+    var frondMesh = new THREE.InstancedMesh(frondGeo, instLam, palms.length);
     for (var p = 0; p < palms.length; p++) {
       var pp = palms[p];
       dummy.position.set(pp.x, city.groundY(pp.x, pp.z), pp.z);
@@ -1665,7 +1683,7 @@ GAME.city = (function () {
     poleB.addBox(0, 3, 0, 0.22, 6, 0.22, 0, 0x3a3f4a, 0);
     poleB.addBox(0.9, 5.9, 0, 2, 0.16, 0.16, 0, 0x3a3f4a, 0);
     var poleGeo = poleB.build();
-    var poleMesh = new THREE.InstancedMesh(poleGeo, new THREE.MeshLambertMaterial({ vertexColors: true }), lightSpots.length);
+    var poleMesh = new THREE.InstancedMesh(poleGeo, instLam, lightSpots.length);
     var headGeo = new THREE.BoxGeometry(0.7, 0.22, 0.3);
     headGeo.translate(1.8, 5.8, 0);
     var headMesh = new THREE.InstancedMesh(headGeo, new THREE.MeshBasicMaterial({ color: 0xffc88a }), lightSpots.length);
@@ -1719,7 +1737,7 @@ GAME.city = (function () {
     benchB.addBox(-0.25, 0.75, 0, 0.08, 0.6, 2.2, 0, 0x8a6a48, 0);
     benchB.addBox(0.18, 0.25, -0.9, 0.1, 0.5, 0.1, 0, 0x44403a, 0);
     benchB.addBox(0.18, 0.25, 0.9, 0.1, 0.5, 0.1, 0, 0x44403a, 0);
-    var benchMesh = new THREE.InstancedMesh(benchB.build(), new THREE.MeshLambertMaterial({ vertexColors: true }), benches.length);
+    var benchMesh = new THREE.InstancedMesh(benchB.build(), instLam, benches.length);
     for (var bb = 0; bb < benches.length; bb++) {
       dummy.position.set(benches[bb].x, 0.3, benches[bb].z);
       dummy.rotation.set(0, 0, 0); dummy.scale.setScalar(1); dummy.updateMatrix();
@@ -1778,8 +1796,9 @@ GAME.city = (function () {
     var rim = new THREE.Mesh(new THREE.TorusGeometry(15, 0.5, 6, 22), new THREE.MeshBasicMaterial({ color: 0x38e8ff }));
     spin.add(rim);
     var spokeMat = new THREE.MeshBasicMaterial({ color: 0xff4fa3 });
+    var spokeGeo = new THREE.BoxGeometry(30, 0.34, 0.34);
     for (var sI = 0; sI < 4; sI++) {
-      var spoke = new THREE.Mesh(new THREE.BoxGeometry(30, 0.34, 0.34), spokeMat);
+      var spoke = new THREE.Mesh(spokeGeo, spokeMat);
       spoke.rotation.z = sI / 4 * Math.PI; // spread in the wheel's XY plane
       spin.add(spoke);
     }
@@ -1798,7 +1817,7 @@ GAME.city = (function () {
     var supB = new GeoBatch();
     supB.addBox(492, 8.5, WZ - 6, 1.2, 17, 1.2, 0, 0x555a6a, 0);
     supB.addBox(492, 8.5, WZ + 6, 1.2, 17, 1.2, 0, 0x555a6a, 0);
-    var sup = new THREE.Mesh(supB.build(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    var sup = new THREE.Mesh(supB.build(), sharedVertexLambert());
     sup.matrixAutoUpdate = false;
     scene.add(sup);
     addSolid(492, WZ, 3, 14, 17, 'prop');
@@ -1813,7 +1832,7 @@ GAME.city = (function () {
       addSolid(c[0] - 6, c[1], 2, 2, 28, 'prop');
       addSolid(c[0] + 6, c[1], 2, 2, 28, 'prop');
     });
-    var craneMesh = new THREE.Mesh(craneB.build(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    var craneMesh = new THREE.Mesh(craneB.build(), sharedVertexLambert());
     craneMesh.matrixAutoUpdate = false;
     scene.add(craneMesh);
   }
@@ -1845,7 +1864,7 @@ GAME.city = (function () {
       marks.addGroundQuad(A.minX + 2, 0.13, A.cz + te * 1.4, 1.2, 1.0, 0, 0x38e878);
       marks.addGroundQuad(A.maxX - 2, 0.13, A.cz + te * 1.4, 1.2, 1.0, 0, 0xe23a4a);
     }
-    var rw = new THREE.Mesh(b.build(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    var rw = new THREE.Mesh(b.build(), sharedVertexLambert());
     rw.matrixAutoUpdate = false; scene.add(rw);
     // terminal building + control tower, south of the runway — jet-age, per
     // the vision: a green-glazed cab you can read from the runway, a rotating
@@ -1876,7 +1895,7 @@ GAME.city = (function () {
     });
     var wsMesh = new THREE.Mesh(wsB.build(), new THREE.MeshBasicMaterial({ vertexColors: true }));
     wsMesh.matrixAutoUpdate = false; scene.add(wsMesh);
-    var tbm = new THREE.Mesh(tb.build(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    var tbm = new THREE.Mesh(tb.build(), sharedVertexLambert());
     tbm.matrixAutoUpdate = false; scene.add(tbm);
     addSolid(A.cx + 30, A.cz + 28, 84, 16, 12);
     addSolid(A.cx + 40, A.cz + 26, 8, 8, 24);
@@ -1915,7 +1934,7 @@ GAME.city = (function () {
     run(A.fx0, A.fz1, A.fx1, A.fz1);       // south
     run(A.fx0, A.fz0, A.fx0, A.fz1);       // west
     run(A.fx1, A.fz0, A.fx1, A.fz1);       // east
-    var mesh = new THREE.Mesh(b.build(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    var mesh = new THREE.Mesh(b.build(), sharedVertexLambert());
     mesh.matrixAutoUpdate = false;
     scene.add(mesh);
     // solid collision segments (thin walls), leaving the gate open

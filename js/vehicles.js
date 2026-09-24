@@ -983,11 +983,12 @@ GAME.vehicles = (function () {
     GAME.fx.spawn(car.pos.x, car.pos.y + 1.2, car.pos.z, { count: 30, color: 0xff9030, spread: 7, vy: 5, life: 1.1, grav: -3 });
     GAME.fx.spawn(car.pos.x, car.pos.y + 1.5, car.pos.z, { count: 20, color: 0x333333, spread: 4, vy: 4, life: 1.6, grav: -0.5 });
     var oldMat = car.mesh.userData.bodyMesh.material;
-    car.mesh.userData.bodyMesh.material = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+    // the charred coat is the same for every wreck, so it is shared too
+    car.mesh.userData.bodyMesh.material = sharedLambert(0x1a1a1a);
     // the body material is usually the SHARED vertex-color workhorse now —
     // disposing it here tore down the material every living car was wearing
     // (three quietly rebuilds it next frame, at the cost of a hitch and the
-    // pooling win). Only a private material — a prior burn — may be freed.
+    // pooling win). Only a private material may be freed.
     if (oldMat && oldMat.dispose && !(oldMat.userData && oldMat.userData.shared)) oldMat.dispose();
     if (car.mesh.userData.lightbar) car.mesh.userData.lightbar.forEach(function (m) { m.visible = false; });
     car.speed *= 0.2;
