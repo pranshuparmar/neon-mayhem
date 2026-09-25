@@ -223,7 +223,32 @@ GAME.missions = (function () {
   var resprayCooldown = 0;
 
   var MARKER_COLORS = { race: 0xff8a3d, courier: 0x38e8ff, rampage: 0xff4fa3 };
+  var MARKER_HEX = {};
+  Object.keys(MARKER_COLORS).forEach(function (k) { MARKER_HEX[k] = '#' + MARKER_COLORS[k].toString(16).padStart(6, '0'); });
+  // The radar asks for the blips twenty times a second, so the list and its
+  // entries are kept and rewritten instead of built new: a caller reads it
+  // straight away and never keeps it. (Written by index and cut to length at
+  // the end: emptied with `length = 0` it would drop its storage every time.)
+  var blipList = [], blipPool = [], blipN = 0;
+  function putBlip(x, z, color, size, kind) {
+    var b = blipPool[blipN] || (blipPool[blipN] = {});
+    b.x = x; b.z = z; b.color = color; b.size = size; b.kind = kind;
+    blipList[blipN++] = b;
+  }
   var TYPE_LABEL = { race: 'STREET RACE', courier: 'COURIER RUN', rampage: 'RAMPAGE' };
+  // the POI line's words for a marker (kind 1) or a respray door (kind 2),
+  // made again only when what is nearest, or its note, changes
+  var HINT_NOTES = ['', '   —   lose the heat first', '   —   come back in a vehicle',
+    '   —   not in an aircraft', '   —   starting…'];
+  var hintK = 0, hintO = null, hintN = -1, hintText = '';
+  function poiHintText(k, o, n) {
+    if (k !== hintK || o !== hintO || n !== hintN) {
+      hintK = k; hintO = o; hintN = n;
+      hintText = k === 1 ? TYPE_LABEL[o.type] + ' · ' + o.name + HINT_NOTES[n]
+        : 'RESPRAY · $100 — repairs your ride; fresh paint clears up to two stars' + (n ? '' : '   —   drive in');
+    }
+    return hintText;
+  }
 
   function makeMarkerMesh(color, r) {
     var m = new THREE.Mesh(
@@ -1011,6 +1036,11 @@ GAME.missions = (function () {
     updateCp();
   }
 
+  // A rival is still racing while there is somebody at their wheel: a wreck is
+  // out, and so is a car its driver has bailed out of, or a bike its rider was
+  // shot off — rolling to a stop with nobody aboard is not a place in the field.
+  function inRace(r) { return !r.dead && r.occupied === 'ai'; }
+
   // race position: further along the checkpoint list wins, ties broken by who's
   // closer to the next one. Returns 1-based place among player + rivals.
   function racePosition() {
@@ -1022,7 +1052,7 @@ GAME.missions = (function () {
     var place = 1;
     for (var i = 0; i < active.racers.length; i++) {
       var r = active.racers[i];
-      if (r.dead) continue;
+      if (!inRace(r)) continue;
       var ri = r.cpIndex || 0;
       if (ri > active.cpIndex) { place++; continue; }
       if (ri < active.cpIndex) continue;
@@ -1037,7 +1067,7 @@ GAME.missions = (function () {
     if (!active) return '';
     var d = active.def;
     if (d.type === 'race') {
-      var field = 1 + active.racers.filter(function (r) { return !r.dead; }).length;
+      var field = 1 + active.racers.filter(inRace).length;
       return ordinal(racePosition()) + ' / ' + field + '   ·   Checkpoint ' + (active.cpIndex + 1) + ' / ' + d.cps.length;
     }
     if (d.type === 'courier') return 'Delivery ' + (active.cpIndex + 1) + ' / ' + active.stops.length;
@@ -1339,7 +1369,11 @@ GAME.missions = (function () {
       // only at the ground plane, so flying over a marker reads as standing on
       // it. Set down first — a landed aircraft is close enough to count.
       if (py - GAME.city.groundY(px, pz) > 4) { GAME.hud.setPoiHint(''); return; }
-      var hint = null;
+      // The nearest thing worth naming, kept as a few numbers — what it is,
+      // which one, how far, and which note it carries — and put into words
+      // only when that changes (poiHintText). Every marker in range used to
+      // build its whole label every tick, shown or not.
+      var hk = 0, ho = null, hd = 0, hn = 0;
       for (var m = 0; m < markers.length; m++) {
         var d = markers[m].def;
         if (!defAvailable(d)) { markers[m].mesh.visible = false; continue; }
@@ -1349,13 +1383,9 @@ GAME.missions = (function () {
         var air = P.car && (P.car.spec.heli || P.car.spec.plane);
         var dd = U.dist2(px, pz, d.start.x, d.start.z);
         // name what the marker is (and what it wants) whenever you're standing near it
-        if (dd < 34 * 34) {
-          var label = TYPE_LABEL[d.type] + ' · ' + d.name;
-          if (hot) label += '   —   lose the heat first';
-          else if (need && !P.inCar) label += '   —   come back in a vehicle';
-          else if (d.type === 'race' && air) label += '   —   not in an aircraft';
-          else if (dd < (need ? 20 : 7)) label += '   —   starting…';
-          if (!hint || dd < hint.d) hint = { d: dd, text: label };
+        if (dd < 34 * 34 && (!hk || dd < hd)) {
+          hk = 1; ho = d; hd = dd;
+          hn = hot ? 1 : need && !P.inCar ? 2 : d.type === 'race' && air ? 3 : dd < (need ? 20 : 7) ? 4 : 0;
         }
         if (hot) continue;   // wanted stars close every start line
         if (need && !P.inCar) continue;
@@ -1363,7 +1393,7 @@ GAME.missions = (function () {
         if (d.type === 'race' && air) continue;
         if (dd < (need ? 20 : 7)) {
           start(d);
-          hint = null;
+          hk = 0;
           break;
         }
       }
@@ -1371,14 +1401,12 @@ GAME.missions = (function () {
       var doors = GAME.city.pois.resprays;
       for (var rg = 0; rg < doors.length; rg++) {
         var rd = U.dist2(px, pz, doors[rg].door.x, doors[rg].door.z);
-        if (rd < 34 * 34 && (!hint || rd < hint.d)) {
-          hint = { d: rd, text: 'RESPRAY · $100 — repairs your ride; fresh paint clears up to two stars' + (P.inCar ? '' : '   —   drive in') };
-        }
+        if (rd < 34 * 34 && (!hk || rd < hd)) { hk = 2; ho = doors[rg]; hd = rd; hn = P.inCar ? 1 : 0; }
       }
       // and the shops share the one readout instead of talking over it
       var sh = GAME.shops && GAME.shops.nearHint(px, pz);
-      if (sh && (!hint || sh.d < hint.d)) hint = sh;
-      GAME.hud.setPoiHint(hint ? hint.text : '');
+      if (sh && (!hk || sh.d < hd)) GAME.hud.setPoiHint(sh.text);
+      else GAME.hud.setPoiHint(hk ? poiHintText(hk, ho, hn) : '');
       return;
     }
     GAME.jobAvailable = null;
@@ -1427,7 +1455,7 @@ GAME.missions = (function () {
       if (!P.inCar || !P.car || P.car.dead) { finish(false, 'You lost your ride.'); return; }
       for (var r = 0; r < active.racers.length; r++) {
         var rc = active.racers[r];
-        if (rc.dead) continue;
+        if (!inRace(rc)) continue;
         var ctl = racerControls(rc, dt);
         if (ctl === null) { finish(false, 'A rival finished first.'); return; }
         rc.controls = ctl;
@@ -1447,12 +1475,20 @@ GAME.missions = (function () {
       active.routeT = (active.routeT || 0) - dt;
       if (active.routeT <= 0 || active.routeCp !== active.cpIndex) {
         active.routeT = 1.0; active.routeCp = active.cpIndex;
-        var rc = P.car ? [P.car.pos.x, P.car.pos.z] : [P.pos.x, P.pos.z];
+        // Only the first leg, from wherever the car is now, changes during a
+        // race; the legs between checkpoints are the same all the way round.
+        // They were routed afresh every second regardless — twenty legs of
+        // path-finding a second on the long island races — and are kept now,
+        // routed again only if the bridge gates change what can be driven.
+        var gated = !!(GAME.isla && !GAME.isla.isOpen());
+        if (!active.legs || active.legsGated !== gated) { active.legs = []; active.legsGated = gated; }
         var pts = [];
-        for (var k = active.cpIndex; k < d2.cps.length; k++) {
-          var seg = roadRoute(rc[0], rc[1], d2.cps[k][0], d2.cps[k][1]);
-          for (var si = 0; si < seg.length; si++) pts.push(seg[si]);
-          rc = d2.cps[k];
+        var here = P.car ? P.car.pos : P.pos;
+        var first = roadRoute(here.x, here.z, d2.cps[active.cpIndex][0], d2.cps[active.cpIndex][1]);
+        for (var si = 0; si < first.length; si++) pts.push(first[si]);
+        for (var k = active.cpIndex + 1; k < d2.cps.length; k++) {
+          var seg = active.legs[k] || (active.legs[k] = roadRoute(d2.cps[k - 1][0], d2.cps[k - 1][1], d2.cps[k][0], d2.cps[k][1]));
+          for (si = 0; si < seg.length; si++) pts.push(seg[si]);
         }
         active.raceRoute = pts;
       }
@@ -1685,27 +1721,27 @@ GAME.missions = (function () {
     getBlips: function () {
       // `kind` keys each blip to its legend entry, so the map legend can
       // hide and show marker families like a chart legend
-      var out = [];
-      GAME.city.pois.resprays.forEach(function (g) {
-        out.push({ x: g.door.x, z: g.door.z, color: '#c86bff', size: 4, kind: 'respray' });
-      });
+      blipN = 0;
+      var rs = GAME.city.pois.resprays;
+      for (var r = 0; r < rs.length; r++) putBlip(rs[r].door.x, rs[r].door.z, '#c86bff', 4, 'respray');
       if (!active) {
         for (var i = 0; i < markers.length; i++) {
           var d = markers[i].def;
           if (!defAvailable(d)) continue;
           var kind = d.type === 'race' ? 'race' : d.type === 'courier' ? 'courier' : 'rampage';
-          out.push({ x: d.start.x, z: d.start.z, color: '#' + MARKER_COLORS[d.type].toString(16).padStart(6, '0'), size: 4, kind: kind });
+          putBlip(d.start.x, d.start.z, MARKER_HEX[d.type], 4, kind);
         }
       } else {
         // every waiting fare/patient shows on the map, not just the nearest
         if (active.targets) {
           for (var t = 0; t < active.targets.length; t++) {
-            out.push({ x: active.targets[t].x, z: active.targets[t].z, color: '#ffe14f', size: 4, kind: 'objective' });
+            putBlip(active.targets[t].x, active.targets[t].z, '#ffe14f', 4, 'objective');
           }
         }
-        if (cpMarker.visible) out.push({ x: cpMarker.position.x, z: cpMarker.position.z, color: '#ffe14f', size: 5, kind: 'objective' });
+        if (cpMarker.visible) putBlip(cpMarker.position.x, cpMarker.position.z, '#ffe14f', 5, 'objective');
       }
-      return out;
+      blipList.length = blipN;
+      return blipList;
     }
   };
 })();

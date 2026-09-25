@@ -5,9 +5,12 @@ GAME.aircraft = (function () {
   // While the bridges are shut the channel is restricted airspace: you can fly
   // out over the water and see the far shore, and that is as far as you get.
   var CLOSED_X = 560, warnT = 0, warnCount = 0;
+  // two fixed answers, handed out rather than built on every ask — everything
+  // that moves asks every tick, and nobody writes to them
+  var LIMIT_OPEN = { maxX: 1560, minZ: -600, maxZ: 600 };
+  var LIMIT_CLOSED = { maxX: CLOSED_X, minZ: -524, maxZ: 524 };
   function airLimit() {
-    if (GAME.isla && GAME.isla.isOpen()) return { maxX: 1560, minZ: -600, maxZ: 600 };
-    return { maxX: CLOSED_X, minZ: -524, maxZ: 524 };
+    return GAME.isla && GAME.isla.isOpen() ? LIMIT_OPEN : LIMIT_CLOSED;
   }
   // Three strikes, not one: pressing the line gets a warning, pressing it
   // again gets a final warning, and only the THIRD violation scrambles the
@@ -116,11 +119,17 @@ GAME.aircraft = (function () {
   // Chin gun rakes the ground ahead of the nose (hold fire), rockets thump
   // out on the right hand (or the AIM button) and detonate where they land.
   var rockets = [];
+  // a rocket's trail, laid every tick of its flight (made once; fx.spawn only reads it)
+  var FX_ROCKET_TRAIL = { count: 1, color: 0xffd080, spread: 0.12, life: 0.16 };
   function hitAt(x, z, rad, dmg, byPlayer) {
     var cars = GAME.world.cars, P = GAME.player;
+    var pr = rad * 0.7;
     for (var i = 0; i < cars.length; i++) {
       var c = cars[i];
       if (c.dead || (P.inCar && c === P.car)) continue;
+      // a rider is as out in the open as anyone on the pavement: knocked
+      // off here, and caught with the people by the loop below
+      if (U.dist2(c.pos.x, c.pos.z, x, z) < pr * pr) GAME.vehicles.throwRider(c);
       if (U.dist2(c.pos.x, c.pos.z, x, z) < rad * rad) {
         // 'shot' is the NPC-fire source, which attribution deliberately
         // ignores — without the explicit flag the TALON's guns were
@@ -135,7 +144,6 @@ GAME.aircraft = (function () {
       }
     }
     var peds = GAME.world.peds;
-    var pr = rad * 0.7;
     for (var j = 0; j < peds.length; j++) {
       var pd = peds[j];
       if (pd.dead) continue;
@@ -174,12 +182,19 @@ GAME.aircraft = (function () {
         vx: ddx / dl * 55, vy: ddy / dl * 55, vz: ddz / dl * 55, t: 0, from: car });
       GAME.police.noteGunfire(car.pos);
     }
+  }
+
+  // Rockets fly on whatever the player does next. They used to be advanced
+  // only inside the gunship's own update, so bailing out left any in flight
+  // frozen in the air — each holding the TALON it came from — until the next
+  // flight picked them up mid-air. The tick advances them now, flown or not.
+  function updateRockets(dt) {
     for (var i = rockets.length - 1; i >= 0; i--) {
       var r = rockets[i];
       r.t += dt;
       r.x += r.vx * dt; r.z += r.vz * dt; r.y += r.vy * dt;
       r.vy -= 9 * dt;
-      GAME.fx.spawn(r.x, r.y, r.z, { count: 1, color: 0xffd080, spread: 0.12, life: 0.16 });
+      GAME.fx.spawn(r.x, r.y, r.z, FX_ROCKET_TRAIL);
       var sy = GAME.city.surfaceY(r.x, r.z);
       var hitCar = null;
       if (r.t > 0.15) {
@@ -464,6 +479,7 @@ GAME.aircraft = (function () {
   return {
     updateHeli: updateHeli,
     updatePlane: updatePlane,
+    updateRockets: updateRockets,
     startParachute: startParachute,
     updateParachute: updateParachute,
     land: land,

@@ -1,29 +1,37 @@
-GAME.resolveCircle = function (x, z, r, feetY) {
-  var boxes = GAME.city.hash.query(x, z, r + 1);
-  for (var i = 0; i < boxes.length; i++) {
-    var b = boxes[i];
-    // if the entity is standing on top of this box (a rooftop), don't shove it off
-    if (feetY !== undefined && b.h !== undefined && b.h <= feetY + 0.2) continue;
-    // nor if the box belongs to a deck overhead — you walk under a bridge
-    if (feetY !== undefined && b.minY !== undefined && feetY < b.minY - 1) continue;
-    var cx = U.clamp(x, b.minX, b.maxX), cz = U.clamp(z, b.minZ, b.maxZ);
-    var dx = x - cx, dz = z - cz;
-    var d2 = dx * dx + dz * dz;
-    if (d2 < r * r) {
-      if (d2 < 0.0001) {
-        // center inside the box: push out along smallest penetration
-        var pl = x - b.minX, pr = b.maxX - x, pt = z - b.minZ, pb = b.maxZ - z;
-        var m = Math.min(pl, pr, pt, pb);
-        if (m === pl) x = b.minX - r; else if (m === pr) x = b.maxX + r;
-        else if (m === pt) z = b.minZ - r; else z = b.maxZ + r;
-      } else {
-        var d = Math.sqrt(d2);
-        x = cx + dx / d * r; z = cz + dz / d * r;
+// Pushes a circle out of the static boxes round it. Every ped, officer and
+// the player on foot asks this every tick, so it reuses one list of boxes
+// (see SpatialHash.queryInto), and a caller that hands in `out` gets the
+// answer written there rather than in a new object.
+GAME.resolveCircle = (function () {
+  var near = [];
+  return function (x, z, r, feetY, out) {
+    var boxes = GAME.city.hash.queryInto(x, z, r + 1, near);
+    for (var i = 0; i < boxes.length; i++) {
+      var b = boxes[i];
+      // if the entity is standing on top of this box (a rooftop), don't shove it off
+      if (feetY !== undefined && b.h !== undefined && b.h <= feetY + 0.2) continue;
+      // nor if the box belongs to a deck overhead — you walk under a bridge
+      if (feetY !== undefined && b.minY !== undefined && feetY < b.minY - 1) continue;
+      var cx = U.clamp(x, b.minX, b.maxX), cz = U.clamp(z, b.minZ, b.maxZ);
+      var dx = x - cx, dz = z - cz;
+      var d2 = dx * dx + dz * dz;
+      if (d2 < r * r) {
+        if (d2 < 0.0001) {
+          // center inside the box: push out along smallest penetration
+          var pl = x - b.minX, pr = b.maxX - x, pt = z - b.minZ, pb = b.maxZ - z;
+          var m = Math.min(pl, pr, pt, pb);
+          if (m === pl) x = b.minX - r; else if (m === pr) x = b.maxX + r;
+          else if (m === pt) z = b.minZ - r; else z = b.maxZ + r;
+        } else {
+          var d = Math.sqrt(d2);
+          x = cx + dx / d * r; z = cz + dz / d * r;
+        }
       }
     }
-  }
-  return { x: x, z: z };
-};
+    if (out) { out.x = x; out.z = z; return out; }
+    return { x: x, z: z };
+  };
+})();
 
 // hair, built around the head's origin, and every style its own silhouette —
 // when a flattop and a crew cut differ by six centimetres nobody can tell
@@ -77,19 +85,22 @@ function makeHair(style, colorHex) {
   return g;
 }
 
+// the town's wardrobe, drawn from for every stranger (built once, not per ped)
+var PED_SHIRTS = [0xf7a8c4, 0x9fe8d8, 0xf9d99a, 0x8fd0f0, 0xe86a8a, 0x8a6ae8, 0xf0f0e8, 0x60c890];
+var PED_PANTS = [0x3a4a68, 0x684a3a, 0x2a2a34, 0x8a4a5a, 0xd8d0c0];
+var PED_SKINS = [0xeac8a8, 0xc89878, 0x8a6848, 0x6a4c34, 0xf0d8c0];
+var PED_HAIR_COLORS = [0x1c1a18, 0x5a3c22, 0x2e2018, 0xd8b86a, 0xa8482a, 0x8a8a90];
+var PED_HAIR_STYLES = ['crew', 'crew', 'crew', 'flattop', 'flattop', 'pompadour', 'mullet', 'afro', 'ponytail', 'mohawk'];
+
 function buildPedMesh(opts) {
   opts = opts || {};
   var g = new THREE.Group();
-  var shirtColors = [0xf7a8c4, 0x9fe8d8, 0xf9d99a, 0x8fd0f0, 0xe86a8a, 0x8a6ae8, 0xf0f0e8, 0x60c890];
-  var pantColors = [0x3a4a68, 0x684a3a, 0x2a2a34, 0x8a4a5a, 0xd8d0c0];
-  var skins = [0xeac8a8, 0xc89878, 0x8a6848, 0x6a4c34, 0xf0d8c0];
-  var hairColors = [0x1c1a18, 0x5a3c22, 0x2e2018, 0xd8b86a, 0xa8482a, 0x8a8a90];
   // opts.look pins the whole appearance — the same person can step out of
   // the same car twice instead of a stranger wearing his job
   var look = opts.look || null;
-  var shirt = opts.cop ? 0x2a4a8a : look ? look.shirt : U.pick(Math.random, shirtColors);
-  var pants = opts.cop ? 0x1a2a4a : look ? look.pants : U.pick(Math.random, pantColors);
-  var skin = look ? look.skin : U.pick(Math.random, skins);
+  var shirt = opts.cop ? 0x2a4a8a : look ? look.shirt : U.pick(Math.random, PED_SHIRTS);
+  var pants = opts.cop ? 0x1a2a4a : look ? look.pants : U.pick(Math.random, PED_PANTS);
+  var skin = look ? look.skin : U.pick(Math.random, PED_SKINS);
   g.userData.look = { shirt: shirt, pants: pants, skin: skin };
   // The town shares its wardrobe: constant colors, constant box sizes, one
   // registry entry each — a ped spawn allocates wrappers, not buffers. The
@@ -118,9 +129,8 @@ function buildPedMesh(opts) {
   } else if (!opts.noHair) {
     // nobody in this town is bald unless they paid the barber for it
     // (the player's own hair is the wardrobe's business — see shops.js)
-    var styles = ['crew', 'crew', 'crew', 'flattop', 'flattop', 'pompadour', 'mullet', 'afro', 'ponytail', 'mohawk'];
-    var hairStyle = look ? look.hair : U.pick(Math.random, styles);
-    var hairCol = look ? look.hairCol : U.pick(Math.random, hairColors);
+    var hairStyle = look ? look.hair : U.pick(Math.random, PED_HAIR_STYLES);
+    var hairCol = look ? look.hairCol : U.pick(Math.random, PED_HAIR_COLORS);
     var hair = makeHair(hairStyle, hairCol);
     if (hair) { hair.position.y = 1.6; g.add(hair); }
     g.userData.look.hair = hairStyle;
@@ -145,6 +155,7 @@ function buildPedMesh(opts) {
 
 GAME.peds = (function () {
   var world = GAME.world;
+  var pushOut = { x: 0, z: 0 };   // resolveCircle's answer for the walkers, reused
 
   function spawnPed(x, z, opts) {
     opts = opts || {};
@@ -167,9 +178,29 @@ GAME.peds = (function () {
       dodgeSkill: Math.random(),
       reactDelay: U.randRange(Math.random, 0.15, 0.45), reactT: 0,
       wpX: x, wpZ: z, wpT: 0,
-      shootT: U.randRange(Math.random, 0.5, 1.5)
+      shootT: U.randRange(Math.random, 0.5, 1.5),
+      look: mesh.userData.look,   // so a car can remember who drives it
+      // Everything else a ped can come to carry, declared here in one order.
+      // These used to be added as they came up, in whatever order a life
+      // happened to go, and the street's peds ended up in some ninety
+      // different shapes — too many for the engine to keep update() below
+      // optimised, so for much of the time it ran unoptimised and boxed every
+      // number it touched: that was most of the garbage the city made. Each
+      // starts as what the missing field used to read as: 0 where it is read
+      // as `x || 0`, false or null where it is only tested, NaN for a number
+      // the code asks whether it has been set yet, and undefined for anything
+      // else it asks that of.
+      dead: false, gone: false, killedBy: null,
+      foe: null, aimPose: false, punchArm: false, poseT: 0, bangT: 0, bumpCd: 0,
+      fleeX: 0, fleeZ: 0,
+      diveX: 0, diveY: 0, diveZ: 0, diveDur: 0,
+      knockX: 0, knockY: NaN, knockZ: 0, knockSpin: 0,
+      prevX2: NaN, prevZ2: NaN, stuckT: 0,
+      stolenCar: null, hadDriver: undefined, yankT: 0, yankWarned: false, leftCar: 0,
+      jobPed: false, iceServed: false, carrying: undefined,
+      patrol: false, onCase: null, beatX: 0, beatZ: 0, beatT: 0, grabbing: false,
+      aimSkill: NaN, lastShotT: 0
     };
-    ped.look = mesh.userData.look;   // so a car can remember who drives it
     world.peds.push(ped);
     return ped;
   }
@@ -286,7 +317,7 @@ GAME.peds = (function () {
     }
     if (foe && foe.kind === 'car') {
       var c = foe.car;
-      var cok = !!c && !c.dead;
+      var cok = !!c && !c.dead && !c.gone;
       return { valid: cok, kind: 'car', car: c, ped: null,
         x: cok ? c.pos.x : ped.pos.x, z: cok ? c.pos.z : ped.pos.z,
         y: cok ? c.pos.y : ped.pos.y, speed: cok ? Math.abs(c.speed || 0) : 0 };
@@ -314,7 +345,7 @@ GAME.peds = (function () {
       if (ped.dead) {
         ped.deadT += dt;
         // carry through a knock-back from a vehicle: tumble, then settle
-        if (ped.knockY !== undefined) {
+        if (!isNaN(ped.knockY)) {
           var gy0 = GAME.city.groundY(ped.pos.x, ped.pos.z);
           ped.knockY -= 18 * dt;
           ped.pos.x += ped.knockX * dt;
@@ -325,7 +356,7 @@ GAME.peds = (function () {
           ped.knockZ *= Math.exp(-2.2 * dt);
           if (ped.pos.y <= gy0 + 0.35) {
             ped.pos.y = gy0 + 0.35;
-            ped.knockY = undefined; // come to rest
+            ped.knockY = NaN; // come to rest
           }
         }
         if (ped.deadT > 12 || d2p > 190 * 190) removePed(ped);
@@ -417,7 +448,11 @@ GAME.peds = (function () {
         // pavement, a driver hauling a stranger out of his own car, and the
         // original case of somebody deciding they have had enough of you.
         ped.attackT -= dt;
-        var myCar = ped.stolenCar && !ped.stolenCar.dead && ped.stolenCar.occupied !== 'ai' ? ped.stolenCar : null;
+        if (ped.stolenCar && ped.stolenCar.gone) ped.stolenCar = null;   // despawned: nothing to take back
+        // (nobody wants a car back once it is on fire — they would only be
+        // turned straight back out of it by vehicles.js)
+        var myCar = ped.stolenCar && !ped.stolenCar.dead && ped.stolenCar.stage < 2 &&
+          ped.stolenCar.occupied !== 'ai' ? ped.stolenCar : null;
         var chaseCar = myCar && U.dist2(ped.pos.x, ped.pos.z, myCar.pos.x, myCar.pos.z) < 55 * 55;
         var F = foeState(ped, chaseCar ? myCar : null);
         var tcar = F.car;
@@ -539,8 +574,9 @@ GAME.peds = (function () {
                   ped.yankT = 0;
                   ped.yankWarned = false;
                 } else if (!boarding) {
-                  // owner slides back in and drives off, done with you
-                  myCar.occupied = 'ai';
+                  // owner slides back in and drives off, done with you —
+                  // and is seen riding it, if it is a bike
+                  GAME.vehicles.seatOccupant(myCar, ped.look);
                   myCar.ai = { mode: 'traffic', desired: 12, laneX: 0, laneZ: 0 };
                   if (myCar.parkedSpot) { myCar.parkedSpot.live = null; myCar.parkedSpot = null; }
                   removePed(ped);
@@ -673,13 +709,13 @@ GAME.peds = (function () {
       if (!GAME.city.canWalkTo(fx0, fz0, ped.pos.x, ped.pos.z)) {
         ped.pos.x = fx0; ped.pos.z = fz0;
       }
-      var rp2 = GAME.resolveCircle(ped.pos.x, ped.pos.z, 0.4);
+      var rp2 = GAME.resolveCircle(ped.pos.x, ped.pos.z, 0.4, undefined, pushOut);
       // walking into a palm tree forever is not a plan: when the legs move
       // but the body doesn't, sidestep and pick a new line. (Job peds are
       // steered by their mission every frame; leave them to it.)
       if (!ped.jobPed && ped.speed > 0.3 && ped.state !== 'dive') {
         var bdx = rp2.x - ped.prevX2, bdz = rp2.z - ped.prevZ2;
-        if (ped.prevX2 !== undefined && bdx * bdx + bdz * bdz < Math.pow(ped.speed * dt * 0.25, 2)) {
+        if (!isNaN(ped.prevX2) && bdx * bdx + bdz * bdz < Math.pow(ped.speed * dt * 0.25, 2)) {
           ped.stuckT = (ped.stuckT || 0) + dt;
           if (ped.stuckT > 1.1) {
             ped.stuckT = 0;

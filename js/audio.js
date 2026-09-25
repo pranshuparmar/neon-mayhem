@@ -5,6 +5,16 @@ GAME.audio = (function () {
   var noiseBuf = null;
   var engine = null, skidNode = null, sirenNode = null, rotorNode = null;
   var lastCrashT = -9, lastCrashV = 0;
+  // The radio's own volume (down on foot and behind overlays), and when it
+  // last went to zero.
+  var radioVol = 0, radioQuietAt = 0;
+  function noteQuiet() { if (ctx) radioQuietAt = ctx.currentTime; }
+  // Notes scheduled now could not be heard, so the radio stops making them:
+  // muted or MUSIC: OFF, which cut the sound at once, or its volume down and
+  // the fade-out finished (a 0.3 s time constant is under -60 dB after 2 s).
+  function radioSilent() {
+    return muted || !musicOn || (radioVol <= 0 && ctx.currentTime - radioQuietAt > 2);
+  }
 
   function midi(n) { return 440 * Math.pow(2, (n - 69) / 12); }
 
@@ -15,12 +25,16 @@ GAME.audio = (function () {
     for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     return buf;
   }
-  function makeImpulse(seconds, decay) {
-    var len = ctx.sampleRate * seconds;
+  // `keep`, when given, is how much of the tail to actually store: the curve
+  // is still shaped over the full `seconds`, so the reverb sounds as it did,
+  // and the part cut off is the part too quiet to hear.
+  function makeImpulse(seconds, decay, keep) {
+    var span = ctx.sampleRate * seconds;
+    var len = Math.floor(ctx.sampleRate * (keep || seconds));
     var buf = ctx.createBuffer(2, len, ctx.sampleRate);
     for (var ch = 0; ch < 2; ch++) {
       var d = buf.getChannelData(ch);
-      for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+      for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / span, decay);
     }
     return buf;
   }
@@ -52,7 +66,10 @@ GAME.audio = (function () {
     var engTone = ctx.createBiquadFilter(); engTone.type = 'lowpass'; engTone.frequency.value = 900;
     engineBus.connect(engTone); engTone.connect(sfxSwitch);
     noiseBuf = makeNoiseBuffer();
-    verb = ctx.createConvolver(); verb.buffer = makeImpulse(1.8, 3.2);
+    // a 1.8 s tail stored to 1.2 s: by then it is down to 3% (-30 dB), the
+    // rest holds 0.03% of its energy, and a third of the buffer — and of the
+    // convolver's work — goes with it
+    verb = ctx.createConvolver(); verb.buffer = makeImpulse(1.8, 3.2, 1.2);
     var verbGain = ctx.createGain(); verbGain.gain.value = 0.35;
     verb.connect(verbGain); verbGain.connect(radioBus);
     initEngine();
@@ -201,9 +218,9 @@ GAME.audio = (function () {
         bass: [45, 41, 43, 40],
         play: function (t, st, bar, chord, bass) {
           var spb = 60 / this.bpm / 4;
-          if (st % 4 === 0) { tone(52, 0.14, 0.85, 'sine', 30, t, radioBus); noiseBurst(0.03, 3000, 0.12, 'highpass', t); }
-          if (st % 8 === 4) noiseBurst(0.14, 1800, 0.35, 'bandpass', t);
-          if (st % 2 === 1) noiseBurst(0.03, 8000, 0.09, 'highpass', t);
+          if (st % 4 === 0) { tone(52, 0.14, 0.85, 'sine', 30, t, radioBus); noiseBurst(0.03, 3000, 0.12, 'highpass', t, radioBus); }
+          if (st % 8 === 4) noiseBurst(0.14, 1800, 0.35, 'bandpass', t, radioBus);
+          if (st % 2 === 1) noiseBurst(0.03, 8000, 0.09, 'highpass', t, radioBus);
           tone(midi(bass + 12 * (st % 2)), spb * 0.9, 0.22, 'sawtooth', 0, t, radioBus);
           var arpN = chord[st % chord.length] + 12 * (1 + ((st >> 2) % 2));
           // straight into the reverb like every other verb-bound voice — a
@@ -221,8 +238,8 @@ GAME.audio = (function () {
         play: function (t, st, bar, chord, bass) {
           var spb = 60 / this.bpm / 4;
           if (st % 4 === 0) { tone(55, 0.13, 0.9, 'sine', 32, t, radioBus); }
-          if (st % 4 === 2) noiseBurst(0.04, 9000, 0.13, 'highpass', t);
-          if (st % 8 === 4) noiseBurst(0.12, 2200, 0.32, 'bandpass', t);
+          if (st % 4 === 2) noiseBurst(0.04, 9000, 0.13, 'highpass', t, radioBus);
+          if (st % 8 === 4) noiseBurst(0.12, 2200, 0.32, 'bandpass', t, radioBus);
           tone(midi(bass + (st % 4 === 3 ? 12 : 0)), spb * 0.85, 0.24, 'square', 0, t, radioBus);
           if (st % 2 === 0) {
             var m = this.mel[(st / 2 + bar * 3) % this.mel.length];
@@ -238,8 +255,8 @@ GAME.audio = (function () {
         play: function (t, st, bar, chord, bass) {
           var spb = 60 / this.bpm / 4;
           if (st % 8 === 0) tone(50, 0.2, 0.5, 'sine', 34, t, radioBus);
-          if (st % 16 === 8) noiseBurst(0.08, 1500, 0.16, 'bandpass', t);
-          if (st % 4 === 2) noiseBurst(0.03, 9000, 0.05, 'highpass', t);
+          if (st % 16 === 8) noiseBurst(0.08, 1500, 0.16, 'bandpass', t, radioBus);
+          if (st % 4 === 2) noiseBurst(0.03, 9000, 0.05, 'highpass', t, radioBus);
           if (st % 8 === 0) tone(midi(bass), spb * 7, 0.2, 'sine', 0, t, radioBus);
           if (st % 16 === 0) for (var i = 0; i < chord.length; i++) tone(midi(chord[i] + 12), spb * 15, 0.045, 'triangle', 0, t, verb);
           if (st % 4 === 0 && (st >> 2) % 3 !== 2) {
@@ -248,14 +265,19 @@ GAME.audio = (function () {
         }
       }
     ];
+    // On foot, with MUSIC: OFF or muted, the radio is a clock with nothing on
+    // the end of it — but a clock that built its ~60 voices a second anyway.
+    // A step nobody can hear is still counted, so the beat is where it would
+    // have been when the radio comes back, rather than restarting the bar.
     function schedule() {
       if (!ctx || !playing || ctx.state !== 'running') return;
       var s = stations[current];
       var spb = 60 / s.bpm / 4;
+      var quiet = radioSilent();
       while (nextTime < ctx.currentTime + 0.25) {
         var bar = Math.floor(step / 16);
         var ci = bar % s.chords.length;
-        s.play(nextTime, step % 64, bar, s.chords[ci], s.bass[ci]);
+        if (!quiet) s.play(nextTime, step % 64, bar, s.chords[ci], s.bass[ci]);
         nextTime += spb;
         step++;
       }
@@ -284,6 +306,9 @@ GAME.audio = (function () {
       },
       setVolume: function (v) {
         if (!ctx) return;
+        // keep playing into the fade rather than cutting it off short
+        if (v <= 0 && radioVol > 0) noteQuiet();
+        radioVol = v;
         radioBus.gain.setTargetAtTime(v, ctx.currentTime, 0.3);
       }
     };

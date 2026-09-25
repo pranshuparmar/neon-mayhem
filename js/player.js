@@ -556,6 +556,7 @@ function carBodyTop(c) {
   return s.icecream ? 2.6 : s.monster ? 2.3 : s.plane ? 1.4 : s.heli ? 1.9 : s.bike ? 1.0 : 0.42 + s.bodyH / 2;
 }
 
+var footPush = { x: 0, z: 0 };   // resolveCircle's answer for the player on foot, reused
 function updateOnFoot(dt) {
   var P = GAME.player, inp = GAME.input, T = inp.touch;
   var aiming = GAME.combat.aiming;
@@ -578,7 +579,7 @@ function updateOnFoot(dt) {
       P.pos.z = rc.pos.z + oz * cs2 - ox * sn2;
       P.pos.y += rc.pos.y - pr.y;
       P.heading += dh2;
-      P.roofPrev = { x: rc.pos.x, z: rc.pos.z, y: rc.pos.y, h: rc.heading };
+      pr.x = rc.pos.x; pr.z = rc.pos.z; pr.y = rc.pos.y; pr.h = rc.heading;
     }
   }
   var mx = 0, mz = 0;
@@ -617,7 +618,7 @@ function updateOnFoot(dt) {
   var h = (mag > 0.05) ? P.moveH : P.heading;
   var nx = P.pos.x + Math.sin(h) * P.moveSpeed * dt * (mag > 0.05 ? 1 : 0);
   var nz = P.pos.z + Math.cos(h) * P.moveSpeed * dt * (mag > 0.05 ? 1 : 0);
-  var rp = GAME.resolveCircle(nx, nz, 0.45, P.pos.y);
+  var rp = GAME.resolveCircle(nx, nz, 0.45, P.pos.y, footPush);
   nx = rp.x; nz = rp.z;
   // solid cars — from the side. Above the body you're standing or sailing
   // over it, and neither the push nor the run-over check applies up there.
@@ -780,8 +781,7 @@ function updateDriving(dt) {
   var c = car.controls;
   if (GAME.autopilot) {
     if (!car.ai || car.ai.mode !== 'traffic') car.ai = { mode: 'traffic', desired: 13, laneX: 0, laneZ: 0 };
-    var tc = GAME.vehicles.trafficControls(car, dt);
-    c.throttle = tc.throttle; c.steer = tc.steer; c.handbrake = false;
+    GAME.vehicles.trafficControls(car, dt, c);
   } else {
     // steering: positive heading delta turns left in this parametrization, so D maps to -1
     var th = 0, st = 0;
@@ -846,6 +846,7 @@ function updateBikeRider(dt) {
 }
 
 var shakePrev = 0;
+var camBoxes = [];   // the boxes between the camera and the player, refilled each frame
 function updateCamera(dt) {
   var P = GAME.player, inp = GAME.input, cam = GAME.cam;
   var mdx = inp.mouseDX, mdy = inp.mouseDY;
@@ -891,7 +892,7 @@ function updateCamera(dt) {
   var cz = fz - Math.cos(cam.yaw) * horiz;
 
   // pull camera in when a building blocks the view
-  var boxes = GAME.city.hash.query((fx + cx) / 2, (fz + cz) / 2, cam.dist + 2);
+  var boxes = GAME.city.hash.queryInto((fx + cx) / 2, (fz + cz) / 2, cam.dist + 2, camBoxes);
   var dirX = cx - fx, dirZ = cz - fz;
   var bestT = 1;
   for (var i = 0; i < boxes.length; i++) {

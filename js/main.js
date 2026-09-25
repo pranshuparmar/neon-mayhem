@@ -51,6 +51,16 @@
     GAME.combat.refreshWeaponHud();
     GAME.hud.wantedChanged(0);
 
+    // One draw of everything, unculled, before the first real frame: the
+    // whole world goes up to the GPU now, and its arrays go with it (see
+    // releaseStatic), rather than each piece the first time it comes into
+    // view — which was also a stall mid-game, the first time you turned
+    // toward something new.
+    var culled = [];
+    scene.traverse(function (o) { if (o.frustumCulled) { culled.push(o); o.frustumCulled = false; } });
+    renderer.render(scene, camera);
+    for (var ci = 0; ci < culled.length; ci++) culled[ci].frustumCulled = true;
+
     window.addEventListener('resize', function () {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
@@ -371,6 +381,7 @@
     GAME.vehicles.update(dt);
     GAME.peds.update(dt);
     GAME.updatePlayer(dt);
+    GAME.aircraft.updateRockets(dt);
     GAME.combat.update(dt);
     GAME.combat.updatePickups(dt);
     GAME.police.update(dt);

@@ -14,6 +14,10 @@ GAME.share = (function () {
     canvas = el['share-canvas'];
     if (!canvas) return;
     ctx = canvas.getContext('2d');
+    // A card is a 1000x560 bitmap, 2.2 MB, and it is only ever on screen for
+    // a moment. It is sized when one is shown and let go of when it closes,
+    // rather than held for the rest of the session after the first one.
+    canvas.width = canvas.height = 0;
     el['share-close'].addEventListener('click', hide);
     el['share-save'].addEventListener('click', save);
     el['share-copy'].addEventListener('click', copy);
@@ -240,6 +244,7 @@ GAME.share = (function () {
     current = o;
     lastBlob = null;
     note('');
+    canvas.width = W; canvas.height = H;   // (resizing also resets the context; draw sets all it uses)
     draw(o);
     el['share-screen'].style.display = 'flex';
     GAME.shareOpen = true;
@@ -255,6 +260,7 @@ GAME.share = (function () {
     GAME.shareOpen = false;
     lastBlob = null;
     current = null;
+    if (canvas) canvas.width = canvas.height = 0;
     if (GAME.syncOverlayMusic) GAME.syncOverlayMusic();
     GAME.regainPointer();
   }

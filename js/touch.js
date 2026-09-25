@@ -260,7 +260,14 @@ GAME.touch = (function () {
     if (GAME.hud && GAME.hud.refreshFsBtn) GAME.hud.refreshFsBtn();
   }
 
-  function show(btn, on) { if (btn) btn.style.display = on ? 'flex' : 'none'; }
+  // The layer is refreshed every tick and almost nothing on it changes from
+  // one tick to the next, so each element remembers what it was last given
+  // and is written only when that differs — a DOM write is not free even when
+  // it changes nothing, and setting textContent replaces the text node.
+  // Nothing outside this file touches these elements.
+  function setDisplay(el, v) { if (el._disp !== v) { el._disp = v; el.style.display = v; } }
+  function setText(el, v) { if (el._text !== v) { el._text = v; el.textContent = v; } }
+  function show(btn, on) { if (btn) setDisplay(btn, on ? 'flex' : 'none'); }
 
   // Every flag the buttons own, let go together.
   //
@@ -291,15 +298,15 @@ GAME.touch = (function () {
     var P = GAME.player;
     // hide all controls behind menus / death screens
     var playing = !GAME.paused && !GAME.mapOpen && P.state === 'alive' && !P.parachuting;
-    layer.style.display = 'block';
+    setDisplay(layer, 'block');
     if (!playing) {
       // Hiding a button is not releasing it. Dying, pausing or opening the map
       // with a toggle on left the flag set behind the overlay and the button
       // lit when it came back — which is how a death could hand you back a
       // sprinting player. Once, on the way out, not every frame we are away.
       if (wasPlaying) { wasPlaying = false; releaseButtons(); }
-      for (var i = 0; i < footBtns.length; i++) footBtns[i].style.display = 'none';
-      for (var j = 0; j < carBtns.length; j++) carBtns[j].style.display = 'none';
+      for (var i = 0; i < footBtns.length; i++) setDisplay(footBtns[i], 'none');
+      for (var j = 0; j < carBtns.length; j++) setDisplay(carBtns[j], 'none');
       return;
     }
     wasPlaying = true;
@@ -329,7 +336,7 @@ GAME.touch = (function () {
       // ENTER only when a car is within reach
       var near = GAME.vehicles.findNearestCar(P.pos.x, P.pos.z, 5.5, null);
       show(btns.enter, !!near);
-      for (var c = 0; c < carBtns.length; c++) carBtns[c].style.display = 'none';
+      for (var c = 0; c < carBtns.length; c++) setDisplay(carBtns[c], 'none');
     } else {
       var heli = P.car && P.car.spec.heli;
       var plane = P.car && P.car.spec.plane;
@@ -337,8 +344,8 @@ GAME.touch = (function () {
       var air = heli || plane;
       show(btns.gas, true); show(btns.brake, true); show(btns.exit, true);
       // aircraft repurpose GAS/BRAKE; hide ground-only buttons
-      btns.gas.textContent = heli ? '▲ UP' : plane ? 'THR+' : 'GAS';
-      btns.brake.textContent = heli ? '▼ DN' : plane ? 'THR−' : 'BRAKE';
+      setText(btns.gas, heli ? '▲ UP' : plane ? 'THR+' : 'GAS');
+      setText(btns.brake, heli ? '▼ DN' : plane ? 'THR−' : 'BRAKE');
       show(btns.handbrake, !air);
       show(btns.radio, !air);
       var hasSMG = !air && P.weapons.smg && P.weapons.smg.have && P.weapons.smg.ammo > 0;
@@ -348,7 +355,7 @@ GAME.touch = (function () {
       // no way to fire on touch at all (FIRE/AIM live in the foot cluster)
       show(btns.gsGun, gunship);
       show(btns.gsRkt, gunship);
-      for (var f = 0; f < footBtns.length; f++) footBtns[f].style.display = 'none';
+      for (var f = 0; f < footBtns.length; f++) setDisplay(footBtns[f], 'none');
     }
 
     // drive-by auto-aims at the nearest side

@@ -67,9 +67,17 @@
 //      frozen 999 the stopped decrement leaves behind.
 //   5. STEREO IMAGE   — a sound's pan must agree with the direction the
 //      player actually moves, so the field can never end up mirrored.
+//   5b. THE RADIO'S OWN TAP — every voice a station plays goes through the
+//       radio's bus, so none of it ticks on through the car door or past
+//       MUSIC: OFF; and a radio nobody can hear builds no voices at all, yet
+//       comes back on the beat it left.
 //   6. RIDING A ROOF  — a chassis that pitches has to carry its passenger
 //      with it, rather than leaving them on the roof it would have had
 //      sitting still.
+//   6b. WHOEVER IS ABOARD — a rider is a person to a round, a fist, a blast
+//       and a car driven into them, not the bike under them; nobody sits in
+//       a burning vehicle of any kind, and whoever is still aboard when one
+//       goes up dies with it.
 //   7. HAPTICS        — a buzz per knock, rationed, silenceable, and safe on
 //      a browser with no motor at all. Then the vocabulary on top of that: no
 //      two kinds may feel the same, the tiers must preempt in one direction
@@ -89,6 +97,11 @@
 //      are on, and settles back to it.
 //  13. TOUCH STICK    — a viewport change mid-drag must let the stick go
 //      rather than keep steering from an origin on the old screen.
+//  13b. MEMORY      — what the memory work took off stays off: spike strips
+//      are capped, the result card, the map and uploaded textures let their
+//      canvases go, the ocean moves on the GPU, batches and static meshes
+//      drop their arrays, the island is instanced and indexed, entities keep
+//      one shape, and a shop's preview renderer goes when the shop closes.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -1361,18 +1374,26 @@ function withTimeout(p, ms) {
   // a third darker at night and a sixth at noon, measured against the build
   // before. Every paint check passed, because none of them looks at anything
   // but the blocks. So: whatever is not a block glows from its own map.
+  //
+  // Only meshes with something in them count. The anchor used to be six, and
+  // two of the six were the Strip's and the harbour's dark-walled meshes,
+  // which nothing had been built into since the blocks moved to the pale set:
+  // empty, drawn every frame for nothing, and removed. The four that are left
+  // are the whole list — downtown's and the generic stock's designed
+  // buildings, the tower, and the showroom.
   var dressed = await page.evaluate(function () {
     var blocks = GAME.city.blockMeshes || [], out = { own: 0, apart: 0 };
     GAME.scene.traverse(function (o) {
       var m = o.material;
       if (!o.isMesh || !m || Array.isArray(m) || !m.map || !m.emissiveMap) return;
       if (blocks.indexOf(o) >= 0) return;
+      if (!o.geometry.attributes.position || !o.geometry.attributes.position.count) return;
       if (m.emissiveMap === m.map) out.own++; else out.apart++;
     });
     return out;
   });
   check('paint: the buildings with windows of their own design are found (anchor sanity)',
-    dressed.own + dressed.apart >= 6, (dressed.own + dressed.apart) + ' textured materials besides the blocks');
+    dressed.own + dressed.apart >= 4, (dressed.own + dressed.apart) + ' textured materials besides the blocks');
   check('paint: and they still glow from their own walls, as before the blocks were painted',
     dressed.apart === 0, dressed.apart + ' of ' + (dressed.own + dressed.apart) + ' given a glow apart from their map');
 
@@ -2601,6 +2622,122 @@ function withTimeout(p, ms) {
     'wanted=' + siren.wanted + ' got=' + JSON.stringify(siren.seen) +
     ' after ' + (siren.waited / 60).toFixed(1) + 's');
 
+  // ---------- 5b: the radio plays through the radio's own tap ----------
+  // The stations' hi-hats and snares were handed to the effects bus instead
+  // of the radio's, and the effects bus is behind neither the car door nor
+  // MUSIC: OFF — so they ticked on after you got out, and through the
+  // setting. Both buses are private, so find the effects bus the way a sound
+  // does: it is the one place a centred UI blip drains to. Then stop the sim,
+  // so the radio's own clock is the only thing left making sound, and count
+  // what it wires up. That clock is a setInterval against the audio clock,
+  // which no fastForward can hurry, so these windows are real time.
+  var tap = await page.evaluate(async function () {
+    var a = GAME.audio, ac = a.ctx;
+    if (!ac || ac.state !== 'running') return { running: false, state: ac ? ac.state : 'none' };
+    var edges = null, starts = null, voices = 0;
+    var connect0 = AudioNode.prototype.connect;
+    var osc0 = ac.createOscillator, src0 = ac.createBufferSource;
+    AudioNode.prototype.connect = function (dst) {
+      if (edges) edges.push([this, dst]);
+      return connect0.apply(this, arguments);
+    };
+    // both kinds of voice: a buffer source declares a start() of its own
+    var unspy = [OscillatorNode.prototype, AudioBufferSourceNode.prototype].map(function (p) {
+      var own = p.hasOwnProperty('start'), f = p.start;
+      p.start = function (when) { if (starts) starts.push(when); return f.apply(this, arguments); };
+      return function () { if (own) p.start = f; else delete p.start; };
+    });
+    ac.createOscillator = function () { voices++; return osc0.apply(ac, arguments); };
+    ac.createBufferSource = function () { voices++; return src0.apply(ac, arguments); };
+    function wait(ms) { return new Promise(function (res) { setTimeout(res, ms); }); }
+    var sfx = null;
+    async function listen(ms) {
+      edges = []; starts = []; voices = 0;
+      await wait(ms);
+      var w = { voices: voices, intoSfx: edges.filter(function (e) { return e[1] === sfx; }).length, starts: starts };
+      edges = starts = null;
+      return w;
+    }
+    var ts0 = GAME.timeScale, music0 = a.musicOn, mute0 = a.muted;
+    var out = { running: true, state: ac.state };
+    try {
+      // the sink of a blip: the one node its edges end at and never leave
+      edges = [];
+      a.cashTick();
+      var from = edges.map(function (e) { return e[0]; });
+      var sinks = edges.map(function (e) { return e[1]; }).filter(function (d) { return from.indexOf(d) < 0; });
+      edges = null;
+      out.sinks = sinks.length;
+      sfx = sinks.length === 1 ? sinks[0] : null;
+
+      a.setMusicOn(true);
+      if (a.muted) a.toggleMute();
+      var car = GAME.test.spawnCar('sedan', 4, 0);
+      GAME.test.fastForward(0.2);
+      if (car) GAME.test.enterNearestCar(car);
+      GAME.test.fastForward(1.2);           // boarding is a walk to the door first
+      out.inCar = GAME.player.inCar === true;
+      GAME.timeScale = 0;                   // the loop ticks nothing from here
+      var st = a.radio.stations.filter(function (s) { return s.name === a.radio.name; })[0];
+      var spb = 60 / st.bpm / 4;
+      out.driving = await listen(1200);
+      a.setMusicOn(false);
+      out.musicOff = await listen(1200);
+      a.setMusicOn(true);
+      a.toggleMute();
+      out.muted = await listen(1200);
+      a.toggleMute();
+      out.back = await listen(1200);
+      // Every note a station plays starts on a step, so a radio that kept
+      // counting through the silence starts its first note back on the grid
+      // it left — one that restarted the bar would land anywhere on it.
+      var t0 = out.driving.starts[0], off = 0;
+      out.back.starts.forEach(function (t) {
+        var k = (t - t0) / spb;
+        off = Math.max(off, Math.abs(k - Math.round(k)));
+      });
+      out.offBeat = t0 === undefined ? 1 : off;
+      // and out of the car: the fade down is played into on purpose, so let
+      // it finish before listening for what is left
+      GAME.test.exitCar();
+      await wait(3000);
+      out.foot = await listen(1500);
+      out.onFoot = !GAME.player.inCar;
+    } finally {
+      AudioNode.prototype.connect = connect0;
+      unspy.forEach(function (undo) { undo(); });
+      delete ac.createOscillator;
+      delete ac.createBufferSource;
+      GAME.timeScale = ts0;
+      a.setMusicOn(music0);
+      if (a.muted !== mute0) a.toggleMute();
+      if (GAME.player.inCar) GAME.test.exitCar();
+      if (car) GAME.vehicles.removeCar(car);
+    }
+    ['driving', 'musicOff', 'muted', 'back', 'foot'].forEach(function (k) { if (out[k]) delete out[k].starts; });
+    return out;
+  });
+  function windows(key) {
+    return ['driving', 'musicOff', 'muted', 'back', 'foot'].map(function (k) {
+      return k + '=' + (tap[k] ? tap[k][key] : '?');
+    }).join(' ');
+  }
+  check('radio: the audio clock is running (anchor sanity)', tap.running, 'state=' + tap.state);
+  check('radio: a UI blip drains to exactly one bus (anchor sanity)', tap.running && tap.sinks === 1, 'sinks=' + tap.sinks);
+  check('radio: behind the wheel it plays (anchor sanity)',
+    tap.running && tap.inCar && tap.driving.voices > 0, 'in car=' + tap.inCar + ' ' + windows('voices'));
+  check('radio: nothing a station plays reaches the effects bus',
+    tap.running && ['driving', 'musicOff', 'muted', 'back', 'foot'].every(function (k) { return tap[k].intoSfx === 0; }),
+    windows('intoSfx'));
+  check('radio: out of the car it builds no voices at all',
+    tap.running && tap.onFoot && tap.foot.voices === 0, 'on foot=' + tap.onFoot + ' voices=' + (tap.foot && tap.foot.voices));
+  check('radio: MUSIC: OFF and mute build none either',
+    tap.running && tap.musicOff.voices === 0 && tap.muted.voices === 0, windows('voices'));
+  // the guard on the fix rather than the bug: silence must not cost the beat
+  check('radio: heard again, it plays on the beat it left',
+    tap.running && tap.back.voices > 0 && tap.offBeat < 1e-4,
+    'voices=' + (tap.back && tap.back.voices) + ' off by ' + tap.offBeat + ' of a step');
+
   // ---------- 6: a rider follows the deck when it tilts ----------
   // vehicles.js pitches a chassis over a ramp (negative rotation.x lifts the
   // nose), but the roof a rider stood on was a flat plane at car.pos.y — so
@@ -2653,6 +2790,175 @@ function withTimeout(p, ms) {
     deck.lift > 0.35 && Math.abs(deck.noseUp - deck.expect) < 0.05,
     'level=' + (deck.level || 0).toFixed(3) + ' noseUp=' + (deck.noseUp || 0).toFixed(3) +
     ' expected=' + (deck.expect || 0).toFixed(3) + ' lift=' + (deck.lift || 0).toFixed(3));
+
+  // ---------- 6b: whoever is aboard ----------
+  // An AI vehicle's driver is a flag on the car, and a bike's rider a figure
+  // riding its mesh: neither is a ped, so nothing aimed at people reached
+  // them. A round, a fist or a car landed on the bike under a rider in plain
+  // view, a burning car kept its driver right up to the blast, and the blast
+  // killed the flag and left the rider sitting on the burnt-out frame. Each
+  // check here drives the real path — the trigger, the fist, the ram, the
+  // fuse, the blast —
+  // at vehicles that hold still ('hold' is no mode the traffic AI drives).
+  var aboard = await page.evaluate(function () {
+    var P = GAME.player, V = GAME.vehicles, w0 = P.currentWeapon;
+    GAME.test.teleport(350, 300);
+    function clearAround() {
+      GAME.world.peds.slice().forEach(function (p) {
+        if (U.dist2(p.pos.x, p.pos.z, P.pos.x, P.pos.z) < 45 * 45) GAME.peds.removePed(p);
+      });
+      GAME.world.cars.slice().forEach(function (c) {
+        if (U.dist2(c.pos.x, c.pos.z, P.pos.x, P.pos.z) < 45 * 45) V.removeCar(c);
+      });
+      P.roofCar = null;
+    }
+    function ridden(type, dx, dz) {
+      return V.spawnCar(type, P.pos.x + dx, P.pos.z + dz, 0, { occupied: 'ai', ai: { mode: 'hold' } });
+    }
+    // whoever has come out of this vehicle as a person (leftCar is what the
+    // way out stamps on them: the car's serial, so it holds no despawned car)
+    function outOf(car) {
+      return GAME.world.peds.filter(function (p) { return p.leftCar === car.serial && !p.gone; });
+    }
+    function fire() { GAME.input.lmbPressed = true; GAME.test.fastForward(1 / 60); }
+    var out = {};
+
+    // a round at a rider, square through the seat (the bike points away)
+    clearAround();
+    GAME.test.fastForward(0.3);
+    GAME.combat.giveWeapon('pistol', 20);
+    GAME.combat.selectWeapon('pistol');
+    var shotAt = ridden('motorcycle', 0, 7);
+    var hp0 = shotAt.hp;
+    GAME.cam.yaw = P.heading = Math.atan2(shotAt.pos.x - P.pos.x, shotAt.pos.z - P.pos.z);
+    fire();
+    var hit = outOf(shotAt);
+    out.shot = { stillOn: !!shotAt.riderMesh, people: hit.length,
+      hurt: hit.length === 1 && (hit[0].dead || hit[0].hp < 30), bikeHp: hp0 - shotAt.hp };
+    GAME.test.fastForward(0.5);              // the trigger's cooldown
+
+    // a fist, at arm's length of a rider stopped beside you
+    clearAround();
+    GAME.combat.selectWeapon('fist');
+    GAME.cam.yaw = P.heading = 0;
+    var punched = ridden('motorcycle', 0, 1.6);
+    hp0 = punched.hp;
+    out.fist = P.currentWeapon;
+    fire();
+    var hitF = outOf(punched);
+    out.punch = { stillOn: !!punched.riderMesh, people: hitF.length,
+      hurt: hitF.length === 1 && (hitF[0].dead || hitF[0].hp < 30), bikeHp: hp0 - punched.hp };
+    GAME.test.fastForward(0.5);
+
+    // a fire, in a car, on a bike and in a cruiser: out, and clear of it
+    // (at no stars, so the officer runs like everybody else rather than
+    // coming for the gunman from the checks above)
+    GAME.police.clearWanted();
+    clearAround();
+    var burning = [ridden('sedan', -7, 10), ridden('motorcycle', 0, 10), ridden('police', 7, 10)];
+    burning.forEach(function (c) { V.damageCar(c, c.hp - c.spec.hp * 0.1, 'test'); });
+    out.lit = burning.every(function (c) { return c.stage >= 2 && !c.dead; });
+    GAME.test.fastForward(2);
+    out.fire = burning.map(function (c) {
+      return { type: c.type, aboard: c.occupied === 'ai', stillOn: !!c.riderMesh, out: outOf(c).length };
+    });
+    var fled = [].concat.apply([], burning.map(outOf));
+    GAME.test.fastForward(5);                // the fuse runs out
+    out.blown = burning.every(function (c) { return c.dead; });
+    out.fled = fled.length;
+    out.fledAlive = fled.filter(function (p) { return !p.dead; }).length;
+
+    // a blast with somebody still aboard, car and bike alike
+    clearAround();
+    var car = ridden('sedan', -5, 8), bike = ridden('motorcycle', 5, 8);
+    V.explodeCar(car, 'test');
+    V.explodeCar(bike, 'test');
+    function bodies(c) { return outOf(c).filter(function (p) { return p.dead; }).length; }
+    out.blast = { stillOn: !!bike.riderMesh, carBodies: bodies(car), bikeBodies: bodies(bike) };
+
+    // and a rider going past somebody else's: out in the open like anyone
+    clearAround();
+    var wreck = V.spawnCar('sedan', P.pos.x - 4, P.pos.z + 12, 0, {});
+    var passing = ridden('motorcycle', 0, 12);
+    V.explodeCar(wreck, 'test');
+    out.passing = { stillOn: !!passing.riderMesh, bodies: bodies(passing) };
+
+    // A car driven into a rider: rolling with nobody at the wheel, square up
+    // the bike's back. The knock is stepped a frame at a time so the car can
+    // be stopped the moment it lands — what happens to somebody lying in
+    // front of a car that keeps coming is the run-over rule's business.
+    function ram(speed, strikerIsPlayers) {
+      clearAround();
+      var striker, bike;
+      if (strikerIsPlayers) {
+        striker = GAME.test.spawnCar('sedan', 4, 0);
+        GAME.test.enterNearestCar(striker);
+        GAME.test.fastForward(1.2);
+        striker.speed = 0;
+      } else striker = V.spawnCar('sedan', P.pos.x, P.pos.z + 6, 0, {});
+      var fx = Math.sin(striker.heading), fz = Math.cos(striker.heading);
+      bike = V.spawnCar('motorcycle', striker.pos.x + fx * 4, striker.pos.z + fz * 4, striker.heading,
+        { occupied: 'ai', ai: { mode: 'hold' } });
+      var h0 = GAME.police.heat;
+      striker.speed = speed;
+      for (var f = 0; f < 90 && bike.riderMesh; f++) GAME.test.fastForward(1 / 60);
+      striker.speed = 0;
+      var r = { inCar: !strikerIsPlayers || P.car === striker, stillOn: !!bike.riderMesh, people: outOf(bike) };
+      r.dead = r.people.filter(function (p) { return p.dead; }).length;
+      r.hurt = r.people.filter(function (p) { return !p.dead && p.hp < 30; }).length;
+      r.people = r.people.length;
+      r.heat = GAME.police.heat - h0;         // before a clean record cools it
+      GAME.test.fastForward(0.5);
+      if (strikerIsPlayers) GAME.test.exitCar();
+      GAME.police.clearWanted();
+      return r;
+    }
+    out.rammed = ram(15);
+    out.nudged = ram(6);
+    out.playerRam = ram(15, true);
+
+    // an owner who takes their bike back is seen riding it
+    clearAround();
+    var theirs = V.spawnCar('motorcycle', P.pos.x + 4, P.pos.z + 4, 0, {});
+    var owner = GAME.peds.spawnPed(theirs.pos.x + 1.2, theirs.pos.z);
+    owner.state = 'attack'; owner.attackT = 12; owner.temper = 0.9; owner.stolenCar = theirs;
+    var waited = 0;
+    while (theirs.occupied !== 'ai' && waited < 60 * 8) { GAME.test.fastForward(1 / 60); waited++; }
+    out.reclaim = { aboard: theirs.occupied === 'ai', rider: !!theirs.riderMesh, after: waited / 60 };
+
+    clearAround();
+    GAME.combat.selectWeapon(w0);
+    GAME.police.clearWanted();
+    GAME.player.health = 100;
+    return out;
+  });
+  check('aboard: a round through a rider knocks them off the bike',
+    !aboard.shot.stillOn && aboard.shot.people === 1 && aboard.shot.hurt, JSON.stringify(aboard.shot));
+  check('aboard: and the bike under them takes none of it', aboard.shot.bikeHp === 0, 'bike lost ' + aboard.shot.bikeHp + ' hp');
+  check('aboard: a fist reaches a rider too',
+    aboard.fist === 'fist' && !aboard.punch.stillOn && aboard.punch.hurt && aboard.punch.bikeHp === 0,
+    'swung ' + aboard.fist + ' ' + JSON.stringify(aboard.punch));
+  check('aboard: a fire was lit under all three (anchor sanity)', aboard.lit);
+  check('aboard: nobody sits in a burning car, bike or cruiser',
+    aboard.fire.every(function (f) { return !f.aboard && !f.stillOn && f.out === 1; }), JSON.stringify(aboard.fire));
+  check('aboard: and all three were clear when it went up',
+    aboard.blown && aboard.fled === 3 && aboard.fledAlive === 3,
+    'blown=' + aboard.blown + ' out=' + aboard.fled + ' alive=' + aboard.fledAlive);
+  check('aboard: a blast kills whoever is still aboard, car and bike alike',
+    !aboard.blast.stillOn && aboard.blast.carBodies === 1 && aboard.blast.bikeBodies === 1, JSON.stringify(aboard.blast));
+  check('aboard: a rider passing a blast is caught in it like anyone on foot',
+    !aboard.passing.stillOn && aboard.passing.bodies === 1, JSON.stringify(aboard.passing));
+  check('aboard: a car driven into a rider throws them off, killed',
+    !aboard.rammed.stillOn && aboard.rammed.people === 1 && aboard.rammed.dead === 1, JSON.stringify(aboard.rammed));
+  check('aboard: a nudge puts them on the road hurt, not dead',
+    !aboard.nudged.stillOn && aboard.nudged.people === 1 && aboard.nudged.hurt === 1, JSON.stringify(aboard.nudged));
+  check('aboard: and a stranger\'s ram is not put on the player',
+    aboard.rammed.heat === 0 && aboard.nudged.heat === 0, 'heat ' + aboard.rammed.heat + ' / ' + aboard.nudged.heat);
+  check('aboard: running a rider down is on the player\'s record',
+    aboard.playerRam.inCar && !aboard.playerRam.stillOn && aboard.playerRam.dead === 1 && aboard.playerRam.heat > 0,
+    JSON.stringify(aboard.playerRam));
+  check('aboard: an owner takes their bike back (anchor sanity)', aboard.reclaim.aboard, JSON.stringify(aboard.reclaim));
+  check('aboard: and is seen riding it', aboard.reclaim.rider, JSON.stringify(aboard.reclaim));
 
   // ---------- nothing broke on the way through ----------
   await page.evaluate(function () { GAME.test.fastForward(5); });
@@ -4115,6 +4421,204 @@ function withTimeout(p, ms) {
     JSON.stringify(hand.back));
   check('touch: zero page errors on the touch layer', touchErrors.length === 0, touchErrors[0]);
   await tctx.close();
+
+  // ---------- 13b: memory — what the memory work took off stays off ----------
+  // One check per fix, each measured when it was made. Every one of these
+  // reads something the old code got wrong, not merely that the new code runs.
+  var mem = await page.evaluate(function () {
+    var out = {}, P = GAME.player, W = GAME.world;
+    GAME.godMode = true;
+    if (P.inCar) GAME.exitCar();
+    // Spike strips: every roadblock at four stars lays one, and nothing took
+    // them up, so a long chase left dozens across the city. Now the oldest
+    // goes when a new one is laid.
+    function strips() {
+      var n = 0;
+      GAME.scene.traverse(function (o) {
+        var g = o.geometry;
+        if (o.isMesh && g && g.parameters && g.parameters.width === 11 && g.parameters.height === 0.12) n++;
+      });
+      return n;
+    }
+    var node = GAME.city.nearestNode(0, -300);
+    GAME.test.teleport(node.x, node.z);
+    var carsBefore = W.cars.slice(), pedsBefore = W.peds.slice();
+    var car = GAME.test.spawnCar('sedan', 4, 0);
+    GAME.test.enterNearestCar(car);
+    GAME.test.fastForward(1.5);               // climbing in takes a moment
+    var copsBefore = W.cars.filter(function (c) { return c.isPolice; }).length;
+    out.laid = 0;
+    if (GAME.police._roadblock && P.inCar) {
+      for (var r = 0; r < 12 && out.laid < 6; r++) {
+        P.car.vx = 0; P.car.vz = 20;       // heading south at speed, as the roadblock wants
+        var n0 = W.cars.length;
+        GAME.police._roadblock(5);
+        if (W.cars.length > n0) out.laid++;
+      }
+    }
+    out.strips = strips();
+    out.copsAdded = W.cars.filter(function (c) { return c.isPolice; }).length - copsBefore;
+    if (P.inCar) GAME.exitCar();
+    W.cars.filter(function (c) { return carsBefore.indexOf(c) < 0; }).forEach(function (c) { GAME.vehicles.removeCar(c); });
+    W.peds.filter(function (p) { return pedsBefore.indexOf(p) < 0; }).forEach(function (p) { GAME.peds.removePed(p); });
+    GAME.police.clearWanted();
+
+    // The result card and the full map each kept a canvas the size of the
+    // screen for the rest of the session after their first showing.
+    GAME.share.show({ slug: 'memory-check', eyebrow: 'check', title: 'CHECK', subtitle: 'check', accent: '#ffffff', stats: [] });
+    var sc = document.getElementById('share-canvas');
+    out.shareShown = sc ? sc.width * sc.height : -1;
+    GAME.share.hide();
+    out.shareHidden = sc ? sc.width * sc.height : -1;
+    GAME.hud.toggleMap(true);
+    var bm = document.getElementById('bigmap');
+    out.mapShown = bm ? bm.width * bm.height : -1;
+    GAME.hud.toggleMap(false);
+    out.mapHidden = bm ? bm.width * bm.height : -1;
+
+    // A texture drawn on a canvas once, uploaded and never redrawn: the
+    // canvas went on holding the pixels the GPU already had.
+    var st = GAME.city.signTex;
+    out.signCanvas = st && st.image ? st.image.width * st.image.height : -1;
+    out.signUploaded = st && st.userData && st.userData.w ? st.userData.w * st.userData.h : 0;
+
+    // The ocean's swell was worked out on the CPU and the whole plane sent up
+    // again every frame; now the shader moves it and the buffer stays put.
+    var ocean = null;
+    GAME.scene.traverse(function (o) {
+      var g = o.geometry;
+      if (o.isMesh && g && g.parameters && g.parameters.width === 3600) ocean = o;
+    });
+    out.ocean = !!ocean;
+    if (ocean) {
+      var v0 = ocean.geometry.attributes.position.version;
+      for (var u = 0; u < 30; u++) GAME.city.update(1 / 60, 50 + u / 60);
+      out.oceanUploads = ocean.geometry.attributes.position.version - v0;
+    }
+
+    // A batch held its working arrays after handing the geometry over, so
+    // the world was built twice over in memory.
+    var gb = new GeoBatch();
+    gb.addBox(0, 0, 0, 1, 1, 1, 0, 0xffffff, 0);
+    var gg = gb.build();
+    out.batchBuilt = gg.attributes.position.count;
+    out.batchKept = gb.pos.length;
+
+    // The broadphase built a fresh list (and a Set, and a string per cell)
+    // for every query; a caller now hands in the list it keeps.
+    var keep = [];
+    out.queryInto = typeof GAME.city.hash.queryInto === 'function' &&
+      GAME.city.hash.queryInto(P.pos.x, P.pos.z, 40, keep) === keep && keep.length > 0;
+
+    // The island's trees and lamps were thousands of boxes baked into one
+    // batch; they are copies of one box now.
+    out.biggestInstanced = 0;
+    GAME.scene.traverse(function (o) { if (o.isInstancedMesh && o.instanceColor) out.biggestInstanced = Math.max(out.biggestInstanced, o.count); });
+
+    // The land was 258,000 separate triangles with every corner stored in
+    // full; it is indexed wedges now, each small enough for 16-bit indices.
+    var land = [];
+    GAME.scene.traverse(function (o) { if (o.userData && o.userData.land) land.push(o); });
+    out.landMeshes = land.length;
+    out.landShared = land.length > 0 && land.every(function (m) {
+      var g = m.geometry;
+      return g.index && g.index.count > 4 * g.attributes.position.count && g.attributes.position.count <= 65536;
+    });
+
+    // Static meshes carried position, normal, colour and uv as floats whatever
+    // their material read, and kept every array after it was on the GPU.
+    var blocks = GAME.city.blockMeshes, packed = 0, loose = 0, released = 0, heldStatic = 0, blocksHeld = 0, bounded = true;
+    GAME.scene.traverse(function (o) {
+      if (!o.isMesh || !o.geometry || !o.material || Array.isArray(o.material)) return;
+      var g = o.geometry, m = o.material;
+      if (blocks.indexOf(o) >= 0) { if (g.attributes.position.array) blocksHeld++; return; }
+      if (!g.userData.released || !m.vertexColors || m.map || !g.attributes.color) return;
+      if (g.attributes.color.normalized && !g.attributes.uv) packed++; else loose++;
+    });
+    GAME.scene.traverse(function (o) {
+      if (!o.isMesh || !o.geometry || !o.geometry.userData.released) return;
+      var g = o.geometry;
+      if (g.attributes.position.array) heldStatic++; else released++;
+      if (!g.boundingSphere) bounded = false;
+    });
+    out.packed = packed; out.loose = loose;
+    out.released = released; out.heldStatic = heldStatic; out.blocksHeld = blocksHeld; out.blocks = blocks.length;
+    out.bounded = bounded;
+
+    // Peds and cars picked up their fields as their lives went, and the
+    // street held some ninety shapes of one and two dozen of the other — too
+    // many for the engine to keep their update loops optimised, which boxed
+    // every number they touched. Fresh ones, a stretch of ordinary play and a
+    // chase later, all share one.
+    var oldCars = W.cars.slice(), oldPeds = W.peds.slice();
+    GAME.test.teleport(-150, -150);
+    GAME.test.setWanted(3);
+    for (var t = 0; t < 60 * 20; t++) { P.health = 100; GAME.tick(1 / 60); }
+    GAME.police.clearWanted();
+    var carShapes = {}, pedShapes = {}, nc = 0, np = 0;
+    W.cars.forEach(function (c) { if (oldCars.indexOf(c) < 0) { carShapes[Object.keys(c).join()] = 1; nc++; } });
+    W.peds.forEach(function (p) { if (oldPeds.indexOf(p) < 0) { pedShapes[Object.keys(p).join()] = 1; np++; } });
+    out.freshCars = nc; out.freshPeds = np;
+    out.carShapes = Object.keys(carShapes).length; out.pedShapes = Object.keys(pedShapes).length;
+    GAME.godMode = false;
+    return out;
+  });
+
+  // The preview in the showroom, the tailor and the hardware store is a
+  // second WebGL renderer. Closing the shop left it — and the scene it drew
+  // from, holding the city's shared meshes — alive for the rest of the
+  // session. The context it draws with while the shop is open must be gone
+  // once the shop closes, every visit.
+  var pvVisits = [];
+  for (var pc = 0; pc < 3; pc++) {
+    await page.evaluate(function (pc) {
+      var ls = GAME.shops.locations().filter(function (x) { return x.kind === 'showroom' || x.kind === 'dress' || x.kind === 'hardware'; });
+      GAME.shops.open(ls[pc % ls.length]);
+    }, pc);
+    await page.evaluate(function () { return new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); }); });
+    pvVisits.push(await page.evaluate(function () {
+      var cv = document.getElementById('shop-preview');
+      // asking a canvas for the kind of context it already has returns that one
+      var gl = cv && (cv.getContext('webgl2') || cv.getContext('webgl'));
+      var live = !!gl && !gl.isContextLost();
+      GAME.shops.close();
+      return { live: live, lost: !!gl && gl.isContextLost() };
+    }));
+  }
+
+  check('memory: roadblocks were laid (anchor sanity)', mem.laid >= 4 && mem.copsAdded >= 8,
+    mem.laid + ' roadblocks, ' + mem.copsAdded + ' cruisers');
+  check('memory: and no more than three spike strips lie about', mem.strips <= 3, mem.strips + ' strips');
+  check('memory: the result card has a canvas while it shows (anchor sanity)', mem.shareShown > 0, mem.shareShown + ' px');
+  check('memory: and lets it go when it closes', mem.shareHidden === 0, mem.shareHidden + ' px');
+  check('memory: the full map has a canvas while it is open (anchor sanity)', mem.mapShown > 0, mem.mapShown + ' px');
+  check('memory: and lets it go when it shuts', mem.mapHidden === 0, mem.mapHidden + ' px');
+  check('memory: the sign atlas went up at full size (anchor sanity)', mem.signUploaded >= 512 * 512, mem.signUploaded + ' px uploaded');
+  check('memory: and its canvas no longer holds the pixels', mem.signCanvas <= 1, mem.signCanvas + ' px held');
+  check('memory: the ocean is there (anchor sanity)', mem.ocean);
+  check('memory: and its swell no longer re-sends the plane every frame', mem.oceanUploads === 0,
+    mem.oceanUploads + ' uploads in 30 frames');
+  check('memory: a batch builds (anchor sanity)', mem.batchBuilt === 36, mem.batchBuilt + ' vertices');
+  check('memory: and keeps nothing once it has', mem.batchKept === 0, mem.batchKept + ' floats kept');
+  check('memory: the broadphase answers into the list its caller keeps', mem.queryInto);
+  check('memory: the island’s trees and lamps are copies of one box', mem.biggestInstanced >= 1000,
+    'largest instanced set ' + mem.biggestInstanced);
+  check('memory: the island’s land is indexed wedges sharing their points', mem.landMeshes >= 2 && mem.landShared,
+    mem.landMeshes + ' wedges');
+  check('memory: vertex-coloured static meshes store colour as bytes and no unused uv', mem.packed > 10 && mem.loose === 0,
+    mem.packed + ' packed, ' + mem.loose + ' not');
+  check('memory: static geometry is gone from JS once it is on the GPU', mem.released > 50 && mem.heldStatic === 0 && mem.bounded,
+    mem.released + ' released, ' + mem.heldStatic + ' still held' + (mem.bounded ? '' : ', some without bounds'));
+  check('memory: while the blocks, which the facade checks read, keep theirs (anchor sanity)', mem.blocks > 0 && mem.blocksHeld === mem.blocks,
+    mem.blocksHeld + ' of ' + mem.blocks);
+  check('memory: fresh traffic and walkers were made (anchor sanity)', mem.freshCars >= 5 && mem.freshPeds >= 5,
+    mem.freshCars + ' cars, ' + mem.freshPeds + ' peds');
+  check('memory: and every car has the same shape', mem.carShapes === 1, mem.carShapes + ' shapes');
+  check('memory: and every ped has the same shape', mem.pedShapes === 1, mem.pedShapes + ' shapes');
+  check('memory: the shop preview draws with a live context while open (anchor sanity)',
+    pvVisits.every(function (v) { return v.live; }), JSON.stringify(pvVisits));
+  check('memory: and it is let go each time the shop closes', pvVisits.every(function (v) { return v.lost; }),
+    JSON.stringify(pvVisits));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the

@@ -1159,6 +1159,38 @@ GAME.shops = (function () {
     disposeTree(pv.obj);
     pv.obj = null;
   }
+  // The preview's context is its own, a second WebGL context with its own
+  // buffers and shaders, and it used to live for the rest of the session from
+  // the first visit to any counter. Now it goes when the shop closes and is
+  // made again on the next visit, while the game is frozen behind the shop.
+  //
+  // That only lets go cleanly if the preview has drawn nothing shared: r128
+  // ties every geometry and material a renderer draws to that renderer until
+  // the resource is disposed, and the town's shared ones never are — so one
+  // shared car body or shirt colour drawn here would hold every torn-down
+  // preview renderer alive. The preview therefore draws copies of anything
+  // shared (a few small buffers), and they are disposed with it.
+  function ownCopies(root) {
+    root.traverse(function (o) {
+      var g = o.geometry;
+      if (g && g.userData && g.userData.shared) { o.geometry = g.clone(); o.geometry.userData = {}; }
+      if (o.material && !Array.isArray(o.material) && o.material.userData && o.material.userData.shared) {
+        o.material = o.material.clone();
+        o.material.userData = {};
+      }
+    });
+    return root;
+  }
+  function releasePv() {
+    clearPvObj();
+    if (!pv.renderer) return;
+    pv.renderer.dispose();
+    pv.renderer.forceContextLoss();
+    // a canvas whose context was lost cannot be given a new one
+    var old = $('shop-preview');
+    if (old && old.parentNode) old.parentNode.replaceChild(old.cloneNode(false), old);
+    pv.renderer = pv.scene = pv.cam = null;
+  }
   function previewOutfit(it) {
     var o = { shirt: outfit().shirt, pants: outfit().pants, hairStyle: outfit().hairStyle, hairColor: outfit().hairColor, skin: outfit().skin };
     if (it) {
@@ -1294,7 +1326,7 @@ GAME.shops = (function () {
       pv.cam.position.set(0, 1.5, 3.2);
       pv.cam.lookAt(0, 1.0, 0);
     }
-    pv.scene.add(pv.obj);
+    pv.scene.add(ownCopies(pv.obj));
   }
   function renderPreview() {
     if (!pv.on || !pv.renderer || !pv.obj || !GAME.shopOpen) return;
@@ -1381,7 +1413,7 @@ GAME.shops = (function () {
     el.screen.style.display = 'none';
     GAME.shopOpen = false;
     pv.on = false;
-    clearPvObj();
+    releasePv();
     pv.key = '';
     if (GAME.syncOverlayMusic) GAME.syncOverlayMusic();
     GAME.regainPointer();
@@ -1453,37 +1485,53 @@ GAME.shops = (function () {
   }
 
   // the nearest doormat's label for the shared POI hint line
+  // (asked every tick near a doormat: the nearest is found as a distance,
+  // and its words — a formatted price among them — are made again only when
+  // the doormat, its owner or the player's mode changes)
+  var hintOut = { d: 0, text: '' }, hintLoc = null, hintForSale = false, hintInCar = false;
   function nearHint(px, pz) {
     var unlocked = !GAME.isla || GAME.isla.isOpen();
-    var best = null;
+    var best = null, bd = 0;
     for (var i = 0; i < locations.length; i++) {
       var loc = locations[i];
       if (loc.isla && !unlocked) continue;
       var d = U.dist2(px, pz, loc.at.x, loc.at.z);
-      if (d < 30 * 30 && (!best || d < best.d)) {
-        var extra = loc.kind === 'safehouse' && !owns(loc.sh.id) ? ' · $' + loc.sh.price.toLocaleString() : '';
-        best = { d: d, text: loc.name + extra + ' — step onto the light' + (GAME.player.inCar ? ' (on foot)' : '') };
-      }
+      if (d < 30 * 30 && (!best || d < bd)) { best = loc; bd = d; }
     }
-    return best;
+    if (!best) return null;
+    var forSale = best.kind === 'safehouse' && !owns(best.sh.id), inCar = GAME.player.inCar;
+    if (best !== hintLoc || forSale !== hintForSale || inCar !== hintInCar) {
+      hintLoc = best; hintForSale = forSale; hintInCar = inCar;
+      hintOut.text = best.name + (forSale ? ' · $' + best.sh.price.toLocaleString() : '') +
+        ' — step onto the light' + (inCar ? ' (on foot)' : '');
+    }
+    hintOut.d = bd;
+    return hintOut;
   }
 
+  // (kept and rewritten rather than built new: the radar asks twenty times a
+  // second, and its callers read the list straight away and keep none of it;
+  // written by index and cut to length, since emptying it would drop its
+  // storage every time)
+  var blipList = [], blipPool = [];
   function blips() {
-    var out = [];
+    var n = 0;
     for (var i = 0; i < locations.length; i++) {
       var loc = locations[i];
       // the desk sergeant lives inside the police station — the P badge
       // already marks it, and a $ stacked on top just clutters the map
       if (loc.kind === 'bribe') continue;
       var home = loc.kind === 'safehouse' && owns(loc.sh.id);
-      out.push({
-        x: loc.at.x, z: loc.at.z,
-        color: home ? '#5dff9e' : '#' + loc.color.toString(16).padStart(6, '0'),
-        label: loc.kind === 'safehouse' ? (home ? '⌂' : '$') : '$',
-        home: home
-      });
+      if (!loc.blipColor) loc.blipColor = '#' + loc.color.toString(16).padStart(6, '0');
+      var b = blipPool[n] || (blipPool[n] = {});
+      b.x = loc.at.x; b.z = loc.at.z;
+      b.color = home ? '#5dff9e' : loc.blipColor;
+      b.label = loc.kind === 'safehouse' ? (home ? '⌂' : '$') : '$';
+      b.home = home;
+      blipList[n++] = b;
     }
-    return out;
+    blipList.length = n;
+    return blipList;
   }
 
   return {

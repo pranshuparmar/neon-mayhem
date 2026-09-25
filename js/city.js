@@ -232,9 +232,12 @@ GAME.city = (function () {
   // height y. A roof only counts once you're actually up at its level, so
   // street traffic never snaps onto a building — but a car that clears a roof
   // on a jump can land on it and drive around up there.
+  // (both keep a list of boxes and refill it — three height asks a tick for
+  // every car used to build three fresh lists; see SpatialHash.queryInto)
+  var driveBoxes = [], surfBoxes = [];
   city.driveSurfaceY = function (x, z, y) {
     var best = city.groundY(x, z, y);
-    var boxes = city.hash.query(x, z, 1);
+    var boxes = city.hash.queryInto(x, z, 1, driveBoxes);
     for (var i = 0; i < boxes.length; i++) {
       var b = boxes[i];
       if (b.tag !== 'building' || b.h === undefined) continue;
@@ -247,7 +250,7 @@ GAME.city = (function () {
   // else the terrain height. Used so aircraft can set down on rooftops.
   city.surfaceY = function (x, z, atY) {
     var y = city.groundY(x, z, atY);
-    var boxes = city.hash.query(x, z, 1);
+    var boxes = city.hash.queryInto(x, z, 1, surfBoxes);
     for (var i = 0; i < boxes.length; i++) {
       var b = boxes[i];
       if (b.tag !== 'building') continue; // land on buildings, not props/fences
@@ -362,6 +365,24 @@ GAME.city = (function () {
     t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.RepeatWrapping;
     return t;
   }
+  // Once a canvas texture is on the GPU, the canvas behind it is a second copy
+  // that nothing reads again: none of these is ever redrawn. So the copy is
+  // shrunk to nothing right after the first upload, about 10 MB of 2D canvas
+  // across the city's textures. The cost is the one the static geometry
+  // already pays: a lost WebGL context would come back with these blank, and
+  // the game does not restore contexts. Only for textures drawn by the main
+  // renderer — the shop preview's own context never samples any of them.
+  function releaseAfterUpload(tex) {
+    tex.onUpdate = function () {
+      tex.onUpdate = null;
+      var im = tex.image;
+      // what went up, for anyone counting texture memory after the fact
+      // (an r128 texture has no userData of its own)
+      if (im) { tex.userData = tex.userData || {}; tex.userData.w = im.width; tex.userData.h = im.height; }
+      if (im && im.getContext) im.width = im.height = 1;
+    };
+    return tex;
+  }
 
   // Two images, not one, and the reason is the whole business of a building
   // having a colour at all.
@@ -409,9 +430,17 @@ GAME.city = (function () {
     // only the pale twins have a glow apart from their map (see above)
     var gv = null, e = null;
     if (opts.glowAll) {
+      // Half the resolution of the wall, drawn in the wall's own coordinates.
+      // The glow only says which windows are lit and how brightly, and at a
+      // street's distance or further the two sizes cannot be told apart; up
+      // against a facade a lit window's edge is a little softer. It saves
+      // three quarters of each one's GPU memory, about 0.8 MB a texture, four
+      // of them. (Compared side by side at street level and across the
+      // skyline before it was chosen.)
       gv = document.createElement('canvas');
-      gv.width = 512; gv.height = 384;
+      gv.width = 256; gv.height = 192;
       e = gv.getContext('2d');
+      e.scale(0.5, 0.5);
       e.fillStyle = '#000'; e.fillRect(0, 0, 512, 384);
     }
     var cw = 512 / cols, ch = 384 / rows;
@@ -444,7 +473,10 @@ GAME.city = (function () {
     var wv = parseInt(wall.slice(1), 16);
     var wallMax = Math.max((wv >> 16) & 255, (wv >> 8) & 255, wv & 255) / 255;
     var map = repeatTex(cv);
-    return { map: map, glow: gv ? repeatTex(gv) : map, cells: [cols, rows], wallMax: wallMax };
+    // (a pale wall keeps its canvas: testFacadeContrast reads the wall's
+    // colour off it; its glow and every dark wall let theirs go)
+    if (!opts.glowAll) releaseAfterUpload(map);
+    return { map: map, glow: gv ? releaseAfterUpload(repeatTex(gv)) : map, cells: [cols, rows], wallMax: wallMax };
   }
 
   // ---------- window light ----------
@@ -583,16 +615,21 @@ GAME.city = (function () {
       g.restore();
       slots.push({ u0: x / 1024, v0: 1 - (y + ROW) / 1024, u1: (x + 512) / 1024, v1: 1 - y / 1024 });
     }
-    return { tex: new THREE.CanvasTexture(cv), slots: slots };
+    return { tex: releaseAfterUpload(new THREE.CanvasTexture(cv)), slots: slots };
   }
+  // One canvas per colour: the city, the island and the shops each ask for the
+  // same soft pool, and each ask used to draw and upload a copy of its own.
+  // Callers share what they are handed, so none may change it.
+  var glowTexCache = {};
   function radialGlowTexture(color) {
+    if (glowTexCache[color]) return glowTexCache[color];
     var cv = document.createElement('canvas');
     cv.width = 128; cv.height = 128;
     var g = cv.getContext('2d');
     var gr = g.createRadialGradient(64, 64, 4, 64, 64, 62);
     gr.addColorStop(0, color); gr.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
-    return new THREE.CanvasTexture(cv);
+    return (glowTexCache[color] = releaseAfterUpload(new THREE.CanvasTexture(cv)));
   }
   city.glowTexture = radialGlowTexture;
 
@@ -602,9 +639,17 @@ GAME.city = (function () {
   // that make a landmark read as switched on.
   city.kinetics = [];
   function kmesh(w, h, d, color, x, y, z, k, matOpts) {
-    var mo = { color: color };
-    if (matOpts) for (var mk in matOpts) mo[mk] = matOpts[mk];
-    var m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshBasicMaterial(mo));
+    // A blinker or a spinner changes `visible` or its rotation, never its
+    // material, so it wears the shared box and colour. Anything that pulses
+    // writes its material's opacity every frame, and options make it more
+    // than a colour — those two still get a private material.
+    var mat;
+    if (matOpts || (k && k.pulse)) {
+      var mo = { color: color };
+      if (matOpts) for (var mk in matOpts) mo[mk] = matOpts[mk];
+      mat = new THREE.MeshBasicMaterial(mo);
+    } else mat = sharedBasic(color);
+    var m = new THREE.Mesh(sharedBoxGeo(w, h, d), mat);
     m.position.set(x, y, z);
     city.scene.add(m);
     if (k) { k.m = m; city.kinetics.push(k); }
@@ -624,9 +669,7 @@ GAME.city = (function () {
       ground: new GeoBatch(),
       marks: new GeoBatch(),
       downtown: new GeoBatch(),
-      strip: new GeoBatch(),
       generic: new GeoBatch(),
-      harbor: new GeoBatch(),
       // The ordinary blocks draw from their own batches so they can have a
       // material of their own. Everything already designed — the hospitals,
       // the stations, the shops, the tower, the island — shares the batches
@@ -638,7 +681,6 @@ GAME.city = (function () {
       blkGeneric: new GeoBatch(),
       blkHarbor: new GeoBatch(),
       wood: new GeoBatch(),
-      glow: new GeoBatch(),
       signs: new GeoBatch()
     };
     // How much of an ordinary block is lit after dark on average, and how
@@ -687,6 +729,9 @@ GAME.city = (function () {
     // boulevard east sidewalk
     batches.ground.addBox(358, 0.09, 0, 4, 0.18, 960, 0, 0x2c2838, 0);
 
+    // the boardwalk's railing posts and the airport's fence posts: several
+    // hundred identical boxes, drawn as copies of one (see BoxSet)
+    postSet = new BoxSet();
     buildBlocks(batches, atlas);
     buildPOIs(batches, atlas);
     buildBeach(scene, batches);
@@ -698,7 +743,12 @@ GAME.city = (function () {
     var texDowntown = windowTexture('#101322', ['#ffe9a8', '#a8e8ff', '#ffd0e8', '#c8ffe0'], 10, 8, 0.5);
     var texStrip = windowTexture('#241a2e', ['#ffe9a8', '#ffd0e8'], 8, 5, 0.4, 'rgba(90,60,90,0.8)');
     var texGeneric = windowTexture('#181420', ['#ffe0a0', '#d8c8ff'], 9, 7, 0.3);
-    var texHarbor = windowTexture('#1a1a20', ['#ffd890'], 6, 3, 0.15, 'rgba(60,62,70,0.9)');
+    // The harbour's dark-walled texture has nothing left to wear it — every
+    // harbour block paints from the pale set below — but it is still drawn and
+    // thrown away: it takes its rolls from the shared stream, and skipping them
+    // would move every ramp, prop and parking spot generated after it. Unworn,
+    // it never reaches the GPU.
+    windowTexture('#1a1a20', ['#ffd890'], 6, 3, 0.15, 'rgba(60,62,70,0.9)');
 
     // The same windows over a wall pale enough that the building's own colour
     // is what you see. Only the block batches use these.
@@ -719,7 +769,7 @@ GAME.city = (function () {
     }
     // the second landmass draws its own meshes but shares the city's window
     // textures and sign atlas, so the two read as one world
-    city.tex = { downtown: texDowntown, strip: texStrip, generic: texGeneric, harbor: texHarbor };
+    city.tex = { downtown: texDowntown, strip: texStrip, generic: texGeneric };
     city.signTex = atlas.tex;
     city.lam = lam;
     function addMesh(batch, mat) {
@@ -728,15 +778,16 @@ GAME.city = (function () {
       scene.add(m);
       return m;
     }
-    addMesh(batches.ground, new THREE.MeshLambertMaterial({ vertexColors: true }));
+    addMesh(batches.ground, sharedVertexLambert());
     addMesh(asphalt, new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 70, specular: 0x232e42 }));
     // road paint always wins its tie against the asphalt beneath it — a
     // depth-only nudge toward the camera, so no altitude can blur the two
     addMesh(batches.marks, new THREE.MeshBasicMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }));
+    // (the Strip's dark-walled texture has no mesh here either: its blocks
+    // paint from the pale set, and the only thing still wearing it is the
+    // showroom in shops.js, which reaches it through city.tex)
     addMesh(batches.downtown, lam(texDowntown));
-    addMesh(batches.strip, lam(texStrip));
     addMesh(batches.generic, lam(texGeneric));
-    addMesh(batches.harbor, lam(texHarbor));
     var blockMeshes = [
       addMesh(batches.blkDowntown, lamBlock(blkDowntown)),
       addMesh(batches.blkStrip, lamBlock(blkStrip)),
@@ -837,14 +888,14 @@ GAME.city = (function () {
       }
       return { verts: n, distinct: Object.keys(seen).length, hash: h };
     };
-    addMesh(batches.wood, new THREE.MeshLambertMaterial({ vertexColors: true }));
+    addMesh(batches.wood, sharedVertexLambert());
     city.signMesh = addMesh(batches.signs, new THREE.MeshBasicMaterial({ map: atlas.tex, transparent: true, vertexColors: true, side: THREE.DoubleSide }));
-    var glowMat = new THREE.MeshBasicMaterial({ map: radialGlowTexture('rgba(255,176,102,0.55)'), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
-    addMesh(batches.glow, glowMat);
 
     buildInstancedProps(scene);
     buildLandmarks(scene);
     buildAirport(scene);
+    scene.add(postSet.build(sharedInstanceLambert()));
+    postSet = null;
     // last, so its clearance tests can see every structure in the world — the
     // terminal, the hospitals, the station, the tower and the bridges all
     // register after the streets do, and a ramp placed before them can end up
@@ -853,6 +904,12 @@ GAME.city = (function () {
     buildRamps(scene);
     buildLaneGraph();
     buildSpots();
+    // down to what each material reads, and gone from this side once it is
+    // on the GPU (see packStatic, releaseStatic); the blocks stay as built,
+    // since their colours, uvs and window light are read back
+    var blocks = new Set(city.blockMeshes.map(function (m) { return m.geometry; }));
+    packStatic(scene, blocks);
+    releaseStatic(scene, blocks);
   };
 
   function addSign(batch, slotIdx, x, y, z, rotY, w, h, tint) {
@@ -1279,6 +1336,7 @@ GAME.city = (function () {
   };
 
   var containerData = [];
+  var postSet = null;   // the fence posts, while the city is being built
 
   function buildBeach(scene, batches) {
     // Boardwalk planks and railing, in lengths with a gap wherever a bridge
@@ -1314,7 +1372,7 @@ GAME.city = (function () {
       if ((z / 6 | 0) % 2 === 0 && !crossed(z)) batches.wood.addBox(365, 0.32, z, 10, 0.04, 3, 0, 0x6a4c34, 0);
     }
     for (var zr = -486; zr < 488; zr += 4) {
-      if (!crossed(zr)) batches.wood.addBox(370.2, 0.52, zr, 0.18, 1.04, 0.18, 0, 0x9a7a58, 0);
+      if (!crossed(zr)) postSet.addBox(370.2, 0.52, zr, 0.18, 1.04, 0.18, 0, 0x9a7a58);
     }
     // Each pier's mouth gets a threshold apron: the boardwalk SLAB continues
     // across the band to the deck. The crossed() gap exists for the RAILING —
@@ -1414,7 +1472,7 @@ GAME.city = (function () {
       sand.addGroundQuad(fx + 10, 0.46 + ((sIdx + 1) % 2) * 0.06, ssh - 6, 20.5, 26, 0, U.pick(rng, sandShades));
       sIdx++;
     }
-    var sandMesh = new THREE.Mesh(sand.build(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    var sandMesh = new THREE.Mesh(sand.build(), sharedVertexLambert());
     sandMesh.matrixAutoUpdate = false;
     scene.add(sandMesh);
 
@@ -1446,7 +1504,7 @@ GAME.city = (function () {
         pier.addBox((x0 + endX) / 2, 1.35, pz + 6.8, endX - x0, 0.12, 0.2, 0, 0xb08a60, 0);
       }
     });
-    var pierMesh = new THREE.Mesh(pier.build(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    var pierMesh = new THREE.Mesh(pier.build(), sharedVertexLambert());
     pierMesh.matrixAutoUpdate = false;
     scene.add(pierMesh);
     // the pier's name board arches OVER the mouth now — it used to hang low
@@ -1460,20 +1518,31 @@ GAME.city = (function () {
     var og = new THREE.PlaneGeometry(3600, 3000, 72, 60);
     og.rotateX(-Math.PI / 2);
     og.translate(450, -0.35, 0);
-    city.oceanGeo = og;
-    city.oceanBase = og.attributes.position.array.slice();
     // the ocean plane spans the whole map, so its inland vertices sit just under
     // the streets. Sink those and never animate them — otherwise wave crests rise
     // through the asphalt as flickering blue patches.
-    var ob = city.oceanBase, mask = new Uint8Array(ob.length / 3);
-    for (var vi = 0, m = 0; vi < ob.length; vi += 3, m++) {
-      var vx = ob[vi], vz = ob[vi + 2];
-      mask[m] = city.isInWater(vx, vz) ? 1 : 0;
-      if (!mask[m]) og.attributes.position.array[vi + 1] = -4;
+    var op = og.attributes.position.array;
+    for (var vi = 0; vi < op.length; vi += 3) {
+      if (!city.isInWater(op[vi], op[vi + 2])) op[vi + 1] = -4;
     }
-    city.oceanMask = mask;
-    og.attributes.position.needsUpdate = true;
     var om = new THREE.MeshPhongMaterial({ color: 0x0d2242, shininess: 120, specular: 0x8899cc, transparent: true, opacity: 0.93 });
+    // The swell is worked out on the GPU. It used to be a loop over all 4,453
+    // vertices on every frame, and the whole position buffer sent up again
+    // after it, which also meant keeping a second copy of the plane to work
+    // from. The sea's own vertices lie at -0.35 and the sunk ones at -4, so
+    // the shader tells them apart by height and needs no mask. The two phases
+    // are wrapped here, in double precision, so a long session never runs
+    // the GPU's single-precision sine out of digits.
+    var wave = { value: new THREE.Vector2() };
+    om.onBeforeCompile = function (sh) {
+      sh.uniforms.uWave = wave;
+      if (sh.vertexShader.indexOf('#include <begin_vertex>') < 0) console.error('ocean: the shader chunk it hooks is missing');
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nuniform vec2 uWave;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n' +
+          'if (position.y > -1.0) transformed.y += sin(position.x * 0.045 + uWave.x) * 0.28 + sin(position.z * 0.06 + uWave.y) * 0.22;');
+    };
+    city.oceanWave = wave.value;
     var ocean = new THREE.Mesh(og, om);
     scene.add(ocean);
 
@@ -1499,7 +1568,7 @@ GAME.city = (function () {
       var gr = g.createLinearGradient(0, 256, 0, 0);
       for (var i = 0; i < stops.length; i++) gr.addColorStop(stops[i][0], stops[i][1]);
       g.fillStyle = gr; g.fillRect(0, 0, 32, 256);
-      return new THREE.CanvasTexture(cv);
+      return releaseAfterUpload(new THREE.CanvasTexture(cv));
     }
 
   function buildSky(scene) {
@@ -1601,6 +1670,11 @@ GAME.city = (function () {
 
   function buildInstancedProps(scene) {
     var dummy = new THREE.Object3D();
+    // The vertex-coloured props below share one material. It is not the
+    // shared workhorse the static meshes wear: r128 keeps one program per
+    // material, and a material worn by instanced and plain meshes alike
+    // swaps its program every time the draw order alternates between them.
+    var instLam = new THREE.MeshLambertMaterial({ vertexColors: true });
 
     // palms
     // extra palms scattered on boulevard sidewalks
@@ -1627,7 +1701,7 @@ GAME.city = (function () {
     }
     var frondGeo = frondB.build();
     // tilt fronds downward by shifting outer edge: cheap visual, skip exact droop
-    var frondMesh = new THREE.InstancedMesh(frondGeo, new THREE.MeshLambertMaterial({ vertexColors: true }), palms.length);
+    var frondMesh = new THREE.InstancedMesh(frondGeo, instLam, palms.length);
     for (var p = 0; p < palms.length; p++) {
       var pp = palms[p];
       dummy.position.set(pp.x, city.groundY(pp.x, pp.z), pp.z);
@@ -1664,11 +1738,10 @@ GAME.city = (function () {
     poleB.addBox(0, 3, 0, 0.22, 6, 0.22, 0, 0x3a3f4a, 0);
     poleB.addBox(0.9, 5.9, 0, 2, 0.16, 0.16, 0, 0x3a3f4a, 0);
     var poleGeo = poleB.build();
-    var poleMesh = new THREE.InstancedMesh(poleGeo, new THREE.MeshLambertMaterial({ vertexColors: true }), lightSpots.length);
+    var poleMesh = new THREE.InstancedMesh(poleGeo, instLam, lightSpots.length);
     var headGeo = new THREE.BoxGeometry(0.7, 0.22, 0.3);
     headGeo.translate(1.8, 5.8, 0);
     var headMesh = new THREE.InstancedMesh(headGeo, new THREE.MeshBasicMaterial({ color: 0xffc88a }), lightSpots.length);
-    var glowB = new GeoBatch();
     for (var L = 0; L < lightSpots.length; L++) {
       var ls = lightSpots[L];
       dummy.position.set(ls.x, 0, ls.z);
@@ -1719,7 +1792,7 @@ GAME.city = (function () {
     benchB.addBox(-0.25, 0.75, 0, 0.08, 0.6, 2.2, 0, 0x8a6a48, 0);
     benchB.addBox(0.18, 0.25, -0.9, 0.1, 0.5, 0.1, 0, 0x44403a, 0);
     benchB.addBox(0.18, 0.25, 0.9, 0.1, 0.5, 0.1, 0, 0x44403a, 0);
-    var benchMesh = new THREE.InstancedMesh(benchB.build(), new THREE.MeshLambertMaterial({ vertexColors: true }), benches.length);
+    var benchMesh = new THREE.InstancedMesh(benchB.build(), instLam, benches.length);
     for (var bb = 0; bb < benches.length; bb++) {
       dummy.position.set(benches[bb].x, 0.3, benches[bb].z);
       dummy.rotation.set(0, 0, 0); dummy.scale.setScalar(1); dummy.updateMatrix();
@@ -1778,8 +1851,9 @@ GAME.city = (function () {
     var rim = new THREE.Mesh(new THREE.TorusGeometry(15, 0.5, 6, 22), new THREE.MeshBasicMaterial({ color: 0x38e8ff }));
     spin.add(rim);
     var spokeMat = new THREE.MeshBasicMaterial({ color: 0xff4fa3 });
+    var spokeGeo = new THREE.BoxGeometry(30, 0.34, 0.34);
     for (var sI = 0; sI < 4; sI++) {
-      var spoke = new THREE.Mesh(new THREE.BoxGeometry(30, 0.34, 0.34), spokeMat);
+      var spoke = new THREE.Mesh(spokeGeo, spokeMat);
       spoke.rotation.z = sI / 4 * Math.PI; // spread in the wheel's XY plane
       spin.add(spoke);
     }
@@ -1798,7 +1872,7 @@ GAME.city = (function () {
     var supB = new GeoBatch();
     supB.addBox(492, 8.5, WZ - 6, 1.2, 17, 1.2, 0, 0x555a6a, 0);
     supB.addBox(492, 8.5, WZ + 6, 1.2, 17, 1.2, 0, 0x555a6a, 0);
-    var sup = new THREE.Mesh(supB.build(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    var sup = new THREE.Mesh(supB.build(), sharedVertexLambert());
     sup.matrixAutoUpdate = false;
     scene.add(sup);
     addSolid(492, WZ, 3, 14, 17, 'prop');
@@ -1813,7 +1887,7 @@ GAME.city = (function () {
       addSolid(c[0] - 6, c[1], 2, 2, 28, 'prop');
       addSolid(c[0] + 6, c[1], 2, 2, 28, 'prop');
     });
-    var craneMesh = new THREE.Mesh(craneB.build(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    var craneMesh = new THREE.Mesh(craneB.build(), sharedVertexLambert());
     craneMesh.matrixAutoUpdate = false;
     scene.add(craneMesh);
   }
@@ -1845,7 +1919,7 @@ GAME.city = (function () {
       marks.addGroundQuad(A.minX + 2, 0.13, A.cz + te * 1.4, 1.2, 1.0, 0, 0x38e878);
       marks.addGroundQuad(A.maxX - 2, 0.13, A.cz + te * 1.4, 1.2, 1.0, 0, 0xe23a4a);
     }
-    var rw = new THREE.Mesh(b.build(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    var rw = new THREE.Mesh(b.build(), sharedVertexLambert());
     rw.matrixAutoUpdate = false; scene.add(rw);
     // terminal building + control tower, south of the runway — jet-age, per
     // the vision: a green-glazed cab you can read from the runway, a rotating
@@ -1876,7 +1950,7 @@ GAME.city = (function () {
     });
     var wsMesh = new THREE.Mesh(wsB.build(), new THREE.MeshBasicMaterial({ vertexColors: true }));
     wsMesh.matrixAutoUpdate = false; scene.add(wsMesh);
-    var tbm = new THREE.Mesh(tb.build(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    var tbm = new THREE.Mesh(tb.build(), sharedVertexLambert());
     tbm.matrixAutoUpdate = false; scene.add(tbm);
     addSolid(A.cx + 30, A.cz + 28, 84, 16, 12);
     addSolid(A.cx + 40, A.cz + 26, 8, 8, 24);
@@ -1902,7 +1976,7 @@ GAME.city = (function () {
       var len = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(len / 5));
       for (var k = 0; k <= n; k++) {
         var t = k / n, px = x0 + (x1 - x0) * t, pz = z0 + (z1 - z0) * t;
-        b.addBox(px, 1.4, pz, 0.24, 2.8, 0.24, 0, postColor, 0);
+        postSet.addBox(px, 1.4, pz, 0.24, 2.8, 0.24, 0, postColor);
       }
       var mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, ang = Math.atan2(x1 - x0, z1 - z0);
       b.addBox(mx, 2.5, mz, 0.1, 0.16, len, ang, railColor, 0);
@@ -1915,7 +1989,7 @@ GAME.city = (function () {
     run(A.fx0, A.fz1, A.fx1, A.fz1);       // south
     run(A.fx0, A.fz0, A.fx0, A.fz1);       // west
     run(A.fx1, A.fz0, A.fx1, A.fz1);       // east
-    var mesh = new THREE.Mesh(b.build(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    var mesh = new THREE.Mesh(b.build(), sharedVertexLambert());
     mesh.matrixAutoUpdate = false;
     scene.add(mesh);
     // solid collision segments (thin walls), leaving the gate open
@@ -2436,16 +2510,8 @@ GAME.city = (function () {
   }
 
   city.update = function (dt, t) {
-    if (city.oceanGeo) {
-      var pos = city.oceanGeo.attributes.position;
-      var arr = pos.array, base = city.oceanBase, mask = city.oceanMask;
-      for (var i = 0, mi = 0; i < arr.length; i += 3, mi++) {
-        if (mask && !mask[mi]) continue; // inland vertex: stays sunk under the streets
-        var x = base[i], z = base[i + 2];
-        arr[i + 1] = base[i + 1] + Math.sin(x * 0.045 + t * 1.1) * 0.28 + Math.sin(z * 0.06 + t * 0.7) * 0.22;
-      }
-      pos.needsUpdate = true;
-    }
+    // the swell's two phases (see the ocean in buildBeach)
+    if (city.oceanWave) city.oceanWave.set((t * 1.1) % (Math.PI * 2), (t * 0.7) % (Math.PI * 2));
     if (city.wheelSpin) {
       city.wheelSpin.rotation.z += dt * 0.15; // spin about the hub axis
       if (!city.cabsSet) {

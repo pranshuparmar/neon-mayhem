@@ -1,6 +1,10 @@
 GAME.hud = (function () {
   var el = {};
-  var lastClock = '';
+  var lastClock = -1;
+  // what the per-tick readouts last wrote, so a tick that changes nothing
+  // builds no strings and touches no styles
+  var lastHealthW = -1, lastArmorW = -1, lastAirPct = -2, lastAirCol = '', vehicleLine;
+  var lastPoiHint = null;
   var shownCash = 0, targetCash = 0;
   var msgT = 0, countT = 0, zoneT = 0, lastZone = '';
   var radioT = 0;
@@ -231,6 +235,10 @@ GAME.hud = (function () {
     });
 
     el['bigmap'].addEventListener('click', onMapClick);
+    // the full map is drawn to size each time it opens (drawBigMap), so while
+    // it is shut its canvas holds nothing — ~1.7 MB it used to keep for the
+    // rest of the session after the first look
+    el['bigmap'].width = el['bigmap'].height = 0;
     el['map-clear'].addEventListener('click', function () { GAME.nav.clear(); drawBigMap(); });
     el['map-close'].addEventListener('click', function () { api.toggleMap(false); });
     // like the pause screen: a click on the dark around the map closes it
@@ -267,9 +275,18 @@ GAME.hud = (function () {
   // cannot drift apart and a check standing on it cannot pass while either
   // one disagrees. A pad is treated exactly like the airport it shares a
   // legend row with: same family, same filter, same blip.
+  // (refilled, not rebuilt: the radar asks twenty times a second, and every
+  // caller reads the list straight away and keeps none of it; written by
+  // index and cut to length, since emptying it would drop its storage)
+  var padBuf = [];
   function shownHelipads() {
-    if (!catVis('airport')) return [];
-    return [GAME.city.helipad, GAME.city.roofHelipad].filter(function (h) { return !!h; });
+    var n = 0;
+    if (catVis('airport')) {
+      if (GAME.city.helipad) padBuf[n++] = GAME.city.helipad;
+      if (GAME.city.roofHelipad) padBuf[n++] = GAME.city.roofHelipad;
+    }
+    padBuf.length = n;
+    return padBuf;
   }
   function pickupCat(t) { return t === 'health' ? 'health' : t === 'armor' ? 'armor' : 'weapon'; }
   function toggleCat(k) {
@@ -626,6 +643,25 @@ GAME.hud = (function () {
     return { mode: 'arrow', x: ux * lim, z: uz * lim, ux: ux, uz: uz, dist: rr };
   }
 
+  // The radar's two stamps. They were closures made afresh inside every draw,
+  // twenty draws a second; they read the draw's context, centre and zoom from
+  // here instead, set at the top of drawMinimap.
+  var mmG = null, mmPx = 0, mmPz = 0, mmZoom = 1;
+  function blip(x, z, color, size) {
+    var g = mmG;
+    g.fillStyle = color;
+    g.beginPath();
+    g.arc((x - mmPx) * MAP_S, (z - mmPz) * MAP_S, size, 0, Math.PI * 2);
+    g.fill();
+  }
+  // airport + helipad landmarks: a ringed cyan blip so they stand out on the radar
+  function landmark(x, z) {
+    var g = mmG, lx = (x - mmPx) * MAP_S, lz = (z - mmPz) * MAP_S;
+    g.fillStyle = '#8de0ff';
+    g.beginPath(); g.arc(lx, lz, 3.4 / mmZoom, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#ffffff'; g.lineWidth = 1.2 / mmZoom;
+    g.beginPath(); g.arc(lx, lz, 5.6 / mmZoom, 0, Math.PI * 2); g.stroke();
+  }
   function drawMinimap() {
     var cv = el.minimap, g = cv.getContext('2d');
     var P = GAME.player;
@@ -634,6 +670,7 @@ GAME.hud = (function () {
     var h = P.inCar && P.car ? P.car.heading : P.heading;
     g.clearRect(0, 0, 180, 180);
     var zoom = P.inCar ? 0.62 : 0.85;
+    mmG = g; mmPx = px; mmPz = pz; mmZoom = zoom;
     g.save();
     g.translate(90, 90);
     // heading-up radar: rotate so the player's forward direction points up
@@ -641,12 +678,6 @@ GAME.hud = (function () {
     g.scale(zoom, zoom);
     g.drawImage(mapBuffer, -(px + MAP_OX) * MAP_S, -(pz + MAP_OY) * MAP_S);
     // blips (drawn in the rotated frame so they track the map)
-    function blip(x, z, color, size) {
-      g.fillStyle = color;
-      g.beginPath();
-      g.arc((x - px) * MAP_S, (z - pz) * MAP_S, size, 0, Math.PI * 2);
-      g.fill();
-    }
     // weapon / health / armor pickups near the player
     var pk = GAME.world.pickups;
     for (var pu = 0; pu < pk.length; pu++) {
@@ -727,21 +758,15 @@ GAME.hud = (function () {
       if (mb[i].kind && !catVis(mb[i].kind)) continue;
       blip(mb[i].x, mb[i].z, mb[i].color, mb[i].size);
     }
-    // airport + helipad landmarks: a ringed cyan blip so they stand out on the radar
-    function landmark(x, z) {
-      var lx = (x - px) * MAP_S, lz = (z - pz) * MAP_S;
-      g.fillStyle = '#8de0ff';
-      g.beginPath(); g.arc(lx, lz, 3.4 / zoom, 0, Math.PI * 2); g.fill();
-      g.strokeStyle = '#ffffff'; g.lineWidth = 1.2 / zoom;
-      g.beginPath(); g.arc(lx, lz, 5.6 / zoom, 0, Math.PI * 2); g.stroke();
-    }
     // POI dots, live and legend-aware (they used to be baked into the base
     // image, where the legend couldn't touch them)
-    if (catVis('hospital')) GAME.city.pois.hospitals.forEach(function (H2) { blip(H2.x, H2.z, '#ff8aa8', 3); });
-    if (catVis('police')) GAME.city.pois.stations.forEach(function (st2) { blip(st2.x, st2.z, '#5aa0ff', 3); });
-    if (catVis('respray')) GAME.city.pois.resprays.forEach(function (r2) { blip(r2.door.x, r2.door.z, '#c86bff', 3); });
+    var pois = GAME.city.pois, pi;
+    if (catVis('hospital')) for (pi = 0; pi < pois.hospitals.length; pi++) blip(pois.hospitals[pi].x, pois.hospitals[pi].z, '#ff8aa8', 3);
+    if (catVis('police')) for (pi = 0; pi < pois.stations.length; pi++) blip(pois.stations[pi].x, pois.stations[pi].z, '#5aa0ff', 3);
+    if (catVis('respray')) for (pi = 0; pi < pois.resprays.length; pi++) blip(pois.resprays[pi].door.x, pois.resprays[pi].door.z, '#c86bff', 3);
     if (catVis('airport')) landmark(GAME.city.airport.apron.x, GAME.city.airport.apron.z);
-    shownHelipads().forEach(function (hp2) { landmark(hp2.x, hp2.z); });
+    var pads = shownHelipads();
+    for (pi = 0; pi < pads.length; pi++) landmark(pads[pi].x, pads[pi].z);
     if (catVis('icecream') && GAME.city.islaPois) landmark(GAME.city.islaPois.factory.x, GAME.city.islaPois.factory.z);
     var cars = GAME.world.cars;
     for (var c = 0; c < cars.length; c++) {
@@ -801,22 +826,34 @@ GAME.hud = (function () {
     // makes a raw minute hand a blur (9.6 game-minutes a second), so it
     // reads in ten-minute steps, ticking about once a real second.
     var cm = Math.floor(GAME.dayPhase * 144) * 10 % 1440;
-    var ct = (cm < 600 ? '0' : '') + Math.floor(cm / 60) + ':' + (cm % 60 === 0 ? '00' : cm % 60);
-    if (ct !== lastClock) { lastClock = ct; el.clock.textContent = ct; }
-    el['health-fill'].style.width = U.clamp(P.health, 0, 100) + '%';
-    el['armor-fill'].style.width = U.clamp(P.armor, 0, 100) + '%';
+    if (cm !== lastClock) {
+      lastClock = cm;
+      el.clock.textContent = (cm < 600 ? '0' : '') + Math.floor(cm / 60) + ':' + (cm % 60 === 0 ? '00' : cm % 60);
+    }
+    var hw = U.clamp(P.health, 0, 100), aw = U.clamp(P.armor, 0, 100);
+    if (hw !== lastHealthW) { lastHealthW = hw; el['health-fill'].style.width = hw + '%'; }
+    if (aw !== lastArmorW) { lastArmorW = aw; el['armor-fill'].style.width = aw + '%'; }
     // aircraft wear their condition on the HUD: their damage is otherwise
     // invisible until the explosion, and "wasted out of nowhere" was just a
     // dying airframe nobody could see
-    var vl = document.getElementById('vehicle-line');
+    if (vehicleLine === undefined) vehicleLine = document.getElementById('vehicle-line');
+    var vl = vehicleLine;
     if (vl) {
       var av = P.inCar && P.car && (P.car.spec.heli || P.car.spec.plane) ? P.car : null;
+      var apct = -1, acol = '';
       if (av) {
         var af = U.clamp(av.hp / av.spec.hp, 0, 1);
-        vl.textContent = 'AIRFRAME ' + Math.round(af * 100) + '%';
-        vl.style.color = af > 0.6 ? '#8dffd8' : af > 0.3 ? '#ffd24a' : '#ff5d7a';
-        vl.style.display = 'block';
-      } else vl.style.display = 'none';
+        apct = Math.round(af * 100);
+        acol = af > 0.6 ? '#8dffd8' : af > 0.3 ? '#ffd24a' : '#ff5d7a';
+      }
+      if (apct !== lastAirPct || acol !== lastAirCol) {
+        lastAirPct = apct; lastAirCol = acol;
+        if (av) {
+          vl.textContent = 'AIRFRAME ' + apct + '%';
+          vl.style.color = acol;
+          vl.style.display = 'block';
+        } else vl.style.display = 'none';
+      }
     }
     if (msgT > 0) { msgT -= dt; if (msgT <= 0) el['msg-line'].style.opacity = 0; }
     if (countT > 0) { countT -= dt; if (countT <= 0) el['count-big'].style.opacity = 0; }
@@ -871,7 +908,10 @@ GAME.hud = (function () {
       // the sim loop halts while the map is open; syncOverlayMusic below
       // silences every voice the halted tick would otherwise leave held
       if (open) drawBigMap();
-      else if (!GAME.paused) GAME.audio.resume(); // don't leave the context suspended
+      else {
+        el.bigmap.width = el.bigmap.height = 0;
+        if (!GAME.paused) GAME.audio.resume(); // don't leave the context suspended
+      }
       // the map is a mouse screen: hand the cursor back without touching
       // fullscreen (Esc would drop both, which is why we never make the
       // player reach for it)
@@ -962,7 +1002,10 @@ GAME.hud = (function () {
     setPoiHint: function (text) {
       var e = el['poi-hint'];
       if (!e) return;
-      if (text) { if (e.textContent !== text) e.textContent = text; e.style.opacity = 1; }
+      // asked every tick, and nearly always with what it already shows
+      if (text === lastPoiHint) return;
+      lastPoiHint = text;
+      if (text) { e.textContent = text; e.style.opacity = 1; }
       else e.style.opacity = 0;
     },
     showBig: function (kind, sub) {
@@ -1041,14 +1084,20 @@ GAME.hud = (function () {
 GAME.nav = (function () {
   var dest = null, path = [], recompT = 0;
 
-  function key(n) { return n.id; }
-
   // Dijkstra over edge length along the road-node graph; [{x,z}...] start->goal.
   // Hop-count BFS minimized the wrong thing once the island joined: its lane
   // links run ~34 m against the mainland's ~100 m blocks, so "fewest edges"
   // biased routes onto fewer-but-longer mainland legs. Metres win now. The
-  // graph is a few hundred nodes and this runs at most every 1.5 s, so the
-  // heapless closest-first scan is comfortably inside budget.
+  // graph is a few hundred nodes, so the heapless closest-first scan is
+  // comfortably inside budget.
+  //
+  // The search's working state lives in typed arrays, one slot per road node
+  // (a node's id is its index), reused by every call and told apart by a
+  // generation stamp. A route is asked for every second along a race line,
+  // every 1.5 s by the map and every 2.5 s by each rival, and each ask used
+  // to build three maps and an open list afresh, then splice the open list
+  // once per node it settled.
+  var pDist = null, pPrev = null, pSeen = null, pDone = null, pGen = 0, pOpen = [];
   function roadPath(x0, z0, x1, z1) {
     var start = GAME.city.nearestNode(x0, z0);
     var goal = GAME.city.nearestNode(x1, z1);
@@ -1057,36 +1106,49 @@ GAME.nav = (function () {
     // off the graph, so a cross-channel destination degrades to a stub at
     // the far end instead of a confident line through the police barrier
     var gated = GAME.isla && !GAME.isla.isOpen();
-    var dist = {}, prev = {}, done = {}, open = [start];
-    dist[key(start)] = 0; prev[key(start)] = null;
-    while (open.length) {
+    var nodes = GAME.city.nodes;
+    if (!pDist || pDist.length < nodes.length) {
+      pDist = new Float64Array(nodes.length); pPrev = new Int32Array(nodes.length);
+      pSeen = new Uint32Array(nodes.length); pDone = new Uint32Array(nodes.length); pGen = 0;
+    }
+    // (the open list is sized by a count of its own, never by its length:
+    // truncating a JS array to nothing drops its storage, and it would be
+    // grown again on every call)
+    var g = ++pGen, open = pOpen, on = 0;
+    open[on++] = start;
+    pSeen[start.id] = g; pDist[start.id] = 0; pPrev[start.id] = -1;
+    while (on) {
       var bi = 0;
-      for (var i = 1; i < open.length; i++) if (dist[key(open[i])] < dist[key(open[bi])]) bi = i;
-      var n = open.splice(bi, 1)[0];
-      var nk = key(n);
-      if (done[nk]) continue;
-      done[nk] = true;
+      for (var i = 1; i < on; i++) if (pDist[open[i].id] < pDist[open[bi].id]) bi = i;
+      var n = open[bi];
+      // taken out in place, keeping the rest in order (as splice did), so
+      // among equally short routes the same one wins as before
+      for (var k = bi; k < on - 1; k++) open[k] = open[k + 1];
+      on--;
+      var nk = n.id;
+      if (pDone[nk] === g) continue;
+      pDone[nk] = g;
       if (n === goal) break;
       var nbs = GAME.city.neighbors(n);
       for (var j = 0; j < nbs.length; j++) {
         var b = nbs[j];
         if (gated && b.span) continue;
-        var bk = key(b);
-        if (done[bk]) continue;
-        var d = dist[nk] + U.dist(n.x, n.z, b.x, b.z);
-        if (dist[bk] === undefined || d < dist[bk]) {
-          dist[bk] = d; prev[bk] = n;
-          open.push(b);
+        var bk = b.id;
+        if (pDone[bk] === g) continue;
+        var d = pDist[nk] + U.dist(n.x, n.z, b.x, b.z);
+        if (pSeen[bk] !== g || d < pDist[bk]) {
+          pSeen[bk] = g; pDist[bk] = d; pPrev[bk] = nk;
+          open[on++] = b;
         }
       }
     }
     // an unreached goal is no route at all: the degraded walk-back used to
     // hand back a single far-end stub, and the map drew the player-to-stub
     // connector as a confident schematic line straight across the water
-    if (!(key(goal) in prev)) return [];
-    var out = [], cur = goal;
-    while (cur) { out.unshift({ x: cur.x, z: cur.z }); cur = prev[key(cur)]; }
-    return out;
+    if (pSeen[goal.id] !== g) return [];
+    var out = [], cur = goal.id;
+    while (cur >= 0) { out.push({ x: nodes[cur].x, z: nodes[cur].z }); cur = pPrev[cur]; }
+    return out.reverse();
   }
 
   function computePath() {

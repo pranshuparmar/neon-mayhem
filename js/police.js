@@ -1,4 +1,5 @@
 GAME.police = (function () {
+  var pushOut = { x: 0, z: 0 };   // resolveCircle's answer for walking officers, reused
   var heat = 0, lastSeen = 0, pinTimer = 0, grabTimer = 0, lastCrime = -99;
   var crimeCooldown = {};
   var roadblockT = 0, spikes = [];
@@ -154,9 +155,33 @@ GAME.police = (function () {
     for (var i = 0; i < spikes.length; i++) { GAME.scene.remove(spikes[i].mesh); disposeTree(spikes[i].mesh); }
     spikes = [];
   }
+  // A long chase at four stars lays a strip at every roadblock, and nothing
+  // took them up again until the stars ran out: twenty minutes in, a hundred
+  // of them across the city. Only the newest few are ever ahead of anyone, so
+  // the oldest goes when a new one is laid, and any the chase has left far
+  // behind are taken up (the same range at which a cruiser is sent home).
+  var MAX_SPIKES = 3, SPIKE_KEEP_R = 260;
+  function dropSpike(i) {
+    GAME.scene.remove(spikes[i].mesh);
+    disposeTree(spikes[i].mesh);
+    spikes.splice(i, 1);
+  }
 
+  // The pursuit's working lists are asked for every tick, so they are kept
+  // and refilled rather than built new each time: a caller reads one before
+  // the next tick asks again, and nobody holds on to it past that. Refilled
+  // by index and then cut to length — emptying one with `length = 0` and
+  // pushing drops its storage and grows it again, which allocates about as
+  // much as the filter() it replaced.
+  var copBuf = [], chaseBuf = [], pedBuf = [];
   function copCars() {
-    return GAME.world.cars.filter(function (c) { return c.isPolice && !c.dead && c.ai && (c.ai.mode === 'chase' || c.ai.mode === 'roadblock'); });
+    var n = 0, cars = GAME.world.cars;
+    for (var i = 0; i < cars.length; i++) {
+      var c = cars[i];
+      if (c.isPolice && !c.dead && c.ai && (c.ai.mode === 'chase' || c.ai.mode === 'roadblock')) copBuf[n++] = c;
+    }
+    copBuf.length = n;
+    return copBuf;
   }
 
   // ---------- the air unit ----------
@@ -165,6 +190,10 @@ GAME.police = (function () {
   // two warnings first, and the THIRD violation is the 5-star response,
   // birds up and firing.
   var airUnits = [];
+  // The searchlight never changes shape or colour, so every bird carries the
+  // same cone and material, built the first time one lifts off. Shared, so
+  // disposeTree leaves them for the next one.
+  var beamGeo = null, beamMat = null;
   function airspaceStrike() {
     if (stars() < 5) {
       setWanted(5);
@@ -183,18 +212,23 @@ GAME.police = (function () {
     // invisible. The unit now announces itself the way a police bird does:
     // a searchlight cone reaching down toward the target, and red/blue
     // strobes. Both ride the mesh, so they move, blink and die with it.
-    var beam = new THREE.Mesh(
-      new THREE.ConeGeometry(7, 26, 12, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0xfff2c0, transparent: true, opacity: 0.15, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false })
-    );
+    if (!beamGeo) {
+      beamGeo = new THREE.ConeGeometry(7, 26, 12, 1, true);
+      beamGeo.userData.shared = true;
+      beamMat = new THREE.MeshBasicMaterial({ color: 0xfff2c0, transparent: true, opacity: 0.15, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
+      beamMat.userData.shared = true;
+    }
+    var beam = new THREE.Mesh(beamGeo, beamMat);
     beam.position.set(0, -12.6, 1.6);   // apex under the chin, cone reaching down
     beam.rotation.x = -0.12;            // leant toward whatever the nose points at
     h.mesh.add(beam);
-    var strobeR = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.28, 0.5), new THREE.MeshBasicMaterial({ color: 0xff2030 }));
+    // the strobes blink by `visible`, never by material, so they can wear the
+    // same shared lamps as a cruiser's lightbar
+    var strobeR = new THREE.Mesh(sharedBoxGeo(0.5, 0.28, 0.5), sharedBasic(0xff2030));
     strobeR.position.set(-0.9, 2.3, -0.6);
-    var strobeB = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.28, 0.5), new THREE.MeshBasicMaterial({ color: 0x2050ff }));
+    var strobeB = new THREE.Mesh(sharedBoxGeo(0.5, 0.28, 0.5), sharedBasic(0x2050ff));
     strobeB.position.set(0.9, 2.3, -0.6);
-    var strobeT = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.34, 0.34), new THREE.MeshBasicMaterial({ color: 0xff2030 }));
+    var strobeT = new THREE.Mesh(sharedBoxGeo(0.34, 0.34, 0.34), sharedBasic(0xff2030));
     strobeT.position.set(0, 1.9, -5.1);   // tail beacon
     h.mesh.add(strobeR); h.mesh.add(strobeB); h.mesh.add(strobeT);
     h.airLights = [strobeR, strobeB, strobeT];
@@ -206,7 +240,13 @@ GAME.police = (function () {
   function updateAirUnits(dt, s) {
     var P = GAME.player;
     var want = s >= 5 ? 2 : s >= 4 ? 1 : 0;
-    airUnits = airUnits.filter(function (h) { return !h.dead && GAME.world.cars.indexOf(h) >= 0; });
+    // compacted in place: this runs every tick, birds or no birds
+    var keep = 0;
+    for (var k = 0; k < airUnits.length; k++) {
+      var au = airUnits[k];
+      if (!au.dead && GAME.world.cars.indexOf(au) >= 0) airUnits[keep++] = au;
+    }
+    airUnits.length = keep;
     if (airUnits.length < want && GAME.frame % 90 === 0) spawnAirUnit();
     var f = GAME.focus();
     var fy = P.inCar && P.car ? P.car.pos.y : P.pos.y;
@@ -466,7 +506,7 @@ GAME.police = (function () {
     cop.pos.x += Math.sin(cop.heading) * cop.speed * dt;
     cop.pos.z += Math.cos(cop.heading) * cop.speed * dt;
     if (!GAME.city.canWalkTo(kx, kz, cop.pos.x, cop.pos.z)) { cop.pos.x = kx; cop.pos.z = kz; }
-    var rp = GAME.resolveCircle(cop.pos.x, cop.pos.z, 0.4);
+    var rp = GAME.resolveCircle(cop.pos.x, cop.pos.z, 0.4, undefined, pushOut);
     cop.pos.x = rp.x; cop.pos.z = rp.z;
     cop.pos.y = GAME.city.groundY(cop.pos.x, cop.pos.z);
     cop.mesh.rotation.y = cop.heading;
@@ -513,6 +553,12 @@ GAME.police = (function () {
     incidents.length = 0;
   }
 
+  // written into the car's own controls, never returned new — see
+  // trafficControls in vehicles.js, which every cruiser would otherwise be
+  // allocating alongside, one object per car per tick
+  function setControls(c, throttle, steer, handbrake) {
+    c.throttle = throttle; c.steer = steer; c.handbrake = handbrake;
+  }
   function chaseControls(car, dt, s) {
     var P = GAME.player;
     var pxr = P.inCar && P.car ? P.car.pos.x : P.pos.x;
@@ -522,7 +568,7 @@ GAME.police = (function () {
     var aimZ = pzr + (P.inCar && P.car ? (P.car.vz || 0) * 0.3 : 0);
     // reaction lag: pursue a smoothed estimate of the target, so cruisers don't
     // mirror sharp turns the instant you make them
-    if (car.aiTX === undefined) { car.aiTX = aimX; car.aiTZ = aimZ; }
+    if (isNaN(car.aiTX)) { car.aiTX = aimX; car.aiTZ = aimZ; }
     car.aiTX = U.damp(car.aiTX, aimX, 4.5, dt);
     car.aiTZ = U.damp(car.aiTZ, aimZ, 4.5, dt);
     var dx = car.aiTX - car.pos.x, dz = car.aiTZ - car.pos.z;
@@ -535,7 +581,8 @@ GAME.police = (function () {
     if (car.unstickT > 1.4) { car.reverseT = 1.0; car.unstickT = 0; }
     if (car.reverseT > 0) {
       car.reverseT -= dt;
-      return { throttle: -1, steer: dh > 0 ? -1 : 1, handbrake: false };
+      setControls(car.controls, -1, dh > 0 ? -1 : 1, false);
+      return;
     }
 
     // gentler steering, eased frame-to-frame (no instant snap to your heading)
@@ -544,7 +591,7 @@ GAME.police = (function () {
     var steer = car.aiSteer;
 
     // pull up and stop near an on-foot target so officers can get out
-    if (!P.inCar && dist < 22) return { throttle: car.speed > 2 ? -0.7 : 0, steer: steer, handbrake: dist < 12 };
+    if (!P.inCar && dist < 22) { setControls(car.controls, car.speed > 2 ? -0.7 : 0, steer, dist < 12); return; }
 
     // keep a pursuit gap rather than gluing to the bumper
     var gap = s === 1 ? 22 : 9;
@@ -556,7 +603,7 @@ GAME.police = (function () {
     // can't corner flat out: lift or brake for hard turns at speed
     if (Math.abs(dh) > 0.7 && car.speed > 16) throttle = Math.min(throttle, -0.2);
     else if (Math.abs(dh) > 0.4 && car.speed > 24) throttle = Math.min(throttle, 0.2);
-    return { throttle: throttle, steer: steer, handbrake: false };
+    setControls(car.controls, throttle, steer, false);
   }
 
   function updateCopCar(car, dt, s) {
@@ -570,7 +617,7 @@ GAME.police = (function () {
       }
       return;
     }
-    car.controls = chaseControls(car, dt, s);
+    chaseControls(car, dt, s);
 
     // occupant fires from the car at 2 stars and up
     if (s >= 2 && !GAME.godMode) {
@@ -597,7 +644,8 @@ GAME.police = (function () {
       var f = GAME.focus();
       var d = U.dist(car.pos.x, car.pos.z, f.x, f.z);
       if (d < (onFoot ? 26 : 18)) {
-        var footCount = GAME.world.peds.filter(function (p) { return p.isCop && !p.dead; }).length;
+        var footCount = 0, wp = GAME.world.peds;
+        for (var fi = 0; fi < wp.length; fi++) if (wp[fi].isCop && !wp[fi].dead) footCount++;
         if (footCount < Math.min(2 + s, 7) && (car.deployT = (car.deployT || 0) + dt) > 0.5) {
           car.deployT = 0;
           var side = car.heading + Math.PI / 2 * (Math.random() < 0.5 ? 1 : -1);
@@ -625,9 +673,12 @@ GAME.police = (function () {
     cop.heading = U.angleLerp(cop.heading, th, Math.min(1, dt * 6));
     // fire at the player on foot, or at a slow/stopped car
     var playerSlow = !P.inCar || (P.car && Math.abs(P.car.speed) < 9);
-    var los = GAME.city.hash.segmentClear(cop.pos.x, cop.pos.z, f.x, f.z)
-      && Math.abs(f.y - cop.pos.y) < 3;   // not through a floor
-    var wantShoot = s >= 2 && dist < 28 && playerSlow && los;
+    // line of sight last: it walks the grid, and every officer asked it
+    // every tick even when the stars, the range or your speed had already
+    // ruled a shot out
+    var wantShoot = s >= 2 && dist < 28 && playerSlow
+      && Math.abs(f.y - cop.pos.y) < 3   // not through a floor
+      && GAME.city.hash.segmentClear(cop.pos.x, cop.pos.z, f.x, f.z);
     var chaseSpeed = 6.8;   // 0.85x the player's 8 sprint — outrunnable, barely
     cop.speed = U.damp(cop.speed, wantShoot && dist < 14 ? 0 : chaseSpeed, 5, dt);
     var cx0 = cop.pos.x, cz0 = cop.pos.z;
@@ -638,7 +689,7 @@ GAME.police = (function () {
     if (!GAME.city.canWalkTo(cx0, cz0, cop.pos.x, cop.pos.z)) {
       cop.pos.x = cx0; cop.pos.z = cz0;
     }
-    var rp = GAME.resolveCircle(cop.pos.x, cop.pos.z, 0.4);
+    var rp = GAME.resolveCircle(cop.pos.x, cop.pos.z, 0.4, undefined, pushOut);
     cop.pos.x = rp.x; cop.pos.z = rp.z;
     cop.pos.y = GAME.city.groundY(cop.pos.x, cop.pos.z);
     cop.mesh.rotation.y = cop.heading;
@@ -682,10 +733,11 @@ GAME.police = (function () {
     if (s >= 4) {
       var toward = Math.atan2(P.car.pos.x - node.x, P.car.pos.z - node.z);
       var sx = node.x + Math.sin(toward) * 10, sz = node.z + Math.cos(toward) * 10;
-      var mesh = new THREE.Mesh(new THREE.BoxGeometry(11, 0.12, 0.9), new THREE.MeshLambertMaterial({ color: 0x777788 }));
+      var mesh = new THREE.Mesh(sharedBoxGeo(11, 0.12, 0.9), sharedLambert(0x777788));
       mesh.position.set(sx, 0.1, sz);
       mesh.rotation.y = perp;
       GAME.scene.add(mesh);
+      if (spikes.length >= MAX_SPIKES) dropSpike(0);
       spikes.push({ mesh: mesh, x: sx, z: sz });
     }
   }
@@ -751,7 +803,9 @@ GAME.police = (function () {
 
     // pursuit cars
     var active = copCars();
-    var chasing = active.filter(function (c) { return c.ai.mode === 'chase'; });
+    var chasing = chaseBuf, cn = 0;
+    for (var ch = 0; ch < active.length; ch++) if (active[ch].ai.mode === 'chase') chasing[cn++] = active[ch];
+    chasing.length = cn;
     if (!flownOff && chasing.length < CAR_CAP[s] && GAME.frame % 45 === 0) spawnCruiser();
     var pf = GAME.focus();
     for (var a = 0; a < active.length; a++) {
@@ -762,7 +816,10 @@ GAME.police = (function () {
     if (!flownOff) maintainFootCops(s, dt);
 
     // foot cops
-    var peds = GAME.world.peds.slice();
+    // a snapshot, because an officer's turn can add or remove people
+    var peds = pedBuf, wpeds = GAME.world.peds;
+    for (var pi = 0; pi < wpeds.length; pi++) peds[pi] = wpeds[pi];
+    peds.length = wpeds.length;
     var anyGrab = false;
     for (var f = 0; f < peds.length; f++) {
       if (peds[f].isCop && !peds[f].dead) {
@@ -784,6 +841,10 @@ GAME.police = (function () {
       }
     }
     // spike strips
+    var sf = GAME.focus();
+    for (var so = spikes.length - 1; so >= 0; so--) {
+      if (U.dist2(spikes[so].x, spikes[so].z, sf.x, sf.z) > SPIKE_KEEP_R * SPIKE_KEEP_R) dropSpike(so);
+    }
     if (P.inCar && P.car && !P.car.spiked) {
       for (var sp = 0; sp < spikes.length; sp++) {
         if (U.dist2(P.car.pos.x, P.car.pos.z, spikes[sp].x, spikes[sp].z) < 27) {
@@ -875,6 +936,8 @@ GAME.police = (function () {
     get airUnitCount() { return airUnits.length; },
     setWanted: setWanted,
     clearWanted: clearWanted,
-    update: update
+    update: update,
+    // test-only: lay a roadblock ahead of the player now (see the spike cap)
+    _roadblock: placeRoadblock
   };
 })();

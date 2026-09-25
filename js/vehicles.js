@@ -9,7 +9,13 @@ GAME.fx = (function () {
   function init(sc) {
     scene = sc;
     var pos = new Float32Array(MAXP * 3), col = new Float32Array(MAXP * 3);
-    for (var i = 0; i < MAXP; i++) { pos[i * 3 + 1] = -1000; parts.push({ life: 0 }); }
+    // every field a particle ever carries, from the start: added as it was
+    // first spawned, a particle had one shape before its first life and
+    // another after, and the update loop saw both
+    for (var i = 0; i < MAXP; i++) {
+      pos[i * 3 + 1] = -1000;
+      parts.push({ life: 0, maxLife: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, grav: 0, color: 0 });
+    }
     pGeo = new THREE.BufferGeometry();
     pGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     pGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
@@ -22,7 +28,7 @@ GAME.fx = (function () {
     tGeo.setAttribute('position', new THREE.BufferAttribute(tpos, 3));
     tLines = new THREE.LineSegments(tGeo, new THREE.LineBasicMaterial({ color: 0xffe9a0, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
     tLines.frustumCulled = false;
-    for (var t = 0; t < MAXT; t++) tracers.push({ life: 0 });
+    for (var t = 0; t < MAXT; t++) tracers.push({ life: 0, i: 0 });
     scene.add(tLines);
 
     for (var f = 0; f < 4; f++) {
@@ -50,10 +56,10 @@ GAME.fx = (function () {
     }
   }
   function tracer(x0, y0, z0, x1, y1, z1) {
-    var t = tracers[tCursor];
+    var slot = tCursor, t = tracers[slot];
     tCursor = (tCursor + 1) % MAXT;
     t.life = 0.07;
-    var a = tGeo.attributes.position.array, i = t.i = tracers.indexOf(t) * 6;
+    var a = tGeo.attributes.position.array, i = t.i = slot * 6;
     a[i] = x0; a[i + 1] = y0; a[i + 2] = z0; a[i + 3] = x1; a[i + 4] = y1; a[i + 5] = z1;
     tGeo.attributes.position.needsUpdate = true;
   }
@@ -72,9 +78,14 @@ GAME.fx = (function () {
   function update(dt) {
     if (!pGeo) return;
     var pa = pGeo.attributes.position.array, ca = pGeo.attributes.color.array;
+    // The buffers go to the GPU only when something in them moved: all 360
+    // slots were re-uploaded every tick, 520 KB a second, with not a spark
+    // in the air.
+    var moved = false, hid = false;
     for (var i = 0; i < MAXP; i++) {
       var p = parts[i];
       if (p.life > 0) {
+        moved = true;
         p.life -= dt;
         p.vy += p.grav * dt;
         p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
@@ -84,10 +95,10 @@ GAME.fx = (function () {
         ca[i * 3] = ((c >> 16 & 255) / 255) * fade;
         ca[i * 3 + 1] = ((c >> 8 & 255) / 255) * fade;
         ca[i * 3 + 2] = ((c & 255) / 255) * fade;
-      } else if (pa[i * 3 + 1] > -999) pa[i * 3 + 1] = -1000;
+      } else if (pa[i * 3 + 1] > -999) { pa[i * 3 + 1] = -1000; hid = true; }
     }
-    pGeo.attributes.position.needsUpdate = true;
-    pGeo.attributes.color.needsUpdate = true;
+    if (moved || hid) pGeo.attributes.position.needsUpdate = true;
+    if (moved) pGeo.attributes.color.needsUpdate = true;
     var ta = tGeo.attributes.position.array;
     for (var t = 0; t < MAXT; t++) {
       var tr = tracers[t];
@@ -141,36 +152,42 @@ var VEHICLES = {
 // plus the baked-in colors. The palettes are small and finite, so the cache
 // tops out at a few dozen geometries and every spawn after the first reuses
 // them: the bubble stops paying typed-array and GPU-upload tax per car.
-// (The batch is still filled on a hit — plain array pushes, near-free.)
+// The builder's boxes are laid only on a miss, too. They used to be laid on
+// every spawn and thrown away on a hit, and that was not near-free: seventy-
+// odd small arrays a box, 100-350 KB of garbage for every car the bubble made.
 var carGeoCache = {};
-function cachedGeo(key, batch) {
+function cachedGeo(key, fill) {
   var g = carGeoCache[key];
-  if (!g) { g = batch.build(); g.userData.shared = true; carGeoCache[key] = g; }
+  if (!g) {
+    var b = new GeoBatch();
+    fill(b);
+    g = b.build(); g.userData.shared = true; carGeoCache[key] = g;
+  }
   return g;
 }
 
 function buildBikeMesh(colorHex, trim) {
   var g = new THREE.Group();
-  var b = new GeoBatch();
-  b.addBox(0, 0.62, 0, 0.28, 0.34, 1.5, 0, colorHex, 0);       // fuel tank / frame
-  b.addBox(0, 0.78, -0.55, 0.42, 0.14, 0.5, 0, 0x141824, 0);    // seat
-  b.addBox(0, 0.98, 0.62, 0.5, 0.1, 0.1, 0, 0x101014, 0);       // handlebars
-  b.addBox(0, 0.7, 0.7, 0.2, 0.24, 0.24, 0, 0x0c0c10, 0);       // front cowl — wider than the wheel so their side faces don't share a plane
-  if (trim) {
-    // the GT wears a full fairing, a tail cowl and racing stripes in its
-    // trim color — reads as a different machine at a glance
-    b.addBox(0, 0.56, 0.42, 0.4, 0.34, 0.6, 0, colorHex, 0);    // fairing
-    b.addBox(0, 0.6, 0.455, 0.44, 0.1, 0.62, 0, trim, 0);       // fairing stripe — nosed past the tank so their front faces split
-    b.addBox(0, 0.82, -0.86, 0.34, 0.16, 0.34, 0, colorHex, 0); // tail cowl
-    b.addBox(0, 0.8, 0, 0.32, 0.06, 1.56, 0, trim, 0);          // spine stripe — its top clears the seat's by 2 cm
-    b.addBox(0, 0.9, 0.58, 0.34, 0.16, 0.1, 0, 0x141824, 0);    // screen
-  }
-  var wheel = new GeoBatch();
-  wheel.addBox(0, 0.34, 0.82, 0.16, 0.68, 0.68, 0, 0x0c0c10, 0);
-  wheel.addBox(0, 0.34, -0.82, 0.16, 0.68, 0.68, 0, 0x0c0c10, 0);
-  var body = new THREE.Mesh(cachedGeo('bike|' + colorHex + '|' + (trim || 0), b), sharedVertexLambert());
+  var body = new THREE.Mesh(cachedGeo('bike|' + colorHex + '|' + (trim || 0), function (b) {
+    b.addBox(0, 0.62, 0, 0.28, 0.34, 1.5, 0, colorHex, 0);       // fuel tank / frame
+    b.addBox(0, 0.78, -0.55, 0.42, 0.14, 0.5, 0, 0x141824, 0);    // seat
+    b.addBox(0, 0.98, 0.62, 0.5, 0.1, 0.1, 0, 0x101014, 0);       // handlebars
+    b.addBox(0, 0.7, 0.7, 0.2, 0.24, 0.24, 0, 0x0c0c10, 0);       // front cowl — wider than the wheel so their side faces don't share a plane
+    if (trim) {
+      // the GT wears a full fairing, a tail cowl and racing stripes in its
+      // trim color — reads as a different machine at a glance
+      b.addBox(0, 0.56, 0.42, 0.4, 0.34, 0.6, 0, colorHex, 0);    // fairing
+      b.addBox(0, 0.6, 0.455, 0.44, 0.1, 0.62, 0, trim, 0);       // fairing stripe — nosed past the tank so their front faces split
+      b.addBox(0, 0.82, -0.86, 0.34, 0.16, 0.34, 0, colorHex, 0); // tail cowl
+      b.addBox(0, 0.8, 0, 0.32, 0.06, 1.56, 0, trim, 0);          // spine stripe — its top clears the seat's by 2 cm
+      b.addBox(0, 0.9, 0.58, 0.34, 0.16, 0.1, 0, 0x141824, 0);    // screen
+    }
+  }), sharedVertexLambert());
   g.add(body);
-  g.add(new THREE.Mesh(cachedGeo('bikewheels', wheel), sharedVertexLambert()));
+  g.add(new THREE.Mesh(cachedGeo('bikewheels', function (wheel) {
+    wheel.addBox(0, 0.34, 0.82, 0.16, 0.68, 0.68, 0, 0x0c0c10, 0);
+    wheel.addBox(0, 0.34, -0.82, 0.16, 0.68, 0.68, 0, 0x0c0c10, 0);
+  }), sharedVertexLambert()));
   var hl = new THREE.Mesh(sharedBoxGeo(0.2, 0.14, 0.06), sharedBasic(0xfff2c0));
   hl.position.set(0, 0.72, 0.83);
   g.add(hl);
@@ -180,8 +197,8 @@ function buildBikeMesh(colorHex, trim) {
 
 // a seated rider posed to straddle a bike, added as a child of the bike group
 // so it moves and leans with it. Used for AI traffic bikes (and reusable).
-function buildBikeRider() {
-  var r = GAME.peds.buildPedMesh({});
+function buildBikeRider(look) {
+  var r = GAME.peds.buildPedMesh(look ? { look: look } : {});
   var j = r.userData.joints;
   j.torso.rotation.x = 0.34;                       // lean toward the bars
   j.legL.rotation.x = -0.55; j.legR.rotation.x = -0.55;
@@ -193,40 +210,40 @@ function buildBikeRider() {
 
 function buildHeliMesh(colorHex, gunship) {
   var g = new THREE.Group();
-  var b = new GeoBatch();
-  b.addBox(0, 1.2, -0.6, 2.2, 1.7, 3.6, 0, colorHex, 0);        // cabin
-  if (gunship) {
-    // chin gun, stub wings and rocket pods — it reads military at a glance
-    b.addBox(0, 0.62, 1.35, 0.26, 0.26, 1.1, 0, 0x161a12, 0);
-    for (var gs = -1; gs <= 1; gs += 2) {
-      b.addBox(gs * 1.85, 1.05, -0.9, 1.5, 0.16, 0.56, 0, 0x2c3626, 0);
-      b.addBox(gs * 2.45, 0.82, -0.9, 0.52, 0.5, 1.7, 0, 0x1f2a1a, 0);
+  var body = new THREE.Mesh(cachedGeo('heli|' + colorHex + '|' + (gunship ? 1 : 0), function (b) {
+    b.addBox(0, 1.2, -0.6, 2.2, 1.7, 3.6, 0, colorHex, 0);        // cabin
+    if (gunship) {
+      // chin gun, stub wings and rocket pods — it reads military at a glance
+      b.addBox(0, 0.62, 1.35, 0.26, 0.26, 1.1, 0, 0x161a12, 0);
+      for (var gs = -1; gs <= 1; gs += 2) {
+        b.addBox(gs * 1.85, 1.05, -0.9, 1.5, 0.16, 0.56, 0, 0x2c3626, 0);
+        b.addBox(gs * 2.45, 0.82, -0.9, 0.52, 0.5, 1.7, 0, 0x1f2a1a, 0);
+      }
     }
-  }
-  // the canopy rides proud of the cabin roof — flush tops fight for depth
-  // (the airplane's cockpit learned this first)
-  b.addBox(0, 1.52, 1.2, 1.7, 1.1, 1.4, 0, 0x141824, 0);        // canopy glass
-  b.addBox(0, 1.4, -3.4, 0.5, 0.5, 3.6, 0, colorHex, 0);        // tail boom
-  b.addBox(0, 1.9, -5.1, 0.16, 1.1, 0.7, 0, colorHex, 0);       // tail fin
-  b.addBox(-0.9, 0.1, -0.4, 0.14, 0.14, 3.4, 0, 0x0c0c10, 0);   // left skid
-  b.addBox(0.9, 0.1, -0.4, 0.14, 0.14, 3.4, 0, 0x0c0c10, 0);    // right skid
-  b.addBox(-0.9, 0.5, 0.6, 0.1, 0.7, 0.1, 0, 0x0c0c10, 0);
-  b.addBox(0.9, 0.5, 0.6, 0.1, 0.7, 0.1, 0, 0x0c0c10, 0);
-  b.addBox(0, 2.05, -0.6, 0.24, 0.3, 0.24, 0, 0x0c0c10, 0);     // rotor mast
-  var body = new THREE.Mesh(cachedGeo('heli|' + colorHex + '|' + (gunship ? 1 : 0), b), sharedVertexLambert());
+    // the canopy rides proud of the cabin roof — flush tops fight for depth
+    // (the airplane's cockpit learned this first)
+    b.addBox(0, 1.52, 1.2, 1.7, 1.1, 1.4, 0, 0x141824, 0);        // canopy glass
+    b.addBox(0, 1.4, -3.4, 0.5, 0.5, 3.6, 0, colorHex, 0);        // tail boom
+    b.addBox(0, 1.9, -5.1, 0.16, 1.1, 0.7, 0, colorHex, 0);       // tail fin
+    b.addBox(-0.9, 0.1, -0.4, 0.14, 0.14, 3.4, 0, 0x0c0c10, 0);   // left skid
+    b.addBox(0.9, 0.1, -0.4, 0.14, 0.14, 3.4, 0, 0x0c0c10, 0);    // right skid
+    b.addBox(-0.9, 0.5, 0.6, 0.1, 0.7, 0.1, 0, 0x0c0c10, 0);
+    b.addBox(0.9, 0.5, 0.6, 0.1, 0.7, 0.1, 0, 0x0c0c10, 0);
+    b.addBox(0, 2.05, -0.6, 0.24, 0.3, 0.24, 0, 0x0c0c10, 0);     // rotor mast
+  }), sharedVertexLambert());
   g.add(body);
   // spinning main rotor
-  var rg = new GeoBatch();
-  // the blades stack 2 cm apart at the hub, like real ones — crossing in the
-  // same plane, their top and bottom faces flickered where they met
-  rg.addBox(0, 0, 0, 0.3, 0.06, 11, 0, 0x1a1a20, 0);
-  rg.addBox(0, 0.08, 0, 11, 0.06, 0.3, 0, 0x1a1a20, 0);
-  var rotor = new THREE.Mesh(cachedGeo('helirotor', rg), sharedVertexLambert());
+  var rotor = new THREE.Mesh(cachedGeo('helirotor', function (rg) {
+    // the blades stack 2 cm apart at the hub, like real ones — crossing in the
+    // same plane, their top and bottom faces flickered where they met
+    rg.addBox(0, 0, 0, 0.3, 0.06, 11, 0, 0x1a1a20, 0);
+    rg.addBox(0, 0.08, 0, 11, 0.06, 0.3, 0, 0x1a1a20, 0);
+  }), sharedVertexLambert());
   rotor.position.set(0, 2.3, -0.6);
   g.add(rotor);
-  var tg = new GeoBatch();
-  tg.addBox(0, 0, 0, 0.14, 0.05, 2.2, 0, 0x1a1a20, 0);
-  var tail = new THREE.Mesh(cachedGeo('helitail', tg), sharedVertexLambert());
+  var tail = new THREE.Mesh(cachedGeo('helitail', function (tg) {
+    tg.addBox(0, 0, 0, 0.14, 0.05, 2.2, 0, 0x1a1a20, 0);
+  }), sharedVertexLambert());
   tail.position.set(0.2, 1.9, -5.1);
   g.add(tail);
   var hl = new THREE.Mesh(sharedBoxGeo(0.3, 0.16, 0.06), sharedBasic(0xfff2c0));
@@ -242,27 +259,27 @@ function buildPlaneMesh(colors) {
   var body = colors[0], accent = colors[1] || 0xff2f7a;
   var g = new THREE.Group();
   g.rotation.order = 'YXZ';
-  var b = new GeoBatch();
-  b.addBox(0, 1.2, 0, 1.5, 1.5, 9, 0, body, 0);            // fuselage
-  // the canopy rides proud of the fuselage: with both tops on the same plane
-  // (1.95) the dark glass and the body fought for depth and the roof flickered
-  b.addBox(0, 1.62, 3.0, 1.1, 0.9, 2.2, 0, 0x141824, 0);   // cockpit glass
-  b.addBox(0, 1.35, -0.4, 12, 0.28, 2.2, 0, body, 0);      // main wing
-  // the stripe stands clear of the wing on every face — flush tops shimmer
-  b.addBox(0, 1.35, -0.4, 12.1, 0.36, 0.36, 0, accent, 0); // wing stripe
-  b.addBox(0, 1.4, -4.4, 4.4, 0.22, 1.2, 0, body, 0);      // tailplane
-  b.addBox(0, 2.1, -4.4, 0.22, 1.6, 1.16, 0, accent, 0);   // vertical fin — a shade shorter than the tailplane so their edges don't share planes
-  b.addBox(-0.55, 0.35, 1.0, 0.14, 0.7, 0.14, 0, 0x0c0c10, 0);
-  b.addBox(0.55, 0.35, 1.0, 0.14, 0.7, 0.14, 0, 0x0c0c10, 0);
-  b.addBox(0, 0.4, -3.5, 0.12, 0.5, 0.12, 0, 0x0c0c10, 0);
-  var mesh = new THREE.Mesh(cachedGeo('plane|' + body + '|' + accent, b), sharedVertexLambert());
+  var mesh = new THREE.Mesh(cachedGeo('plane|' + body + '|' + accent, function (b) {
+    b.addBox(0, 1.2, 0, 1.5, 1.5, 9, 0, body, 0);            // fuselage
+    // the canopy rides proud of the fuselage: with both tops on the same plane
+    // (1.95) the dark glass and the body fought for depth and the roof flickered
+    b.addBox(0, 1.62, 3.0, 1.1, 0.9, 2.2, 0, 0x141824, 0);   // cockpit glass
+    b.addBox(0, 1.35, -0.4, 12, 0.28, 2.2, 0, body, 0);      // main wing
+    // the stripe stands clear of the wing on every face — flush tops shimmer
+    b.addBox(0, 1.35, -0.4, 12.1, 0.36, 0.36, 0, accent, 0); // wing stripe
+    b.addBox(0, 1.4, -4.4, 4.4, 0.22, 1.2, 0, body, 0);      // tailplane
+    b.addBox(0, 2.1, -4.4, 0.22, 1.6, 1.16, 0, accent, 0);   // vertical fin — a shade shorter than the tailplane so their edges don't share planes
+    b.addBox(-0.55, 0.35, 1.0, 0.14, 0.7, 0.14, 0, 0x0c0c10, 0);
+    b.addBox(0.55, 0.35, 1.0, 0.14, 0.7, 0.14, 0, 0x0c0c10, 0);
+    b.addBox(0, 0.4, -3.5, 0.12, 0.5, 0.12, 0, 0x0c0c10, 0);
+  }), sharedVertexLambert());
   g.add(mesh);
   // nose light + spinning prop
-  var pg = new GeoBatch();
-  // same trick as the rotor: crossed blades sit 2 cm apart in depth
-  pg.addBox(0, 0, 0, 0.24, 3.4, 0.14, 0, 0x1a1a20, 0);
-  pg.addBox(0, 0, 0.02, 3.4, 0.24, 0.14, 0, 0x1a1a20, 0);
-  var prop = new THREE.Mesh(cachedGeo('planeprop', pg), sharedVertexLambert());
+  var prop = new THREE.Mesh(cachedGeo('planeprop', function (pg) {
+    // same trick as the rotor: crossed blades sit 2 cm apart in depth
+    pg.addBox(0, 0, 0, 0.24, 3.4, 0.14, 0, 0x1a1a20, 0);
+    pg.addBox(0, 0, 0.02, 3.4, 0.24, 0.14, 0, 0x1a1a20, 0);
+  }), sharedVertexLambert());
   prop.position.set(0, 1.2, 4.7);
   g.add(prop);
   var hl = new THREE.Mesh(sharedBoxGeo(0.3, 0.16, 0.06), sharedBasic(0xfff2c0));
@@ -275,25 +292,25 @@ function buildPlaneMesh(colors) {
 
 function buildMonsterMesh(colorHex) {
   var g = new THREE.Group();
-  var b = new GeoBatch();
-  b.addBox(0, 1.85, 0, 2.3, 0.9, 4.6, 0, colorHex, 0);          // chassis
-  b.addBox(0, 2.65, -0.3, 1.9, 0.85, 2.2, 0, 0x141824, 0);      // cab
-  b.addBox(0, 1.25, 0, 0.5, 0.35, 4.0, 0, 0x22262e, 0);         // spine
-  b.addBox(0, 1.85, 2.35, 2.2, 0.5, 0.2, 0, 0x22262e, 0);       // bar
-  var wh = new GeoBatch();
-  // the tyre tops used to land on exactly the chassis top (both y=2.30) and the
-  // two coplanar faces fought for depth wherever they overlapped — tucked under
-  // it now, still sitting on the ground at y=0
-  [[1.25, 1.5], [-1.25, 1.5], [1.25, -1.5], [-1.25, -1.5]].forEach(function (w) {
-    wh.addBox(w[0], 1.06, w[1], 0.62, 2.12, 2.12, 0, 0x0c0c10, 0);
-  });
-  var body = new THREE.Mesh(cachedGeo('monster|' + colorHex, b), sharedVertexLambert());
+  var body = new THREE.Mesh(cachedGeo('monster|' + colorHex, function (b) {
+    b.addBox(0, 1.85, 0, 2.3, 0.9, 4.6, 0, colorHex, 0);          // chassis
+    b.addBox(0, 2.65, -0.3, 1.9, 0.85, 2.2, 0, 0x141824, 0);      // cab
+    b.addBox(0, 1.25, 0, 0.5, 0.35, 4.0, 0, 0x22262e, 0);         // spine
+    b.addBox(0, 1.85, 2.35, 2.2, 0.5, 0.2, 0, 0x22262e, 0);       // bar
+  }), sharedVertexLambert());
   g.add(body);
-  g.add(new THREE.Mesh(cachedGeo('monsterwheels', wh), sharedVertexLambert()));
-  var glow = new GeoBatch();
-  glow.addBox(0.7, 2.1, 2.32, 0.4, 0.2, 0.06, 0, 0xfff2c0, 0);
-  glow.addBox(-0.7, 2.1, 2.32, 0.4, 0.2, 0.06, 0, 0xfff2c0, 0);
-  g.add(new THREE.Mesh(cachedGeo('monsterglow', glow), sharedVertexBasic()));
+  g.add(new THREE.Mesh(cachedGeo('monsterwheels', function (wh) {
+    // the tyre tops used to land on exactly the chassis top (both y=2.30) and the
+    // two coplanar faces fought for depth wherever they overlapped — tucked under
+    // it now, still sitting on the ground at y=0
+    [[1.25, 1.5], [-1.25, 1.5], [1.25, -1.5], [-1.25, -1.5]].forEach(function (w) {
+      wh.addBox(w[0], 1.06, w[1], 0.62, 2.12, 2.12, 0, 0x0c0c10, 0);
+    });
+  }), sharedVertexLambert()));
+  g.add(new THREE.Mesh(cachedGeo('monsterglow', function (glow) {
+    glow.addBox(0.7, 2.1, 2.32, 0.4, 0.2, 0.06, 0, 0xfff2c0, 0);
+    glow.addBox(-0.7, 2.1, 2.32, 0.4, 0.2, 0.06, 0, 0xfff2c0, 0);
+  }), sharedVertexBasic()));
   g.userData.bodyMesh = body;
   return g;
 }
@@ -305,89 +322,89 @@ function buildCarMesh(type, colorHex) {
   if (s.heli) return buildHeliMesh(colorHex, s.gunship);
   if (s.bike) return buildBikeMesh(colorHex, s.trim);
   var g = new THREE.Group();
-  var b = new GeoBatch();
   var hl = s.l / 2, hw = s.w / 2;
-  b.addBox(0, 0.42, 0, s.w, s.bodyH, s.l, 0, colorHex, 0);
-  if (type === 'ambulance') {
-    // tall box body + red cross panels
-    b.addBox(0, 0.42 + s.bodyH / 2 + 0.5, -0.2, s.w, 1.0, s.l * 0.62, 0, colorHex, 0);
-    // the cross's two bars sit a centimetre apart in depth — sharing one
-    // plane, they fought where they crossed
-    b.addBox(hw + 0.01, 1.3, -0.2, 0.05, 0.5, 0.16, 0, 0xd83040, 0);
-    b.addBox(hw + 0.02, 1.3, -0.2, 0.05, 0.16, 0.5, 0, 0xd83040, 0);
-    b.addBox(-hw - 0.01, 1.3, -0.2, 0.05, 0.5, 0.16, 0, 0xd83040, 0);
-    b.addBox(-hw - 0.02, 1.3, -0.2, 0.05, 0.16, 0.5, 0, 0xd83040, 0);
-  }
-  if (type === 'icecream') {
-    // A tall, square, upright van: one slab of a body from the windscreen to
-    // the back doors, a stripe round it, a serving hatch with an awning on the
-    // kerb side, and a pair of cones on the roof you can see three streets
-    // away. The tall body stands 2 cm proud of the chassis slab underneath it:
-    // give them the same width and the two coplanar side faces fight for
-    // depth — that was the truck's flicker.
-    var boxTop = 2.55, bw = s.w + 0.04, bhw = bw / 2;
-    b.addBox(0, 1.5, -0.25, bw, 2.1, s.l * 0.78, 0, colorHex, 0);          // body
-    b.addBox(0, 1.02, hl - 0.42, s.w * 0.98, 0.92, 0.9, 0, colorHex, 0);   // stubby bonnet
-    b.addBox(0, 1.9, hl - 0.5, s.w * 0.84, 0.86, 0.14, 0, 0x141824, 0);    // windscreen
-    b.addBox(bhw - 0.02, 1.9, hl - 1.25, 0.1, 0.7, 1.0, 0, 0x141824, 0);   // cab windows
-    b.addBox(-bhw + 0.02, 1.9, hl - 1.25, 0.1, 0.7, 1.0, 0, 0x141824, 0);
-    // the livery: a pink band and a blue pinstripe wrapped round the van.
-    // Wider AND longer than the body — with the same length their end faces
-    // shared the body's front and rear planes, and the tail flickered
-    b.addBox(0, 1.28, -0.25, bw + 0.08, 0.34, s.l * 0.78 + 0.06, 0, 0xff7fb2, 0);
-    b.addBox(0, 1.02, -0.25, bw + 0.08, 0.1, s.l * 0.78 + 0.06, 0, 0x53c8ea, 0);
-    // serving hatch, awning and counter on the kerb side — the hatch sits
-    // clear of the stripe band's face rather than in the same plane as it
-    b.addBox(bhw + 0.07, 1.82, -0.5, 0.08, 0.9, 1.9, 0, 0x2a2230, 0);
-    b.addBox(bhw + 0.38, 2.36, -0.5, 0.72, 0.08, 2.1, 0, 0xff7fb2, 0);
-    b.addBox(bhw + 0.2, 1.3, -0.5, 0.34, 0.1, 2.0, 0, 0xf0e6d2, 0);
-    // roof cones, two abreast: both show from the front, and from the side
-    // they sit in the same slice so they read as one
-    [-0.5, 0.5].forEach(function (cx2) {
-      b.addBox(cx2, boxTop + 0.05, -0.3, 0.5, 0.5, 0.5, 0.7, 0xe0a860, 0);
-      b.addBox(cx2, boxTop + 0.42, -0.3, 0.66, 0.34, 0.66, 0.35, 0xffd7e4, 0);
-      b.addBox(cx2, boxTop + 0.72, -0.3, 0.5, 0.3, 0.5, 0.9, 0xfff0f4, 0);
-      b.addBox(cx2, boxTop + 0.94, -0.3, 0.28, 0.24, 0.28, 0, 0xffd7e4, 0);
+  var body = new THREE.Mesh(cachedGeo('car|' + type + '|' + colorHex, function (b) {
+    b.addBox(0, 0.42, 0, s.w, s.bodyH, s.l, 0, colorHex, 0);
+    if (type === 'ambulance') {
+      // tall box body + red cross panels
+      b.addBox(0, 0.42 + s.bodyH / 2 + 0.5, -0.2, s.w, 1.0, s.l * 0.62, 0, colorHex, 0);
+      // the cross's two bars sit a centimetre apart in depth — sharing one
+      // plane, they fought where they crossed
+      b.addBox(hw + 0.01, 1.3, -0.2, 0.05, 0.5, 0.16, 0, 0xd83040, 0);
+      b.addBox(hw + 0.02, 1.3, -0.2, 0.05, 0.16, 0.5, 0, 0xd83040, 0);
+      b.addBox(-hw - 0.01, 1.3, -0.2, 0.05, 0.5, 0.16, 0, 0xd83040, 0);
+      b.addBox(-hw - 0.02, 1.3, -0.2, 0.05, 0.16, 0.5, 0, 0xd83040, 0);
+    }
+    if (type === 'icecream') {
+      // A tall, square, upright van: one slab of a body from the windscreen to
+      // the back doors, a stripe round it, a serving hatch with an awning on the
+      // kerb side, and a pair of cones on the roof you can see three streets
+      // away. The tall body stands 2 cm proud of the chassis slab underneath it:
+      // give them the same width and the two coplanar side faces fight for
+      // depth — that was the truck's flicker.
+      var boxTop = 2.55, bw = s.w + 0.04, bhw = bw / 2;
+      b.addBox(0, 1.5, -0.25, bw, 2.1, s.l * 0.78, 0, colorHex, 0);          // body
+      b.addBox(0, 1.02, hl - 0.42, s.w * 0.98, 0.92, 0.9, 0, colorHex, 0);   // stubby bonnet
+      b.addBox(0, 1.9, hl - 0.5, s.w * 0.84, 0.86, 0.14, 0, 0x141824, 0);    // windscreen
+      b.addBox(bhw - 0.02, 1.9, hl - 1.25, 0.1, 0.7, 1.0, 0, 0x141824, 0);   // cab windows
+      b.addBox(-bhw + 0.02, 1.9, hl - 1.25, 0.1, 0.7, 1.0, 0, 0x141824, 0);
+      // the livery: a pink band and a blue pinstripe wrapped round the van.
+      // Wider AND longer than the body — with the same length their end faces
+      // shared the body's front and rear planes, and the tail flickered
+      b.addBox(0, 1.28, -0.25, bw + 0.08, 0.34, s.l * 0.78 + 0.06, 0, 0xff7fb2, 0);
+      b.addBox(0, 1.02, -0.25, bw + 0.08, 0.1, s.l * 0.78 + 0.06, 0, 0x53c8ea, 0);
+      // serving hatch, awning and counter on the kerb side — the hatch sits
+      // clear of the stripe band's face rather than in the same plane as it
+      b.addBox(bhw + 0.07, 1.82, -0.5, 0.08, 0.9, 1.9, 0, 0x2a2230, 0);
+      b.addBox(bhw + 0.38, 2.36, -0.5, 0.72, 0.08, 2.1, 0, 0xff7fb2, 0);
+      b.addBox(bhw + 0.2, 1.3, -0.5, 0.34, 0.1, 2.0, 0, 0xf0e6d2, 0);
+      // roof cones, two abreast: both show from the front, and from the side
+      // they sit in the same slice so they read as one
+      [-0.5, 0.5].forEach(function (cx2) {
+        b.addBox(cx2, boxTop + 0.05, -0.3, 0.5, 0.5, 0.5, 0.7, 0xe0a860, 0);
+        b.addBox(cx2, boxTop + 0.42, -0.3, 0.66, 0.34, 0.66, 0.35, 0xffd7e4, 0);
+        b.addBox(cx2, boxTop + 0.72, -0.3, 0.5, 0.3, 0.5, 0.9, 0xfff0f4, 0);
+        b.addBox(cx2, boxTop + 0.94, -0.3, 0.28, 0.24, 0.28, 0, 0xffd7e4, 0);
+      });
+      // a chime horn on the roof, because the chimes have to come from somewhere
+      b.addBox(-0.62, boxTop + 0.15, 0.9, 0.3, 0.3, 0.44, 0, 0xd8c47a, 0);
+    }
+    if (type === 'pickup') {
+      b.addBox(0, 0.42 + s.bodyH / 2 + 0.22, -1.05, s.w, 0.45, s.l * 0.44, 0, 0x2a2a34, 0);   // bed walls
+    }
+    var cabL = s.l * (type === 'van' ? 0.85 : type === 'icecream' ? 0.34 : type === 'limo' ? 0.72 : 0.5);
+    var cabZ = type === 'sports' ? -0.35 : type === 'van' ? -0.1
+      : type === 'icecream' ? s.l * 0.28 : type === 'pickup' ? 0.35 : -0.15;
+    if (s.buggy) {
+      // no cabin at all: a roll hoop over an open tub. The cross bar is wider
+      // than the posts — matching widths put their side faces in one plane
+      b.addBox(0, 1.05, -0.5, 0.12, 1.2, 0.12, 0, 0x2a2a34, 0);
+      b.addBox(0, 1.05, 0.5, 0.12, 1.2, 0.12, 0, 0x2a2a34, 0);
+      b.addBox(0, 1.6, 0, 0.16, 0.12, 1.1, 0, 0x2a2a34, 0);
+    }
+    if (s.cabinH > 0) {
+      b.addBox(0, 0.42 + s.bodyH / 2 + s.cabinH / 2 - 0.05, cabZ, s.w * 0.82, s.cabinH, cabL, 0, type === 'police' ? 0x20242e : 0x141824, 0);
+    }
+    b.addBox(0, 0.28, hl * 0.72, s.w * 0.9, 0.32, 0.55, 0, 0x22262e, 0);
+    b.addBox(0, 0.28, -hl * 0.72, s.w * 0.9, 0.32, 0.55, 0, 0x22262e, 0);
+    var wy = 0.32, wx = hw - 0.12, wz = hl * 0.56;
+    [[wx, wz], [-wx, wz], [wx, -wz], [-wx, -wz]].forEach(function (w) {
+      b.addBox(w[0], wy, w[1], 0.32, 0.64, 0.72, 0, 0x0c0c10, 0);
     });
-    // a chime horn on the roof, because the chimes have to come from somewhere
-    b.addBox(-0.62, boxTop + 0.15, 0.9, 0.3, 0.3, 0.44, 0, 0xd8c47a, 0);
-  }
-  if (type === 'pickup') {
-    b.addBox(0, 0.42 + s.bodyH / 2 + 0.22, -1.05, s.w, 0.45, s.l * 0.44, 0, 0x2a2a34, 0);   // bed walls
-  }
-  var cabL = s.l * (type === 'van' ? 0.85 : type === 'icecream' ? 0.34 : type === 'limo' ? 0.72 : 0.5);
-  var cabZ = type === 'sports' ? -0.35 : type === 'van' ? -0.1
-    : type === 'icecream' ? s.l * 0.28 : type === 'pickup' ? 0.35 : -0.15;
-  if (s.buggy) {
-    // no cabin at all: a roll hoop over an open tub. The cross bar is wider
-    // than the posts — matching widths put their side faces in one plane
-    b.addBox(0, 1.05, -0.5, 0.12, 1.2, 0.12, 0, 0x2a2a34, 0);
-    b.addBox(0, 1.05, 0.5, 0.12, 1.2, 0.12, 0, 0x2a2a34, 0);
-    b.addBox(0, 1.6, 0, 0.16, 0.12, 1.1, 0, 0x2a2a34, 0);
-  }
-  if (s.cabinH > 0) {
-    b.addBox(0, 0.42 + s.bodyH / 2 + s.cabinH / 2 - 0.05, cabZ, s.w * 0.82, s.cabinH, cabL, 0, type === 'police' ? 0x20242e : 0x141824, 0);
-  }
-  b.addBox(0, 0.28, hl * 0.72, s.w * 0.9, 0.32, 0.55, 0, 0x22262e, 0);
-  b.addBox(0, 0.28, -hl * 0.72, s.w * 0.9, 0.32, 0.55, 0, 0x22262e, 0);
-  var wy = 0.32, wx = hw - 0.12, wz = hl * 0.56;
-  [[wx, wz], [-wx, wz], [wx, -wz], [-wx, -wz]].forEach(function (w) {
-    b.addBox(w[0], wy, w[1], 0.32, 0.64, 0.72, 0, 0x0c0c10, 0);
-  });
-  if (type === 'police') {
-    // a centimetre up: its underside used to share the cabin's bottom plane
-    b.addBox(0, 0.42 + s.bodyH / 2 + 0.01, s.l * 0.28, s.w * 0.7, 0.1, 1.2, 0, 0x30405a, 0);
-  }
-  var body = new THREE.Mesh(cachedGeo('car|' + type + '|' + colorHex, b), sharedVertexLambert());
+    if (type === 'police') {
+      // a centimetre up: its underside used to share the cabin's bottom plane
+      b.addBox(0, 0.42 + s.bodyH / 2 + 0.01, s.l * 0.28, s.w * 0.7, 0.1, 1.2, 0, 0x30405a, 0);
+    }
+  }), sharedVertexLambert());
   g.add(body);
 
-  var glow = new GeoBatch();
-  glow.addBox(hw * 0.55, 0.5, hl + 0.02, 0.38, 0.16, 0.06, 0, 0xfff2c0, 0);
-  glow.addBox(-hw * 0.55, 0.5, hl + 0.02, 0.38, 0.16, 0.06, 0, 0xfff2c0, 0);
-  glow.addBox(hw * 0.55, 0.5, -hl - 0.02, 0.38, 0.14, 0.06, 0, 0xff3040, 0);
-  glow.addBox(-hw * 0.55, 0.5, -hl - 0.02, 0.38, 0.14, 0.06, 0, 0xff3040, 0);
-  if (type === 'taxi') glow.addBox(0, 1.35, -0.1, 0.7, 0.24, 0.34, 0, 0xffd040, 0);
-  var glowMesh = new THREE.Mesh(cachedGeo('carglow|' + type, glow), sharedVertexBasic());
+  var glowMesh = new THREE.Mesh(cachedGeo('carglow|' + type, function (glow) {
+    glow.addBox(hw * 0.55, 0.5, hl + 0.02, 0.38, 0.16, 0.06, 0, 0xfff2c0, 0);
+    glow.addBox(-hw * 0.55, 0.5, hl + 0.02, 0.38, 0.16, 0.06, 0, 0xfff2c0, 0);
+    glow.addBox(hw * 0.55, 0.5, -hl - 0.02, 0.38, 0.14, 0.06, 0, 0xff3040, 0);
+    glow.addBox(-hw * 0.55, 0.5, -hl - 0.02, 0.38, 0.14, 0.06, 0, 0xff3040, 0);
+    if (type === 'taxi') glow.addBox(0, 1.35, -0.1, 0.7, 0.24, 0.34, 0, 0xffd040, 0);
+  }), sharedVertexBasic());
   g.add(glowMesh);
 
   if (type === 'police') {
@@ -406,6 +423,7 @@ GAME.vehicles = (function () {
   var world = GAME.world;
   var carRng = mulberry32(777);
 
+  var carSerial = 0;
   function spawnCar(type, x, z, heading, opts) {
     opts = opts || {};
     var spec = VEHICLES[type] || VEHICLES.sedan;
@@ -423,6 +441,7 @@ GAME.vehicles = (function () {
     mesh.rotation.y = heading || 0;
     GAME.scene.add(mesh);
     var car = {
+      serial: ++carSerial,   // who is who, for anything that must not hold the car itself
       kind: 'car',
       type: type, spec: spec, mesh: mesh,
       pos: mesh.position,
@@ -436,14 +455,30 @@ GAME.vehicles = (function () {
       parkedSpot: opts.parkedSpot || null,
       mission: opts.mission || false,
       smokeT: 0, unstickT: 0, reverseT: 0,
-      radius: spec.l * 0.42
+      radius: spec.l * 0.42,
+      // Everything else a vehicle can come to carry, declared here in one
+      // order — added as they came up, the traffic ended up in two dozen
+      // shapes and the physics kept being thrown out of its optimised code
+      // (see spawnPed in peds.js). Each starts as what the missing field used
+      // to read as: 0 where it is read as `x || 0`, false or null where it is
+      // only tested, and NaN for a number the code asks whether it has been
+      // set yet, or counts down from without setting (NaN fails every
+      // comparison and survives arithmetic, as undefined did: a patrol car
+      // turned chaser still never fires or sends officers out). airVX/airVZ
+      // stay undefined because code elsewhere clears them to that.
+      gone: false, byPlayer: false, sinking: false, spiked: false, stalled: false,
+      stageWarn: 0, airframeWarn: 0, boostPing: false, capPing: false,
+      hitCd: 0, boostT: 0, abandonT: 0, deadT: 0, fireGlowT: 0,
+      vx: 0, vy: 0, vz: 0, air: 0, airVX: undefined, airVZ: undefined,
+      jumpRamp: null, onRampIdx: null, jumpX: 0, jumpZ: 0, jumpSpin: 0, lastHeading: 0,
+      bodyPitch: NaN, susp: null, suspSpeed: NaN,
+      raceEdge: 0, cpIndex: 0, path: null, pathT: 0,
+      lastDriver: null, riderMesh: null, fromSpot: null,
+      aiSteer: 0, aiTX: NaN, aiTZ: NaN, aiAir: false, airLights: null,
+      copsOut: NaN, shootT: NaN, aimSkill: NaN, deployT: 0, fireT: 0, bailT: 0,
+      heliSpeed: 0, rotorSpin: 0, mgT: 0, rkT: 0, pitch: 0, roll: 0, sinkV: 0
     };
-    // AI-ridden bikes get a visible rider (empty motorbikes look abandoned)
-    if (spec.bike && car.occupied === 'ai') {
-      var rider = buildBikeRider();
-      mesh.add(rider);
-      car.riderMesh = rider;
-    }
+    if (car.occupied === 'ai') seatOccupant(car);
     world.cars.push(car);
     return car;
   }
@@ -451,6 +486,10 @@ GAME.vehicles = (function () {
   function removeCar(car) {
     var i = world.cars.indexOf(car);
     if (i >= 0) world.cars.splice(i, 1);
+    // said out loud, as a ped's `gone` is: a despawned car is not dead, and
+    // anything still holding one (a stranger's grudge, a stolen-car chase, a
+    // lock-on) must let go of it rather than keep chasing where it last stood
+    car.gone = true;
     if (car.parkedSpot) car.parkedSpot.live = null;
     GAME.scene.remove(car.mesh);
     disposeTree(car.mesh);
@@ -615,7 +654,7 @@ GAME.vehicles = (function () {
     // back off the mesh. What the body does ON TOP of it is load transfer,
     // and adding the two is what lets a car climbing a ramp still squat under
     // power instead of one angle overwriting the other.
-    car.bodyPitch = justLanded || car.bodyPitch === undefined
+    car.bodyPitch = justLanded || isNaN(car.bodyPitch)
       ? pitch : U.lerp(car.bodyPitch, pitch, Math.min(1, dt * 22));
 
     // Weight moves when speed does: open the throttle and it goes to the back
@@ -627,7 +666,7 @@ GAME.vehicles = (function () {
     // there and the body simply hangs at its flight pose.
     var susp = car.susp || (car.susp = { p: 0, v: 0 });
     var airborne = (car.air || 0) > 0.05;
-    var accel = (car.speed - (car.suspSpeed === undefined ? car.speed : car.suspSpeed)) / Math.max(dt, 1e-4);
+    var accel = (car.speed - (isNaN(car.suspSpeed) ? car.speed : car.suspSpeed)) / Math.max(dt, 1e-4);
     car.suspSpeed = car.speed;
     // bikes lean, they do not sit on a body that pitches on its springs, and
     // the rider code owns their attitude anyway
@@ -714,6 +753,7 @@ GAME.vehicles = (function () {
   // The reversing AWAY from the wall is the part that was wrong.
   var REST_WALL = 0.4, MAX_BOUNCE = 3.5;
 
+  var wallBoxes = [];   // collideStatic's list of nearby boxes, refilled per car
   function collideStatic(car, dt) {
     var fx = fwdX(car), fz = fwdZ(car);
     var sxv = fz, szv = -fx;
@@ -722,7 +762,7 @@ GAME.vehicles = (function () {
     // not sample points. Sampling always had gaps: a thin post could pass
     // between samples, and a BUILDING CORNER could poke through the body
     // between two of them — you could clip through the corner of a block.
-    var boxes = GAME.city.hash.query(car.pos.x, car.pos.z, car.spec.l);
+    var boxes = GAME.city.hash.queryInto(car.pos.x, car.pos.z, car.spec.l, wallBoxes);
     if (!boxes.length) return;
     var afx = Math.abs(fx), afz = Math.abs(fz);
     for (var bi = 0; bi < boxes.length; bi++) {
@@ -802,25 +842,117 @@ GAME.vehicles = (function () {
     }
   }
 
-  // Get the driver out from behind the wheel and leave the car standing. The
-  // same person every time — lastDriver remembers the face and the temper —
-  // so the man who got out to argue about a dent is the man who was driving.
-  function ejectDriver(car) {
-    if (!car || car.dead || car.occupied !== 'ai' || car.isPolice) return null;
-    var side = car.heading + Math.PI / 2;
-    var stepOut = car.spec.w / 2 + 1;      // clear of his own car's flank
-    var d = GAME.peds.spawnPed(car.pos.x + Math.sin(side) * stepOut, car.pos.z + Math.cos(side) * stepOut,
-      car.lastDriver ? { look: car.lastDriver } : undefined);
+  // ---------- whoever is aboard ----------
+  // An AI vehicle's driver is a flag on it, not a ped — on a bike, a figure
+  // riding the mesh as well — so nothing that acts on people can reach them
+  // until they are turned back into one. Everything that does that goes
+  // through occupantOut, whatever the vehicle and whoever is driving it.
+
+  // Somebody at the wheel, and drawn there if the seat is out in the open.
+  function seatOccupant(car, look) {
+    car.occupied = 'ai';
+    if (car.spec.bike && !car.riderMesh) {
+      car.riderMesh = buildBikeRider(look);
+      car.mesh.add(car.riderMesh);
+    }
+  }
+
+  // The one occupant a round, a fist or a blast reaches before the bodywork:
+  // a rider, sitting up in the line of fire with nothing around them.
+  function exposedRider(car) {
+    return !!car && !car.dead && car.occupied === 'ai' && !!car.riderMesh;
+  }
+  // where they sit (buildBikeRider puts the hips 0.35 m behind the middle)
+  function seatPos(car) {
+    return { x: car.pos.x - fwdX(car) * 0.35, z: car.pos.z - fwdZ(car) * 0.35 };
+  }
+  // clear of the vehicle's own flank
+  function besidePos(car) {
+    var side = car.heading + Math.PI / 2, step = car.spec.w / 2 + 1;
+    return { x: car.pos.x + Math.sin(side) * step, z: car.pos.z + Math.cos(side) * step };
+  }
+
+  // The occupant as a ped at `at`, and nobody left at the wheel. The same
+  // person every time — lastDriver remembers the face and the temper, and a
+  // rider is whoever was drawn on the seat — or an officer, out of a cruiser.
+  function occupantOut(car, at) {
+    var look = car.isPolice ? null : car.lastDriver || (car.riderMesh && car.riderMesh.userData.look) || null;
+    var d = GAME.peds.spawnPed(at.x, at.z, car.isPolice ? { cop: true } : look ? { look: look } : undefined);
     if (!d) return null;
-    if (car.lastDriver) d.temper = car.lastDriver.temper;
-    else car.lastDriver = { shirt: d.look.shirt, pants: d.look.pants, skin: d.look.skin,
-      hair: d.look.hair, hairCol: d.look.hairCol, temper: d.temper };
+    if (!car.isPolice) {
+      if (car.lastDriver) d.temper = car.lastDriver.temper;
+      else car.lastDriver = { shirt: d.look.shirt, pants: d.look.pants, skin: d.look.skin,
+        hair: d.look.hair, hairCol: d.look.hairCol, temper: d.temper };
+    }
     car.occupied = null;
     car.ai = null;
-    car.controls = { throttle: 0, steer: 0, handbrake: true };
-    car.speed = 0; car.lat = 0;
     if (car.riderMesh) { car.mesh.remove(car.riderMesh); disposeTree(car.riderMesh); car.riderMesh = null; }
-    d.leftCar = car;
+    // which car, by its serial and not the car itself: holding the car here
+    // kept a despawned car's whole object graph alive for as long as its old
+    // driver walked about
+    d.leftCar = car.serial;
+    return d;
+  }
+
+  // Get the driver out from behind the wheel and leave the car standing, so
+  // the man who got out to argue about a dent is the man who was driving.
+  function ejectDriver(car) {
+    if (!car || car.dead || car.occupied !== 'ai' || car.isPolice) return null;
+    var d = occupantOut(car, besidePos(car));
+    if (!d) return null;
+    setControls(car.controls, 0, 0, true);
+    car.speed = 0; car.lat = 0;
+    return d;
+  }
+
+  // Knocked off by a round, a fist or a blast: they come off where they sat,
+  // and the machine runs on without them. Null when nobody is out in the open.
+  function throwRider(car) {
+    return exposedRider(car) ? occupantOut(car, seatPos(car)) : null;
+  }
+
+  // Rammed off. A rider sits on top of the machine with nothing around them,
+  // so a hit that only dents a car puts them on the road — over the same
+  // 4 m/s at which bodywork runs down anybody on foot. A real hit (10 m/s
+  // closing) kills and throws them clear the way a run-over does; anything
+  // less leaves them hurt in proportion, landed clear of what hit them, and
+  // back on their feet. `other` is whatever they were hit by, or hit.
+  var RIDER_KNOCK = 4, RIDER_KILL = 10;
+  function knockOffRider(bike, other, rel) {
+    var d = throwRider(bike);
+    if (!d) return;
+    var P = GAME.player, byPlayer = other === P.car && P.inCar;
+    var kx = bike.pos.x - other.pos.x, kz = bike.pos.z - other.pos.z;
+    var kl = Math.sqrt(kx * kx + kz * kz) || 1;
+    kx /= kl; kz /= kl;
+    if (byPlayer) GAME.police.reportCrime('hit_ped', d.pos);
+    if (rel >= RIDER_KILL) {
+      GAME.peds.kill(d, 'car', byPlayer);
+      var kf = Math.min(1, rel / 26);
+      d.knockX = kx * (4 + rel * 0.35);
+      d.knockZ = kz * (4 + rel * 0.35);
+      d.knockY = 2.2 + kf * 3.2;
+      d.knockSpin = (Math.random() < 0.5 ? -1 : 1) * (4 + kf * 7);
+      if (byPlayer) GAME.haptics.splat(kf);
+      return;
+    }
+    if (GAME.city.canWalkTo(d.pos.x, d.pos.z, d.pos.x + kx * 1.2, d.pos.z + kz * 1.2)) {
+      d.pos.x += kx * 1.2; d.pos.z += kz * 1.2;
+    }
+    // the player who did it may get a fight out of it; anyone else, a runner
+    GAME.peds.damage(d, rel * 3, byPlayer);
+    if (!byPlayer && !d.dead) GAME.peds.startFlee(d, other.pos.x, other.pos.z, 6);
+  }
+
+  // Nobody sits in a fire. Out and away from it before it goes up — an
+  // officer back to the chase on foot if there is one, otherwise off duty
+  // the way a stand-down releases them, and running like everybody else.
+  function bailOut(car) {
+    var d = occupantOut(car, besidePos(car));
+    if (!d) return null;
+    if (d.isCop && GAME.police.wanted > 0) { d.state = 'chase'; return d; }
+    if (d.isCop) { d.isCop = false; d.temper = 0; d.aimPose = false; }
+    GAME.peds.startFlee(d, car.pos.x, car.pos.z, 8);
     return d;
   }
 
@@ -877,6 +1009,12 @@ GAME.vehicles = (function () {
         b.pos.x += nx * overlap / 2; b.pos.z += nz * overlap / 2;
         var avx = a.vx || 0, avz = a.vz || 0, bvx = b.vx || 0, bvz = b.vz || 0;
         var rel = (avx - bvx) * nx + (avz - bvz) * nz;
+        // a rider takes the hit in person, whichever side of it they were on
+        // — before the damage below, which can blow the bike up under them
+        if (rel > RIDER_KNOCK) {
+          if (exposedRider(a)) knockOffRider(a, b, rel);
+          if (exposedRider(b)) knockOffRider(b, a, rel);
+        }
         if (rel > 3 && (a.hitCd || 0) <= 0 && (b.hitCd || 0) <= 0) {
           a.hitCd = 0.25; b.hitCd = 0.25;
           var dmg = Math.min(26, rel * 1.3);
@@ -981,11 +1119,12 @@ GAME.vehicles = (function () {
     GAME.fx.spawn(car.pos.x, car.pos.y + 1.2, car.pos.z, { count: 30, color: 0xff9030, spread: 7, vy: 5, life: 1.1, grav: -3 });
     GAME.fx.spawn(car.pos.x, car.pos.y + 1.5, car.pos.z, { count: 20, color: 0x333333, spread: 4, vy: 4, life: 1.6, grav: -0.5 });
     var oldMat = car.mesh.userData.bodyMesh.material;
-    car.mesh.userData.bodyMesh.material = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+    // the charred coat is the same for every wreck, so it is shared too
+    car.mesh.userData.bodyMesh.material = sharedLambert(0x1a1a1a);
     // the body material is usually the SHARED vertex-color workhorse now —
     // disposing it here tore down the material every living car was wearing
     // (three quietly rebuilds it next frame, at the cost of a hitch and the
-    // pooling win). Only a private material — a prior burn — may be freed.
+    // pooling win). Only a private material may be freed.
     if (oldMat && oldMat.dispose && !(oldMat.userData && oldMat.userData.shared)) oldMat.dispose();
     if (car.mesh.userData.lightbar) car.mesh.userData.lightbar.forEach(function (m) { m.visible = false; });
     car.speed *= 0.2;
@@ -1012,6 +1151,16 @@ GAME.vehicles = (function () {
       if (dd < 64 && dy < 7) GAME.playerDamage(Math.round(75 - Math.sqrt(dd) * 6.8), 'explosion');
     }
     if (p.car === car) GAME.playerDamage(200, 'explosion');
+    // Whoever was still aboard goes up with it. The driver was only a flag on
+    // the car, so a flag was all that died — which left a bike's rider sat on
+    // the burnt-out frame, alive and well. They come out as themselves, into
+    // the blast, like anybody standing there; and a rider going past is out
+    // in the open the same as they are. An airframe's crew comes down with it.
+    var crew = car.occupied === 'ai' && !car.spec.heli && !car.spec.plane ? occupantOut(car, besidePos(car)) : null;
+    if (car.occupied === 'ai') car.occupied = null;
+    world.cars.forEach(function (c2) {
+      if (c2 !== car && U.dist2(c2.pos.x, c2.pos.z, car.pos.x, car.pos.z) < 55) throwRider(c2);
+    });
     world.peds.forEach(function (ped) {
       if (!ped.dead && U.dist2(ped.pos.x, ped.pos.z, car.pos.x, car.pos.z) < 55) GAME.peds.kill(ped, 'explosion', byPlayer);
     });
@@ -1030,8 +1179,8 @@ GAME.vehicles = (function () {
     world.cars.forEach(function (c2) {
       if (c2 !== car && !c2.dead && U.dist2(c2.pos.x, c2.pos.z, car.pos.x, car.pos.z) < 60) damageCar(c2, 40, 'explosion', byPlayer);
     });
-    if (car.isPolice && byPlayer) GAME.police.reportCrime('kill_cop', car.pos);
-    if (car.occupied === 'ai') car.occupied = null;
+    // a crew's officer reported their own death when the blast killed them
+    if (car.isPolice && byPlayer && !crew) GAME.police.reportCrime('kill_cop', car.pos);
     GAME.missions.notifyChaos(500);
   }
 
@@ -1052,7 +1201,16 @@ GAME.vehicles = (function () {
     ai.laneZ = (-mx / ml) * 3.1;
   }
 
-  function trafficControls(car, dt) {
+  // Controls are written into the object they will be read from — the car's
+  // own, unless the caller hands another — never returned new: every AI car
+  // asks for them every tick, and a fresh object per ask was most of a
+  // thousand small allocations a second in ordinary traffic.
+  function setControls(c, throttle, steer, handbrake) {
+    c.throttle = throttle; c.steer = steer; c.handbrake = handbrake;
+    return c;
+  }
+  function trafficControls(car, dt, out) {
+    out = out || car.controls;
     var ai = car.ai;
     var city = GAME.city;
     if (!ai.node) {
@@ -1118,7 +1276,7 @@ GAME.vehicles = (function () {
     if (car.unstickT > 1.6) { car.reverseT = 1.1; car.unstickT = 0; }
     if (car.reverseT > 0) {
       car.reverseT -= dt;
-      return { throttle: -0.8, steer: dh > 0 ? -1 : 1, handbrake: false };
+      return setControls(out, -0.8, dh > 0 ? -1 : 1, false);
     }
 
     var desired = ai.desired || 11;
@@ -1162,7 +1320,7 @@ GAME.vehicles = (function () {
     if (hard) throttle = car.speed > 0.5 ? -1 : 0;
     else if (blocked) throttle = car.speed > desired * 0.4 ? -0.4 : 0.15;
     else throttle = car.speed < desired ? 0.55 : 0;
-    return { throttle: throttle, steer: steer, handbrake: false };
+    return setControls(out, throttle, steer, false);
   }
 
   function spawnTraffic() {
@@ -1263,6 +1421,14 @@ GAME.vehicles = (function () {
     }
   }
 
+  // Emitters that fire every tick — a wreck smoulders, a fire burns — hand
+  // fx.spawn the same settings each time, so they are made once here rather
+  // than as a fresh object per car per tick. fx.spawn only reads them.
+  var FX_WRECK_SMOKE = { count: 1, color: 0x222222, spread: 0.5, vy: 1.5, life: 1.4, grav: 0.2 };
+  var FX_FLAME = { count: 3, color: 0xff7020, spread: 0.8, vy: 2.6, life: 0.35, grav: 1.5 };
+  var FX_FLAME_CORE = { count: 2, color: 0xffc040, spread: 0.5, vy: 3.2, life: 0.25, grav: 1.5 };
+  var FX_FIRE_SMOKE = { count: 2, color: 0x2a2a2e, spread: 0.7, vy: 2.4, life: 1.3, grav: 0.6 };
+  var FX_ENGINE_SMOKE = { count: 3, color: 0x555560, spread: 0.7, vy: 2.2, life: 1.0, grav: 0.5 };
   function update(dt) {
     var P = GAME.player;
     var fc = GAME.focus();
@@ -1285,7 +1451,7 @@ GAME.vehicles = (function () {
       if (car.dead) {
         if (!car.deadT) car.deadT = 0;
         car.deadT += dt;
-        GAME.fx.spawn(car.pos.x, car.pos.y + 1.2, car.pos.z, { count: 1, color: 0x222222, spread: 0.5, vy: 1.5, life: 1.4, grav: 0.2 });
+        GAME.fx.spawn(car.pos.x, car.pos.y + 1.2, car.pos.z, FX_WRECK_SMOKE);
         if (car.deadT > 14 && car !== P.car) { removeCar(car); continue; }
         continue;
       }
@@ -1302,14 +1468,14 @@ GAME.vehicles = (function () {
           var bnX = car.pos.x + fwdX(car) * 1.4, bnZ = car.pos.z + fwdZ(car) * 1.4;
           if (car.stage >= 2) {
             car.smokeT = 0.09;
-            GAME.fx.spawn(bnX, bnY, bnZ, { count: 3, color: 0xff7020, spread: 0.8, vy: 2.6, life: 0.35, grav: 1.5 });
-            GAME.fx.spawn(bnX, bnY + 0.4, bnZ, { count: 2, color: 0xffc040, spread: 0.5, vy: 3.2, life: 0.25, grav: 1.5 });
-            GAME.fx.spawn(bnX, bnY + 0.8, bnZ, { count: 2, color: 0x2a2a2e, spread: 0.7, vy: 2.4, life: 1.3, grav: 0.6 });
+            GAME.fx.spawn(bnX, bnY, bnZ, FX_FLAME);
+            GAME.fx.spawn(bnX, bnY + 0.4, bnZ, FX_FLAME_CORE);
+            GAME.fx.spawn(bnX, bnY + 0.8, bnZ, FX_FIRE_SMOKE);
             car.fireGlowT = (car.fireGlowT || 0) - 0.09;
             if (car.fireGlowT <= 0) { car.fireGlowT = 0.4; GAME.fx.flash(bnX, bnY + 0.4, bnZ, 1.6); }
           } else {
             car.smokeT = 0.12;
-            GAME.fx.spawn(bnX, bnY, bnZ, { count: 3, color: 0x555560, spread: 0.7, vy: 2.2, life: 1.0, grav: 0.5 });
+            GAME.fx.spawn(bnX, bnY, bnZ, FX_ENGINE_SMOKE);
           }
         }
         if (car.stage >= 2) {
@@ -1346,11 +1512,24 @@ GAME.vehicles = (function () {
         if (car.mesh.userData.prop) car.mesh.userData.prop.rotation.z += (powered ? 40 : car.rotorSpin) * dt;
         continue;
       }
+      // A driver whose ride has caught stands on the brakes and gets out,
+      // whatever it is and whoever they are — traffic, a cruiser's crew, a
+      // rival mid-race — rather than sitting there until the fuse runs out.
+      // A second and a bit at most, out of the five and a half they have.
+      if (car.stage >= 2 && car.occupied === 'ai') {
+        car.bailT = (car.bailT || 0) + dt;
+        // (throttle against the roll is the brake; held at a standstill it
+        // would be reverse)
+        setControls(car.controls, car.speed > 1 ? -1 : car.speed < -1 ? 1 : 0, 0, false);
+        stepPhysics(car, dt);
+        if (Math.abs(car.speed) < 1.5 || car.bailT > 1.2) bailOut(car);
+        continue;
+      }
       if (car === P.car && P.inCar) {
         // controls set by player.js
         stepPhysics(car, dt);
       } else if (car.ai && car.ai.mode === 'traffic' && car.occupied === 'ai') {
-        car.controls = trafficControls(car, dt);
+        trafficControls(car, dt, car.controls);
         stepPhysics(car, dt);
       } else if (car.ai && car.ai.mode === 'chase') {
         stepPhysics(car, dt); // controls written by police.js
@@ -1359,7 +1538,7 @@ GAME.vehicles = (function () {
       } else {
         // ownerless: coast to a stop
         if (Math.abs(car.speed) > 0.1 || Math.abs(car.lat) > 0.1) {
-          car.controls = { throttle: 0, steer: 0, handbrake: false };
+          setControls(car.controls, 0, 0, false);
           stepPhysics(car, dt);
         }
       }
@@ -1384,6 +1563,10 @@ GAME.vehicles = (function () {
     spawnCar: spawnCar,
     removeCar: removeCar,
     ejectDriver: ejectDriver,
+    seatOccupant: seatOccupant,
+    exposedRider: exposedRider,
+    seatPos: seatPos,
+    throwRider: throwRider,
     update: update,
     damageCar: damageCar,
     explodeCar: explodeCar,
