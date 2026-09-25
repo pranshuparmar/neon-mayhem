@@ -67,9 +67,17 @@
 //      frozen 999 the stopped decrement leaves behind.
 //   5. STEREO IMAGE   — a sound's pan must agree with the direction the
 //      player actually moves, so the field can never end up mirrored.
+//   5b. THE RADIO'S OWN TAP — every voice a station plays goes through the
+//       radio's bus, so none of it ticks on through the car door or past
+//       MUSIC: OFF; and a radio nobody can hear builds no voices at all, yet
+//       comes back on the beat it left.
 //   6. RIDING A ROOF  — a chassis that pitches has to carry its passenger
 //      with it, rather than leaving them on the roof it would have had
 //      sitting still.
+//   6b. WHOEVER IS ABOARD — a rider is a person to a round, a fist, a blast
+//       and a car driven into them, not the bike under them; nobody sits in
+//       a burning vehicle of any kind, and whoever is still aboard when one
+//       goes up dies with it.
 //   7. HAPTICS        — a buzz per knock, rationed, silenceable, and safe on
 //      a browser with no motor at all. Then the vocabulary on top of that: no
 //      two kinds may feel the same, the tiers must preempt in one direction
@@ -2614,6 +2622,122 @@ function withTimeout(p, ms) {
     'wanted=' + siren.wanted + ' got=' + JSON.stringify(siren.seen) +
     ' after ' + (siren.waited / 60).toFixed(1) + 's');
 
+  // ---------- 5b: the radio plays through the radio's own tap ----------
+  // The stations' hi-hats and snares were handed to the effects bus instead
+  // of the radio's, and the effects bus is behind neither the car door nor
+  // MUSIC: OFF — so they ticked on after you got out, and through the
+  // setting. Both buses are private, so find the effects bus the way a sound
+  // does: it is the one place a centred UI blip drains to. Then stop the sim,
+  // so the radio's own clock is the only thing left making sound, and count
+  // what it wires up. That clock is a setInterval against the audio clock,
+  // which no fastForward can hurry, so these windows are real time.
+  var tap = await page.evaluate(async function () {
+    var a = GAME.audio, ac = a.ctx;
+    if (!ac || ac.state !== 'running') return { running: false, state: ac ? ac.state : 'none' };
+    var edges = null, starts = null, voices = 0;
+    var connect0 = AudioNode.prototype.connect;
+    var osc0 = ac.createOscillator, src0 = ac.createBufferSource;
+    AudioNode.prototype.connect = function (dst) {
+      if (edges) edges.push([this, dst]);
+      return connect0.apply(this, arguments);
+    };
+    // both kinds of voice: a buffer source declares a start() of its own
+    var unspy = [OscillatorNode.prototype, AudioBufferSourceNode.prototype].map(function (p) {
+      var own = p.hasOwnProperty('start'), f = p.start;
+      p.start = function (when) { if (starts) starts.push(when); return f.apply(this, arguments); };
+      return function () { if (own) p.start = f; else delete p.start; };
+    });
+    ac.createOscillator = function () { voices++; return osc0.apply(ac, arguments); };
+    ac.createBufferSource = function () { voices++; return src0.apply(ac, arguments); };
+    function wait(ms) { return new Promise(function (res) { setTimeout(res, ms); }); }
+    var sfx = null;
+    async function listen(ms) {
+      edges = []; starts = []; voices = 0;
+      await wait(ms);
+      var w = { voices: voices, intoSfx: edges.filter(function (e) { return e[1] === sfx; }).length, starts: starts };
+      edges = starts = null;
+      return w;
+    }
+    var ts0 = GAME.timeScale, music0 = a.musicOn, mute0 = a.muted;
+    var out = { running: true, state: ac.state };
+    try {
+      // the sink of a blip: the one node its edges end at and never leave
+      edges = [];
+      a.cashTick();
+      var from = edges.map(function (e) { return e[0]; });
+      var sinks = edges.map(function (e) { return e[1]; }).filter(function (d) { return from.indexOf(d) < 0; });
+      edges = null;
+      out.sinks = sinks.length;
+      sfx = sinks.length === 1 ? sinks[0] : null;
+
+      a.setMusicOn(true);
+      if (a.muted) a.toggleMute();
+      var car = GAME.test.spawnCar('sedan', 4, 0);
+      GAME.test.fastForward(0.2);
+      if (car) GAME.test.enterNearestCar(car);
+      GAME.test.fastForward(1.2);           // boarding is a walk to the door first
+      out.inCar = GAME.player.inCar === true;
+      GAME.timeScale = 0;                   // the loop ticks nothing from here
+      var st = a.radio.stations.filter(function (s) { return s.name === a.radio.name; })[0];
+      var spb = 60 / st.bpm / 4;
+      out.driving = await listen(1200);
+      a.setMusicOn(false);
+      out.musicOff = await listen(1200);
+      a.setMusicOn(true);
+      a.toggleMute();
+      out.muted = await listen(1200);
+      a.toggleMute();
+      out.back = await listen(1200);
+      // Every note a station plays starts on a step, so a radio that kept
+      // counting through the silence starts its first note back on the grid
+      // it left — one that restarted the bar would land anywhere on it.
+      var t0 = out.driving.starts[0], off = 0;
+      out.back.starts.forEach(function (t) {
+        var k = (t - t0) / spb;
+        off = Math.max(off, Math.abs(k - Math.round(k)));
+      });
+      out.offBeat = t0 === undefined ? 1 : off;
+      // and out of the car: the fade down is played into on purpose, so let
+      // it finish before listening for what is left
+      GAME.test.exitCar();
+      await wait(3000);
+      out.foot = await listen(1500);
+      out.onFoot = !GAME.player.inCar;
+    } finally {
+      AudioNode.prototype.connect = connect0;
+      unspy.forEach(function (undo) { undo(); });
+      delete ac.createOscillator;
+      delete ac.createBufferSource;
+      GAME.timeScale = ts0;
+      a.setMusicOn(music0);
+      if (a.muted !== mute0) a.toggleMute();
+      if (GAME.player.inCar) GAME.test.exitCar();
+      if (car) GAME.vehicles.removeCar(car);
+    }
+    ['driving', 'musicOff', 'muted', 'back', 'foot'].forEach(function (k) { if (out[k]) delete out[k].starts; });
+    return out;
+  });
+  function windows(key) {
+    return ['driving', 'musicOff', 'muted', 'back', 'foot'].map(function (k) {
+      return k + '=' + (tap[k] ? tap[k][key] : '?');
+    }).join(' ');
+  }
+  check('radio: the audio clock is running (anchor sanity)', tap.running, 'state=' + tap.state);
+  check('radio: a UI blip drains to exactly one bus (anchor sanity)', tap.running && tap.sinks === 1, 'sinks=' + tap.sinks);
+  check('radio: behind the wheel it plays (anchor sanity)',
+    tap.running && tap.inCar && tap.driving.voices > 0, 'in car=' + tap.inCar + ' ' + windows('voices'));
+  check('radio: nothing a station plays reaches the effects bus',
+    tap.running && ['driving', 'musicOff', 'muted', 'back', 'foot'].every(function (k) { return tap[k].intoSfx === 0; }),
+    windows('intoSfx'));
+  check('radio: out of the car it builds no voices at all',
+    tap.running && tap.onFoot && tap.foot.voices === 0, 'on foot=' + tap.onFoot + ' voices=' + (tap.foot && tap.foot.voices));
+  check('radio: MUSIC: OFF and mute build none either',
+    tap.running && tap.musicOff.voices === 0 && tap.muted.voices === 0, windows('voices'));
+  // the guard on the fix rather than the bug: silence must not cost the beat
+  check('radio: heard again, it plays on the beat it left',
+    tap.running && tap.back.voices > 0 && tap.offBeat < 1e-4,
+    'voices=' + (tap.back && tap.back.voices) + ' off by ' + tap.offBeat + ' of a step');
+
   // ---------- 6: a rider follows the deck when it tilts ----------
   // vehicles.js pitches a chassis over a ramp (negative rotation.x lifts the
   // nose), but the roof a rider stood on was a flat plane at car.pos.y — so
@@ -2666,6 +2790,175 @@ function withTimeout(p, ms) {
     deck.lift > 0.35 && Math.abs(deck.noseUp - deck.expect) < 0.05,
     'level=' + (deck.level || 0).toFixed(3) + ' noseUp=' + (deck.noseUp || 0).toFixed(3) +
     ' expected=' + (deck.expect || 0).toFixed(3) + ' lift=' + (deck.lift || 0).toFixed(3));
+
+  // ---------- 6b: whoever is aboard ----------
+  // An AI vehicle's driver is a flag on the car, and a bike's rider a figure
+  // riding its mesh: neither is a ped, so nothing aimed at people reached
+  // them. A round, a fist or a car landed on the bike under a rider in plain
+  // view, a burning car kept its driver right up to the blast, and the blast
+  // killed the flag and left the rider sitting on the burnt-out frame. Each
+  // check here drives the real path — the trigger, the fist, the ram, the
+  // fuse, the blast —
+  // at vehicles that hold still ('hold' is no mode the traffic AI drives).
+  var aboard = await page.evaluate(function () {
+    var P = GAME.player, V = GAME.vehicles, w0 = P.currentWeapon;
+    GAME.test.teleport(350, 300);
+    function clearAround() {
+      GAME.world.peds.slice().forEach(function (p) {
+        if (U.dist2(p.pos.x, p.pos.z, P.pos.x, P.pos.z) < 45 * 45) GAME.peds.removePed(p);
+      });
+      GAME.world.cars.slice().forEach(function (c) {
+        if (U.dist2(c.pos.x, c.pos.z, P.pos.x, P.pos.z) < 45 * 45) V.removeCar(c);
+      });
+      P.roofCar = null;
+    }
+    function ridden(type, dx, dz) {
+      return V.spawnCar(type, P.pos.x + dx, P.pos.z + dz, 0, { occupied: 'ai', ai: { mode: 'hold' } });
+    }
+    // whoever has come out of this vehicle as a person (leftCar is what the
+    // way out stamps on them: the car's serial, so it holds no despawned car)
+    function outOf(car) {
+      return GAME.world.peds.filter(function (p) { return p.leftCar === car.serial && !p.gone; });
+    }
+    function fire() { GAME.input.lmbPressed = true; GAME.test.fastForward(1 / 60); }
+    var out = {};
+
+    // a round at a rider, square through the seat (the bike points away)
+    clearAround();
+    GAME.test.fastForward(0.3);
+    GAME.combat.giveWeapon('pistol', 20);
+    GAME.combat.selectWeapon('pistol');
+    var shotAt = ridden('motorcycle', 0, 7);
+    var hp0 = shotAt.hp;
+    GAME.cam.yaw = P.heading = Math.atan2(shotAt.pos.x - P.pos.x, shotAt.pos.z - P.pos.z);
+    fire();
+    var hit = outOf(shotAt);
+    out.shot = { stillOn: !!shotAt.riderMesh, people: hit.length,
+      hurt: hit.length === 1 && (hit[0].dead || hit[0].hp < 30), bikeHp: hp0 - shotAt.hp };
+    GAME.test.fastForward(0.5);              // the trigger's cooldown
+
+    // a fist, at arm's length of a rider stopped beside you
+    clearAround();
+    GAME.combat.selectWeapon('fist');
+    GAME.cam.yaw = P.heading = 0;
+    var punched = ridden('motorcycle', 0, 1.6);
+    hp0 = punched.hp;
+    out.fist = P.currentWeapon;
+    fire();
+    var hitF = outOf(punched);
+    out.punch = { stillOn: !!punched.riderMesh, people: hitF.length,
+      hurt: hitF.length === 1 && (hitF[0].dead || hitF[0].hp < 30), bikeHp: hp0 - punched.hp };
+    GAME.test.fastForward(0.5);
+
+    // a fire, in a car, on a bike and in a cruiser: out, and clear of it
+    // (at no stars, so the officer runs like everybody else rather than
+    // coming for the gunman from the checks above)
+    GAME.police.clearWanted();
+    clearAround();
+    var burning = [ridden('sedan', -7, 10), ridden('motorcycle', 0, 10), ridden('police', 7, 10)];
+    burning.forEach(function (c) { V.damageCar(c, c.hp - c.spec.hp * 0.1, 'test'); });
+    out.lit = burning.every(function (c) { return c.stage >= 2 && !c.dead; });
+    GAME.test.fastForward(2);
+    out.fire = burning.map(function (c) {
+      return { type: c.type, aboard: c.occupied === 'ai', stillOn: !!c.riderMesh, out: outOf(c).length };
+    });
+    var fled = [].concat.apply([], burning.map(outOf));
+    GAME.test.fastForward(5);                // the fuse runs out
+    out.blown = burning.every(function (c) { return c.dead; });
+    out.fled = fled.length;
+    out.fledAlive = fled.filter(function (p) { return !p.dead; }).length;
+
+    // a blast with somebody still aboard, car and bike alike
+    clearAround();
+    var car = ridden('sedan', -5, 8), bike = ridden('motorcycle', 5, 8);
+    V.explodeCar(car, 'test');
+    V.explodeCar(bike, 'test');
+    function bodies(c) { return outOf(c).filter(function (p) { return p.dead; }).length; }
+    out.blast = { stillOn: !!bike.riderMesh, carBodies: bodies(car), bikeBodies: bodies(bike) };
+
+    // and a rider going past somebody else's: out in the open like anyone
+    clearAround();
+    var wreck = V.spawnCar('sedan', P.pos.x - 4, P.pos.z + 12, 0, {});
+    var passing = ridden('motorcycle', 0, 12);
+    V.explodeCar(wreck, 'test');
+    out.passing = { stillOn: !!passing.riderMesh, bodies: bodies(passing) };
+
+    // A car driven into a rider: rolling with nobody at the wheel, square up
+    // the bike's back. The knock is stepped a frame at a time so the car can
+    // be stopped the moment it lands — what happens to somebody lying in
+    // front of a car that keeps coming is the run-over rule's business.
+    function ram(speed, strikerIsPlayers) {
+      clearAround();
+      var striker, bike;
+      if (strikerIsPlayers) {
+        striker = GAME.test.spawnCar('sedan', 4, 0);
+        GAME.test.enterNearestCar(striker);
+        GAME.test.fastForward(1.2);
+        striker.speed = 0;
+      } else striker = V.spawnCar('sedan', P.pos.x, P.pos.z + 6, 0, {});
+      var fx = Math.sin(striker.heading), fz = Math.cos(striker.heading);
+      bike = V.spawnCar('motorcycle', striker.pos.x + fx * 4, striker.pos.z + fz * 4, striker.heading,
+        { occupied: 'ai', ai: { mode: 'hold' } });
+      var h0 = GAME.police.heat;
+      striker.speed = speed;
+      for (var f = 0; f < 90 && bike.riderMesh; f++) GAME.test.fastForward(1 / 60);
+      striker.speed = 0;
+      var r = { inCar: !strikerIsPlayers || P.car === striker, stillOn: !!bike.riderMesh, people: outOf(bike) };
+      r.dead = r.people.filter(function (p) { return p.dead; }).length;
+      r.hurt = r.people.filter(function (p) { return !p.dead && p.hp < 30; }).length;
+      r.people = r.people.length;
+      r.heat = GAME.police.heat - h0;         // before a clean record cools it
+      GAME.test.fastForward(0.5);
+      if (strikerIsPlayers) GAME.test.exitCar();
+      GAME.police.clearWanted();
+      return r;
+    }
+    out.rammed = ram(15);
+    out.nudged = ram(6);
+    out.playerRam = ram(15, true);
+
+    // an owner who takes their bike back is seen riding it
+    clearAround();
+    var theirs = V.spawnCar('motorcycle', P.pos.x + 4, P.pos.z + 4, 0, {});
+    var owner = GAME.peds.spawnPed(theirs.pos.x + 1.2, theirs.pos.z);
+    owner.state = 'attack'; owner.attackT = 12; owner.temper = 0.9; owner.stolenCar = theirs;
+    var waited = 0;
+    while (theirs.occupied !== 'ai' && waited < 60 * 8) { GAME.test.fastForward(1 / 60); waited++; }
+    out.reclaim = { aboard: theirs.occupied === 'ai', rider: !!theirs.riderMesh, after: waited / 60 };
+
+    clearAround();
+    GAME.combat.selectWeapon(w0);
+    GAME.police.clearWanted();
+    GAME.player.health = 100;
+    return out;
+  });
+  check('aboard: a round through a rider knocks them off the bike',
+    !aboard.shot.stillOn && aboard.shot.people === 1 && aboard.shot.hurt, JSON.stringify(aboard.shot));
+  check('aboard: and the bike under them takes none of it', aboard.shot.bikeHp === 0, 'bike lost ' + aboard.shot.bikeHp + ' hp');
+  check('aboard: a fist reaches a rider too',
+    aboard.fist === 'fist' && !aboard.punch.stillOn && aboard.punch.hurt && aboard.punch.bikeHp === 0,
+    'swung ' + aboard.fist + ' ' + JSON.stringify(aboard.punch));
+  check('aboard: a fire was lit under all three (anchor sanity)', aboard.lit);
+  check('aboard: nobody sits in a burning car, bike or cruiser',
+    aboard.fire.every(function (f) { return !f.aboard && !f.stillOn && f.out === 1; }), JSON.stringify(aboard.fire));
+  check('aboard: and all three were clear when it went up',
+    aboard.blown && aboard.fled === 3 && aboard.fledAlive === 3,
+    'blown=' + aboard.blown + ' out=' + aboard.fled + ' alive=' + aboard.fledAlive);
+  check('aboard: a blast kills whoever is still aboard, car and bike alike',
+    !aboard.blast.stillOn && aboard.blast.carBodies === 1 && aboard.blast.bikeBodies === 1, JSON.stringify(aboard.blast));
+  check('aboard: a rider passing a blast is caught in it like anyone on foot',
+    !aboard.passing.stillOn && aboard.passing.bodies === 1, JSON.stringify(aboard.passing));
+  check('aboard: a car driven into a rider throws them off, killed',
+    !aboard.rammed.stillOn && aboard.rammed.people === 1 && aboard.rammed.dead === 1, JSON.stringify(aboard.rammed));
+  check('aboard: a nudge puts them on the road hurt, not dead',
+    !aboard.nudged.stillOn && aboard.nudged.people === 1 && aboard.nudged.hurt === 1, JSON.stringify(aboard.nudged));
+  check('aboard: and a stranger\'s ram is not put on the player',
+    aboard.rammed.heat === 0 && aboard.nudged.heat === 0, 'heat ' + aboard.rammed.heat + ' / ' + aboard.nudged.heat);
+  check('aboard: running a rider down is on the player\'s record',
+    aboard.playerRam.inCar && !aboard.playerRam.stillOn && aboard.playerRam.dead === 1 && aboard.playerRam.heat > 0,
+    JSON.stringify(aboard.playerRam));
+  check('aboard: an owner takes their bike back (anchor sanity)', aboard.reclaim.aboard, JSON.stringify(aboard.reclaim));
+  check('aboard: and is seen riding it', aboard.reclaim.rider, JSON.stringify(aboard.reclaim));
 
   // ---------- nothing broke on the way through ----------
   await page.evaluate(function () { GAME.test.fastForward(5); });

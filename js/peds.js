@@ -196,7 +196,7 @@ GAME.peds = (function () {
       diveX: 0, diveY: 0, diveZ: 0, diveDur: 0,
       knockX: 0, knockY: NaN, knockZ: 0, knockSpin: 0,
       prevX2: NaN, prevZ2: NaN, stuckT: 0,
-      stolenCar: null, hadDriver: undefined, yankT: 0, yankWarned: false, leftCar: false,
+      stolenCar: null, hadDriver: undefined, yankT: 0, yankWarned: false, leftCar: 0,
       jobPed: false, iceServed: false, carrying: undefined,
       patrol: false, onCase: null, beatX: 0, beatZ: 0, beatT: 0, grabbing: false,
       aimSkill: NaN, lastShotT: 0
@@ -449,7 +449,10 @@ GAME.peds = (function () {
         // original case of somebody deciding they have had enough of you.
         ped.attackT -= dt;
         if (ped.stolenCar && ped.stolenCar.gone) ped.stolenCar = null;   // despawned: nothing to take back
-        var myCar = ped.stolenCar && !ped.stolenCar.dead && ped.stolenCar.occupied !== 'ai' ? ped.stolenCar : null;
+        // (nobody wants a car back once it is on fire — they would only be
+        // turned straight back out of it by vehicles.js)
+        var myCar = ped.stolenCar && !ped.stolenCar.dead && ped.stolenCar.stage < 2 &&
+          ped.stolenCar.occupied !== 'ai' ? ped.stolenCar : null;
         var chaseCar = myCar && U.dist2(ped.pos.x, ped.pos.z, myCar.pos.x, myCar.pos.z) < 55 * 55;
         var F = foeState(ped, chaseCar ? myCar : null);
         var tcar = F.car;
@@ -571,8 +574,9 @@ GAME.peds = (function () {
                   ped.yankT = 0;
                   ped.yankWarned = false;
                 } else if (!boarding) {
-                  // owner slides back in and drives off, done with you
-                  myCar.occupied = 'ai';
+                  // owner slides back in and drives off, done with you —
+                  // and is seen riding it, if it is a bike
+                  GAME.vehicles.seatOccupant(myCar, ped.look);
                   myCar.ai = { mode: 'traffic', desired: 12, laneX: 0, laneZ: 0 };
                   if (myCar.parkedSpot) { myCar.parkedSpot.live = null; myCar.parkedSpot = null; }
                   removePed(ped);

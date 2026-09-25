@@ -69,7 +69,8 @@ GAME.combat = (function () {
       if (cd > range || cd < 0.5) continue;
       var cang = Math.abs(U.wrapPI(Math.atan2(cdx, cdz) - cam.yaw));
       if (cang > 0.7) continue;
-      score(car, cang * 30 + cd + 14);
+      // ...except one with a rider out in the open: that is a person too
+      score(car, cang * 30 + cd + (GAME.vehicles.exposedRider(car) ? 0 : 14));
     }
     return P.pos.y + 1.35;
   }
@@ -147,6 +148,14 @@ GAME.combat = (function () {
     for (var c = 0; c < cars.length; c++) {
       var car = cars[c];
       if (car === ignoreCar) continue;
+      // A rider sits up above the machine, square in the line of fire: a
+      // round through where they sit is theirs, not the bodywork's. Without
+      // this the bike's own circle, which the seat sits inside, took them all.
+      if (GAME.vehicles.exposedRider(car)) {
+        var seat = GAME.vehicles.seatPos(car);
+        var tr = rayCircle(ox, oz, dirX, dirZ, seat.x, seat.z, 0.5);
+        if (tr >= 0 && tr < bestT) { bestT = tr; hit = { kind: 'rider', obj: car, t: tr }; continue; }
+      }
       var tc = rayCircle(ox, oz, dirX, dirZ, car.pos.x, car.pos.z, car.radius * 0.9);
       if (tc >= 0 && tc < bestT) { bestT = tc; hit = { kind: 'car', obj: car, t: tc }; }
     }
@@ -205,6 +214,15 @@ GAME.combat = (function () {
         if (res.hit.kind === 'ped') {
           GAME.haptics.hit();
           GAME.peds.damage(res.hit.obj, wd.damage, true);
+        } else if (res.hit.kind === 'rider') {
+          // off the bike and onto the road, wounded or worse — and the lock
+          // goes with the person, not the machine rolling on without them
+          GAME.haptics.hit();
+          var rider = GAME.vehicles.throwRider(res.hit.obj);
+          if (rider) {
+            if (lockTarget === res.hit.obj) lockTarget = rider;
+            GAME.peds.damage(rider, wd.damage, true);
+          }
         } else if (res.hit.kind === 'car') {
           GAME.haptics.hit();
           GAME.vehicles.damageCar(res.hit.obj, wd.damage * 0.8, 'gun');
@@ -261,6 +279,14 @@ GAME.combat = (function () {
       }
     }
     var car = GAME.vehicles.findNearestCar(px, pz, 2.2, P.car);
+    // a rider is within reach where a driver behind glass is not
+    var rider = car && GAME.vehicles.throwRider(car);
+    if (rider) {
+      GAME.peds.damage(rider, WEAPONS.fist.damage, true);
+      GAME.police.reportCrime('hit_ped', P.pos);
+      GAME.missions.notifyChaos(20);
+      return;
+    }
     if (car) {
       GAME.vehicles.damageCar(car, 6, 'fist');
       GAME.fx.spawn(px, 1, pz, { count: 3, color: 0xffe0a0, spread: 1, life: 0.3 });

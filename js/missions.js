@@ -1036,6 +1036,11 @@ GAME.missions = (function () {
     updateCp();
   }
 
+  // A rival is still racing while there is somebody at their wheel: a wreck is
+  // out, and so is a car its driver has bailed out of, or a bike its rider was
+  // shot off — rolling to a stop with nobody aboard is not a place in the field.
+  function inRace(r) { return !r.dead && r.occupied === 'ai'; }
+
   // race position: further along the checkpoint list wins, ties broken by who's
   // closer to the next one. Returns 1-based place among player + rivals.
   function racePosition() {
@@ -1047,7 +1052,7 @@ GAME.missions = (function () {
     var place = 1;
     for (var i = 0; i < active.racers.length; i++) {
       var r = active.racers[i];
-      if (r.dead) continue;
+      if (!inRace(r)) continue;
       var ri = r.cpIndex || 0;
       if (ri > active.cpIndex) { place++; continue; }
       if (ri < active.cpIndex) continue;
@@ -1062,7 +1067,7 @@ GAME.missions = (function () {
     if (!active) return '';
     var d = active.def;
     if (d.type === 'race') {
-      var field = 1 + active.racers.filter(function (r) { return !r.dead; }).length;
+      var field = 1 + active.racers.filter(inRace).length;
       return ordinal(racePosition()) + ' / ' + field + '   ·   Checkpoint ' + (active.cpIndex + 1) + ' / ' + d.cps.length;
     }
     if (d.type === 'courier') return 'Delivery ' + (active.cpIndex + 1) + ' / ' + active.stops.length;
@@ -1450,7 +1455,7 @@ GAME.missions = (function () {
       if (!P.inCar || !P.car || P.car.dead) { finish(false, 'You lost your ride.'); return; }
       for (var r = 0; r < active.racers.length; r++) {
         var rc = active.racers[r];
-        if (rc.dead) continue;
+        if (!inRace(rc)) continue;
         var ctl = racerControls(rc, dt);
         if (ctl === null) { finish(false, 'A rival finished first.'); return; }
         rc.controls = ctl;

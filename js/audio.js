@@ -5,15 +5,15 @@ GAME.audio = (function () {
   var noiseBuf = null;
   var engine = null, skidNode = null, sirenNode = null, rotorNode = null;
   var lastCrashT = -9, lastCrashV = 0;
-  // When the radio last went silent, for any of the three reasons it can:
-  // muted, music switched off, or its own volume down (on foot, overlays).
+  // The radio's own volume (down on foot and behind overlays), and when it
+  // last went to zero.
   var radioVol = 0, radioQuietAt = 0;
   function noteQuiet() { if (ctx) radioQuietAt = ctx.currentTime; }
-  // Silent, and for long enough that the fade-out has finished (the radio's
-  // own fade is the slowest, a 0.3 s time constant): notes scheduled now
-  // could not be heard, so the radio stops making them.
+  // Notes scheduled now could not be heard, so the radio stops making them:
+  // muted or MUSIC: OFF, which cut the sound at once, or its volume down and
+  // the fade-out finished (a 0.3 s time constant is under -60 dB after 2 s).
   function radioSilent() {
-    return (muted || !musicOn || radioVol === 0) && ctx.currentTime - radioQuietAt > 1.5;
+    return muted || !musicOn || (radioVol <= 0 && ctx.currentTime - radioQuietAt > 2);
   }
 
   function midi(n) { return 440 * Math.pow(2, (n - 69) / 12); }
@@ -265,6 +265,10 @@ GAME.audio = (function () {
         }
       }
     ];
+    // On foot, with MUSIC: OFF or muted, the radio is a clock with nothing on
+    // the end of it — but a clock that built its ~60 voices a second anyway.
+    // A step nobody can hear is still counted, so the beat is where it would
+    // have been when the radio comes back, rather than restarting the bar.
     function schedule() {
       if (!ctx || !playing || ctx.state !== 'running') return;
       var s = stations[current];
@@ -273,10 +277,6 @@ GAME.audio = (function () {
       while (nextTime < ctx.currentTime + 0.25) {
         var bar = Math.floor(step / 16);
         var ci = bar % s.chords.length;
-        // The beat keeps moving when nobody can hear it, so the station comes
-        // back in time, but the notes are not made: that was sixty-odd audio
-        // nodes a second, built, rendered at zero and thrown away, on foot
-        // and with the music switched off.
         if (!quiet) s.play(nextTime, step % 64, bar, s.chords[ci], s.bass[ci]);
         nextTime += spb;
         step++;
@@ -306,7 +306,8 @@ GAME.audio = (function () {
       },
       setVolume: function (v) {
         if (!ctx) return;
-        if (v === 0 && radioVol !== 0) noteQuiet();
+        // keep playing into the fade rather than cutting it off short
+        if (v <= 0 && radioVol > 0) noteQuiet();
         radioVol = v;
         radioBus.gain.setTargetAtTime(v, ctx.currentTime, 0.3);
       }
@@ -383,7 +384,6 @@ GAME.audio = (function () {
     get muted() { return muted; },
     toggleMute: function () {
       muted = !muted;
-      if (muted) noteQuiet();
       if (ctx) master.gain.setTargetAtTime(muted ? 0 : 0.8, ctx.currentTime, 0.05);
       return muted;
     },
@@ -391,7 +391,6 @@ GAME.audio = (function () {
     get musicOn() { return musicOn; },
     get sfxOn() { return sfxOn; },
     setMusicOn: function (v) {
-      if (musicOn && !v) noteQuiet();
       musicOn = !!v;
       if (ctx && musicSwitch) musicSwitch.gain.setTargetAtTime(musicOn ? 1 : 0, ctx.currentTime, 0.05);
       return musicOn;

@@ -197,8 +197,8 @@ function buildBikeMesh(colorHex, trim) {
 
 // a seated rider posed to straddle a bike, added as a child of the bike group
 // so it moves and leans with it. Used for AI traffic bikes (and reusable).
-function buildBikeRider() {
-  var r = GAME.peds.buildPedMesh({});
+function buildBikeRider(look) {
+  var r = GAME.peds.buildPedMesh(look ? { look: look } : {});
   var j = r.userData.joints;
   j.torso.rotation.x = 0.34;                       // lean toward the bars
   j.legL.rotation.x = -0.55; j.legR.rotation.x = -0.55;
@@ -423,6 +423,7 @@ GAME.vehicles = (function () {
   var world = GAME.world;
   var carRng = mulberry32(777);
 
+  var carSerial = 0;
   function spawnCar(type, x, z, heading, opts) {
     opts = opts || {};
     var spec = VEHICLES[type] || VEHICLES.sedan;
@@ -440,6 +441,7 @@ GAME.vehicles = (function () {
     mesh.rotation.y = heading || 0;
     GAME.scene.add(mesh);
     var car = {
+      serial: ++carSerial,   // who is who, for anything that must not hold the car itself
       kind: 'car',
       type: type, spec: spec, mesh: mesh,
       pos: mesh.position,
@@ -473,15 +475,10 @@ GAME.vehicles = (function () {
       raceEdge: 0, cpIndex: 0, path: null, pathT: 0,
       lastDriver: null, riderMesh: null, fromSpot: null,
       aiSteer: 0, aiTX: NaN, aiTZ: NaN, aiAir: false, airLights: null,
-      copsOut: NaN, shootT: NaN, aimSkill: NaN, deployT: 0, fireT: 0,
+      copsOut: NaN, shootT: NaN, aimSkill: NaN, deployT: 0, fireT: 0, bailT: 0,
       heliSpeed: 0, rotorSpin: 0, mgT: 0, rkT: 0, pitch: 0, roll: 0, sinkV: 0
     };
-    // AI-ridden bikes get a visible rider (empty motorbikes look abandoned)
-    if (spec.bike && car.occupied === 'ai') {
-      var rider = buildBikeRider();
-      mesh.add(rider);
-      car.riderMesh = rider;
-    }
+    if (car.occupied === 'ai') seatOccupant(car);
     world.cars.push(car);
     return car;
   }
@@ -845,27 +842,117 @@ GAME.vehicles = (function () {
     }
   }
 
-  // Get the driver out from behind the wheel and leave the car standing. The
-  // same person every time — lastDriver remembers the face and the temper —
-  // so the man who got out to argue about a dent is the man who was driving.
-  function ejectDriver(car) {
-    if (!car || car.dead || car.occupied !== 'ai' || car.isPolice) return null;
-    var side = car.heading + Math.PI / 2;
-    var stepOut = car.spec.w / 2 + 1;      // clear of his own car's flank
-    var d = GAME.peds.spawnPed(car.pos.x + Math.sin(side) * stepOut, car.pos.z + Math.cos(side) * stepOut,
-      car.lastDriver ? { look: car.lastDriver } : undefined);
+  // ---------- whoever is aboard ----------
+  // An AI vehicle's driver is a flag on it, not a ped — on a bike, a figure
+  // riding the mesh as well — so nothing that acts on people can reach them
+  // until they are turned back into one. Everything that does that goes
+  // through occupantOut, whatever the vehicle and whoever is driving it.
+
+  // Somebody at the wheel, and drawn there if the seat is out in the open.
+  function seatOccupant(car, look) {
+    car.occupied = 'ai';
+    if (car.spec.bike && !car.riderMesh) {
+      car.riderMesh = buildBikeRider(look);
+      car.mesh.add(car.riderMesh);
+    }
+  }
+
+  // The one occupant a round, a fist or a blast reaches before the bodywork:
+  // a rider, sitting up in the line of fire with nothing around them.
+  function exposedRider(car) {
+    return !!car && !car.dead && car.occupied === 'ai' && !!car.riderMesh;
+  }
+  // where they sit (buildBikeRider puts the hips 0.35 m behind the middle)
+  function seatPos(car) {
+    return { x: car.pos.x - fwdX(car) * 0.35, z: car.pos.z - fwdZ(car) * 0.35 };
+  }
+  // clear of the vehicle's own flank
+  function besidePos(car) {
+    var side = car.heading + Math.PI / 2, step = car.spec.w / 2 + 1;
+    return { x: car.pos.x + Math.sin(side) * step, z: car.pos.z + Math.cos(side) * step };
+  }
+
+  // The occupant as a ped at `at`, and nobody left at the wheel. The same
+  // person every time — lastDriver remembers the face and the temper, and a
+  // rider is whoever was drawn on the seat — or an officer, out of a cruiser.
+  function occupantOut(car, at) {
+    var look = car.isPolice ? null : car.lastDriver || (car.riderMesh && car.riderMesh.userData.look) || null;
+    var d = GAME.peds.spawnPed(at.x, at.z, car.isPolice ? { cop: true } : look ? { look: look } : undefined);
     if (!d) return null;
-    if (car.lastDriver) d.temper = car.lastDriver.temper;
-    else car.lastDriver = { shirt: d.look.shirt, pants: d.look.pants, skin: d.look.skin,
-      hair: d.look.hair, hairCol: d.look.hairCol, temper: d.temper };
+    if (!car.isPolice) {
+      if (car.lastDriver) d.temper = car.lastDriver.temper;
+      else car.lastDriver = { shirt: d.look.shirt, pants: d.look.pants, skin: d.look.skin,
+        hair: d.look.hair, hairCol: d.look.hairCol, temper: d.temper };
+    }
     car.occupied = null;
     car.ai = null;
-    car.controls = { throttle: 0, steer: 0, handbrake: true };
-    car.speed = 0; car.lat = 0;
     if (car.riderMesh) { car.mesh.remove(car.riderMesh); disposeTree(car.riderMesh); car.riderMesh = null; }
-    // a flag, not the car: holding the car here kept a despawned car's whole
-    // object graph alive for as long as its old driver walked about
-    d.leftCar = true;
+    // which car, by its serial and not the car itself: holding the car here
+    // kept a despawned car's whole object graph alive for as long as its old
+    // driver walked about
+    d.leftCar = car.serial;
+    return d;
+  }
+
+  // Get the driver out from behind the wheel and leave the car standing, so
+  // the man who got out to argue about a dent is the man who was driving.
+  function ejectDriver(car) {
+    if (!car || car.dead || car.occupied !== 'ai' || car.isPolice) return null;
+    var d = occupantOut(car, besidePos(car));
+    if (!d) return null;
+    setControls(car.controls, 0, 0, true);
+    car.speed = 0; car.lat = 0;
+    return d;
+  }
+
+  // Knocked off by a round, a fist or a blast: they come off where they sat,
+  // and the machine runs on without them. Null when nobody is out in the open.
+  function throwRider(car) {
+    return exposedRider(car) ? occupantOut(car, seatPos(car)) : null;
+  }
+
+  // Rammed off. A rider sits on top of the machine with nothing around them,
+  // so a hit that only dents a car puts them on the road — over the same
+  // 4 m/s at which bodywork runs down anybody on foot. A real hit (10 m/s
+  // closing) kills and throws them clear the way a run-over does; anything
+  // less leaves them hurt in proportion, landed clear of what hit them, and
+  // back on their feet. `other` is whatever they were hit by, or hit.
+  var RIDER_KNOCK = 4, RIDER_KILL = 10;
+  function knockOffRider(bike, other, rel) {
+    var d = throwRider(bike);
+    if (!d) return;
+    var P = GAME.player, byPlayer = other === P.car && P.inCar;
+    var kx = bike.pos.x - other.pos.x, kz = bike.pos.z - other.pos.z;
+    var kl = Math.sqrt(kx * kx + kz * kz) || 1;
+    kx /= kl; kz /= kl;
+    if (byPlayer) GAME.police.reportCrime('hit_ped', d.pos);
+    if (rel >= RIDER_KILL) {
+      GAME.peds.kill(d, 'car', byPlayer);
+      var kf = Math.min(1, rel / 26);
+      d.knockX = kx * (4 + rel * 0.35);
+      d.knockZ = kz * (4 + rel * 0.35);
+      d.knockY = 2.2 + kf * 3.2;
+      d.knockSpin = (Math.random() < 0.5 ? -1 : 1) * (4 + kf * 7);
+      if (byPlayer) GAME.haptics.splat(kf);
+      return;
+    }
+    if (GAME.city.canWalkTo(d.pos.x, d.pos.z, d.pos.x + kx * 1.2, d.pos.z + kz * 1.2)) {
+      d.pos.x += kx * 1.2; d.pos.z += kz * 1.2;
+    }
+    // the player who did it may get a fight out of it; anyone else, a runner
+    GAME.peds.damage(d, rel * 3, byPlayer);
+    if (!byPlayer && !d.dead) GAME.peds.startFlee(d, other.pos.x, other.pos.z, 6);
+  }
+
+  // Nobody sits in a fire. Out and away from it before it goes up — an
+  // officer back to the chase on foot if there is one, otherwise off duty
+  // the way a stand-down releases them, and running like everybody else.
+  function bailOut(car) {
+    var d = occupantOut(car, besidePos(car));
+    if (!d) return null;
+    if (d.isCop && GAME.police.wanted > 0) { d.state = 'chase'; return d; }
+    if (d.isCop) { d.isCop = false; d.temper = 0; d.aimPose = false; }
+    GAME.peds.startFlee(d, car.pos.x, car.pos.z, 8);
     return d;
   }
 
@@ -922,6 +1009,12 @@ GAME.vehicles = (function () {
         b.pos.x += nx * overlap / 2; b.pos.z += nz * overlap / 2;
         var avx = a.vx || 0, avz = a.vz || 0, bvx = b.vx || 0, bvz = b.vz || 0;
         var rel = (avx - bvx) * nx + (avz - bvz) * nz;
+        // a rider takes the hit in person, whichever side of it they were on
+        // — before the damage below, which can blow the bike up under them
+        if (rel > RIDER_KNOCK) {
+          if (exposedRider(a)) knockOffRider(a, b, rel);
+          if (exposedRider(b)) knockOffRider(b, a, rel);
+        }
         if (rel > 3 && (a.hitCd || 0) <= 0 && (b.hitCd || 0) <= 0) {
           a.hitCd = 0.25; b.hitCd = 0.25;
           var dmg = Math.min(26, rel * 1.3);
@@ -1058,6 +1151,16 @@ GAME.vehicles = (function () {
       if (dd < 64 && dy < 7) GAME.playerDamage(Math.round(75 - Math.sqrt(dd) * 6.8), 'explosion');
     }
     if (p.car === car) GAME.playerDamage(200, 'explosion');
+    // Whoever was still aboard goes up with it. The driver was only a flag on
+    // the car, so a flag was all that died — which left a bike's rider sat on
+    // the burnt-out frame, alive and well. They come out as themselves, into
+    // the blast, like anybody standing there; and a rider going past is out
+    // in the open the same as they are. An airframe's crew comes down with it.
+    var crew = car.occupied === 'ai' && !car.spec.heli && !car.spec.plane ? occupantOut(car, besidePos(car)) : null;
+    if (car.occupied === 'ai') car.occupied = null;
+    world.cars.forEach(function (c2) {
+      if (c2 !== car && U.dist2(c2.pos.x, c2.pos.z, car.pos.x, car.pos.z) < 55) throwRider(c2);
+    });
     world.peds.forEach(function (ped) {
       if (!ped.dead && U.dist2(ped.pos.x, ped.pos.z, car.pos.x, car.pos.z) < 55) GAME.peds.kill(ped, 'explosion', byPlayer);
     });
@@ -1076,8 +1179,8 @@ GAME.vehicles = (function () {
     world.cars.forEach(function (c2) {
       if (c2 !== car && !c2.dead && U.dist2(c2.pos.x, c2.pos.z, car.pos.x, car.pos.z) < 60) damageCar(c2, 40, 'explosion', byPlayer);
     });
-    if (car.isPolice && byPlayer) GAME.police.reportCrime('kill_cop', car.pos);
-    if (car.occupied === 'ai') car.occupied = null;
+    // a crew's officer reported their own death when the blast killed them
+    if (car.isPolice && byPlayer && !crew) GAME.police.reportCrime('kill_cop', car.pos);
     GAME.missions.notifyChaos(500);
   }
 
@@ -1409,6 +1512,19 @@ GAME.vehicles = (function () {
         if (car.mesh.userData.prop) car.mesh.userData.prop.rotation.z += (powered ? 40 : car.rotorSpin) * dt;
         continue;
       }
+      // A driver whose ride has caught stands on the brakes and gets out,
+      // whatever it is and whoever they are — traffic, a cruiser's crew, a
+      // rival mid-race — rather than sitting there until the fuse runs out.
+      // A second and a bit at most, out of the five and a half they have.
+      if (car.stage >= 2 && car.occupied === 'ai') {
+        car.bailT = (car.bailT || 0) + dt;
+        // (throttle against the roll is the brake; held at a standstill it
+        // would be reverse)
+        setControls(car.controls, car.speed > 1 ? -1 : car.speed < -1 ? 1 : 0, 0, false);
+        stepPhysics(car, dt);
+        if (Math.abs(car.speed) < 1.5 || car.bailT > 1.2) bailOut(car);
+        continue;
+      }
       if (car === P.car && P.inCar) {
         // controls set by player.js
         stepPhysics(car, dt);
@@ -1447,6 +1563,10 @@ GAME.vehicles = (function () {
     spawnCar: spawnCar,
     removeCar: removeCar,
     ejectDriver: ejectDriver,
+    seatOccupant: seatOccupant,
+    exposedRider: exposedRider,
+    seatPos: seatPos,
+    throwRider: throwRider,
     update: update,
     damageCar: damageCar,
     explodeCar: explodeCar,
