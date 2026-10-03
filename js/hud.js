@@ -820,7 +820,7 @@ GAME.hud = (function () {
     }
     var h = '<b>' + K('KeyW') + K('KeyA') + K('KeyS') + K('KeyD') + '</b> move / drive &nbsp;·&nbsp; <b>Mouse</b> camera &nbsp;·&nbsp; <b>RMB / ' + K('Tab') + '</b> aim lock-on &nbsp;·&nbsp; <b>LMB</b> fire<br>' +
       '<b>' + K('KeyQ') + ' / ' + K('KeyE') + '</b> cycle target · drive-by · plane roll &nbsp;·&nbsp; <b>' + K('Space') + '</b> jump · climb / handbrake &nbsp;·&nbsp; <b>' + K('KeyF') + '</b> enter / exit car &nbsp;·&nbsp; <b>' + K('ShiftLeft') + '</b> sprint<br>' +
-      '<b>1–5</b> weapons &nbsp;·&nbsp; <b>' + K('Comma') + ' / ' + K('Period') + '</b> radio &nbsp;·&nbsp; <b>' + K('KeyG') + '</b> horn / siren &nbsp;·&nbsp; <b>' + K('KeyJ') + '</b> job &nbsp;·&nbsp; <b>' + K('KeyX') + '</b> abandon mission &nbsp;·&nbsp; <b>' + K('KeyC') + '</b> photo &nbsp;·&nbsp; <b>' + K('KeyL') + '</b> Lola &nbsp;·&nbsp; <b>' + K('KeyP') + '</b> map &nbsp;·&nbsp; <b>' + K('KeyM') + '</b> mute &nbsp;·&nbsp; <b>' + K('KeyH') + '</b> hide help &nbsp;·&nbsp; <b>Esc</b> pause';
+      '<b>1–5</b> weapons &nbsp;·&nbsp; <b>' + K('Comma') + ' / ' + K('Period') + '</b> radio &nbsp;·&nbsp; <b>' + K('KeyG') + '</b> horn / siren &nbsp;·&nbsp; <b>' + K('KeyJ') + '</b> job &nbsp;·&nbsp; <b>' + K('KeyX') + '</b> abandon mission &nbsp;·&nbsp; <b>' + K('KeyC') + '</b> photo · <b>' + K('KeyV') + '</b> see it &nbsp;·&nbsp; <b>' + K('KeyL') + '</b> Lola &nbsp;·&nbsp; <b>' + K('KeyP') + '</b> map &nbsp;·&nbsp; <b>' + K('KeyM') + '</b> mute &nbsp;·&nbsp; <b>' + K('KeyH') + '</b> hide help &nbsp;·&nbsp; <b>Esc</b> pause';
     var card = document.getElementById('controls-card');
     if (card) card.innerHTML = h;
     if (el['pause-controls']) el['pause-controls'].innerHTML = h;

@@ -14,6 +14,8 @@ GAME.photo = (function () {
   var MAX = 36, MAX_W = 1920, MAX_W_TOUCH = 1440;
   var album = [];              // { id, t, name, blob, url, thumb }
   var pending = false, toastT = 0, albumOpen = false, nextId = 1;
+  var toastShot = null;        // the shot on the print that slid in
+  var viewing = null, viewPaused = false;   // the one open at full size
   var el = {};
   function $(id) { return document.getElementById(id); }
   function prefs() { GAME.prefs = GAME.prefs || {}; return GAME.prefs; }
@@ -113,6 +115,7 @@ GAME.photo = (function () {
     if (albumOpen) renderAlbum();
   }
   function forget(shot) {
+    if (viewing === shot) closeView();
     var i = album.indexOf(shot);
     if (i >= 0) album.splice(i, 1);
     if (shot.url) URL.revokeObjectURL(shot.url);
@@ -174,11 +177,59 @@ GAME.photo = (function () {
   // ---------- on screen ----------
   function toast(shot) {
     if (!el.toast) return;
+    toastShot = shot;
     el.toastImg.src = shot.thumb;
-    var where = GAME.isTouch ? 'PAUSE → PHOTOS' : 'Esc → PHOTOS';
-    el.toastText.textContent = prefs().photoAuto ? 'Saved to your downloads' : 'In your album · ' + where;
+    // how to see it full size: tap the print; on a keyboard the mouse is
+    // aiming, so a key; on a pad, the album
+    var pad = GAME.controls && GAME.controls.usingPad && GAME.controls.usingPad();
+    var see = GAME.isTouch ? 'Tap to view' : pad ? 'START → PHOTOS' : (GAME.controls ? GAME.controls.label('KeyV') : 'V') + ' to view';
+    el.toastText.textContent = (prefs().photoAuto ? 'Saved to your downloads' : 'In your album') + ' · ' + see;
     el.toast.classList.add('on');
     toastT = 3.2;
+  }
+
+  // ---------- one at full size ----------
+  // The print that slides in and every photo in the album open here: the
+  // whole frame as it was taken, DOWNLOAD, and the rest of the album either
+  // side. Opened from play it pauses the world, and closing it carries on.
+  function openView(shot) {
+    if (!shot || !el.view) return false;
+    if (GAME.started && !GAME.paused) { GAME.togglePause(); viewPaused = true; }
+    viewing = shot;
+    paintView();
+    el.view.style.display = 'flex';
+    if (el.toast) el.toast.classList.remove('on');
+    toastT = 0;
+    if (GAME.track) GAME.track('photo-viewed');
+    return true;
+  }
+  function closeView() {
+    if (!viewing) return;
+    viewing = null;
+    el.view.style.display = 'none';
+    el.viewImg.removeAttribute('src');   // the full-size decode goes with it
+    if (viewPaused) {
+      viewPaused = false;
+      if (GAME.paused && !albumOpen) GAME.togglePause();
+    }
+    if (albumOpen) paintFocus();
+  }
+  // the album runs newest first, so "next" is the older one
+  function stepView(dir) {
+    var i = album.indexOf(viewing), j = i - dir;
+    if (i < 0 || j < 0 || j >= album.length) return;
+    viewing = album[j];
+    paintView();
+    if (albumOpen) { focus = album.length - 1 - j; paintFocus(); }
+  }
+  function paintView() {
+    var i = album.indexOf(viewing), n = album.length;
+    el.viewImg.src = viewing.url || viewing.thumb;
+    el.viewImg.alt = viewing.name;
+    var d = new Date(viewing.t);
+    el.viewName.textContent = viewing.name + '  ·  ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + (i >= 0 ? '  ·  ' + (n - i) + ' of ' + n : '');
+    el.viewPrev.style.visibility = i >= 0 && i < n - 1 ? '' : 'hidden';
+    el.viewNext.style.visibility = i > 0 ? '' : 'hidden';
   }
   function paintButton() {
     if (el.btn) el.btn.textContent = '📷 PHOTOS' + (album.length ? ' (' + album.length + ')' : '');
@@ -205,6 +256,9 @@ GAME.photo = (function () {
       del.className = 'mbtn ph-del'; del.textContent = '✕';
       tap(save, function () { download(shot); });
       tap(del, function () { forget(shot); renderAlbum(); paintButton(); });
+      // the photo itself opens it full size (a click only: a touchend here
+      // would also be the end of a swipe scrolling the album)
+      card.addEventListener('click', function (e) { e.preventDefault(); openView(shot); });
       card.appendChild(im); card.appendChild(when); card.appendChild(save); card.appendChild(del);
       el.grid.appendChild(card);
     })(album[i]);
@@ -228,7 +282,9 @@ GAME.photo = (function () {
   }
   // keys while the album is up — the keyboard and a pad's d-pad and A/B
   // (controls.js maps them onto these): the arrows walk the photos, newest
-  // first, Enter saves the lit one, Esc puts the album away
+  // first, Enter opens the lit one full size, Esc puts the album away. With
+  // one open full size: the arrows walk the album, Enter downloads it, Esc
+  // closes it.
   var focus = 0;
   function paintFocus() {
     var cards = el.grid ? el.grid.children : [];
@@ -237,12 +293,19 @@ GAME.photo = (function () {
     for (var i = 0; i < cards.length; i++) cards[i].classList.toggle('kfocus', i === focus);
   }
   function key(code) {
+    if (viewing) {
+      if (code === 'Escape' || code === 'Backspace') closeView();
+      else if (code === 'Enter' || code === 'Space') download(viewing);
+      else if (code === 'ArrowRight' || code === 'ArrowDown') stepView(1);
+      else if (code === 'ArrowLeft' || code === 'ArrowUp') stepView(-1);
+      return true;
+    }
     if (!albumOpen) return false;
     if (code === 'Escape') { closeAlbum(); return true; }
     var n = album.length;
     if (code === 'ArrowRight' || code === 'ArrowDown') focus++;
     else if (code === 'ArrowLeft' || code === 'ArrowUp') focus--;
-    else if ((code === 'Enter' || code === 'Space') && n) download(album[n - 1 - Math.max(0, Math.min(n - 1, focus))]);
+    else if ((code === 'Enter' || code === 'Space') && n) { openView(album[n - 1 - Math.max(0, Math.min(n - 1, focus))]); return true; }
     paintFocus();
     return true;
   }
@@ -258,6 +321,19 @@ GAME.photo = (function () {
     if (all) tap(all, function () { album.forEach(function (s, i) { setTimeout(function () { download(s); }, i * 250); }); });
     var close = $('photo-close');
     if (close) tap(close, closeAlbum);
+    el.view = $('photo-view'); el.viewImg = $('photo-view-img'); el.viewName = $('photo-view-name');
+    el.viewPrev = $('photo-view-prev'); el.viewNext = $('photo-view-next');
+    if (el.view) {
+      tap($('photo-view-save'), function () { if (viewing) download(viewing); });
+      tap($('photo-view-close'), closeView);
+      tap(el.viewPrev, function () { stepView(-1); });
+      tap(el.viewNext, function () { stepView(1); });
+      // the dark around the photo closes it, as it does on any lightbox
+      el.view.addEventListener('click', function (e) { if (e.target === el.view) closeView(); });
+    }
+    // the print that slid in: tap or click it to see the photo full size
+    // (only while it is out: hidden, it takes no clicks — see #photo-toast)
+    if (el.toast) el.toast.addEventListener('click', function (e) { e.preventDefault(); if (toastShot) openView(toastShot); });
     paintButton();
     restore();
   }
@@ -267,6 +343,9 @@ GAME.photo = (function () {
       if (GAME.input.touch) GAME.input.touch.photo = false;
       snap();
     }
+    // V: the last photo, full size (the print can't be clicked while the
+    // mouse is aiming)
+    if (GAME.keyPressed('KeyV') && album.length) openView(album[album.length - 1]);
     if (toastT > 0) {
       toastT -= dt;
       if (toastT <= 0 && el.toast) el.toast.classList.remove('on');
@@ -276,7 +355,9 @@ GAME.photo = (function () {
   return {
     init: init, update: update, snap: snap, capture: capture, key: key,
     open: openAlbum, close: closeAlbum, download: download,
+    view: openView, closeView: closeView,
     get albumOpen() { return albumOpen; },
+    get viewing() { return viewing; },
     get count() { return album.length; },
     get pending() { return pending; },
     // headless: the shots themselves; and the album dropped from memory and

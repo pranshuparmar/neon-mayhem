@@ -96,8 +96,35 @@ GAME.derby = (function () {
     return !!(room && room.kind === 'casino');
   }
 
+  // With money down you watch your race from the terminal: held where you
+  // stand (player.js) from the bet until the result is in and read, your
+  // own set up top showing it. You could walk off mid-race — out of the
+  // door, to the bar, into another menu — and leave it running for nobody.
+  // Space, Enter (A on a pad) or JUMP on a touchscreen skips ahead: the
+  // race in front of yours, the count to the off, the running itself.
+  var AFTER = 2.5, afterT = 0, skipLatch = true, wasHeld = false;
+  function holding() { return here() && GAME.player.state === 'alive' && !GAME.player.inCar && (!!mine || afterT > 0); }
+  function skipAhead() {
+    if (state === 'board') { if (mine) off(); return; }
+    if (state === 'running') {
+      var last = 0;
+      for (var i = 0; i < order.length; i++) last = Math.max(last, order[i].fin);
+      clock = Math.max(clock, last + 0.8);      // over the line: the next tick has the result
+      return;
+    }
+    clock = RESULT_HOLD;                         // on to the next race's board
+  }
+  function holdHint() {
+    var key = GAME.isTouch ? 'JUMP' : GAME.controls ? GAME.controls.label('Space') : 'Space';
+    if (!mine) return 'THE RESULT IS IN';
+    var now = mine.race === field.no;
+    return (now ? (state === 'board' ? 'YOUR RACE IS OFF IN A MOMENT' : 'YOUR RACE IS ON') : 'YOUR RACE IS NEXT') +
+      ' — ' + key + ' skips ahead';
+  }
+
   function settle() {
     if (!mine || mine.race !== field.no) return;
+    if (here()) afterT = AFTER;
     var bet = mine; mine = null;
     var win = order[0];
     var horse = field.runners[bet.n - 1];
@@ -123,6 +150,15 @@ GAME.derby = (function () {
     // with nobody in the room and nothing riding on it, nothing runs
     if (!watching && !mine) { showTv(false); return; }
     clock += dt; saidT += dt;
+    if (afterT > 0) afterT -= dt;
+    var held = holding();
+    if (held && !wasHeld && GAME.interiors.faceScreen) GAME.interiors.faceScreen();
+    wasHeld = held;
+    if (held) {
+      var T = GAME.input.touch, tap = !!T.jump && !skipLatch;
+      skipLatch = !!T.jump;
+      if ((GAME.keyPressed('Space') || GAME.keyPressed('Enter') || tap) && mine) skipAhead();
+    } else skipLatch = true;
     if (state === 'board') {
       var wait = mine ? BOARD_BET : BOARD_IDLE;
       if (clock >= wait) off();
@@ -378,6 +414,9 @@ GAME.derby = (function () {
     get bet() { return mine; },
     get stake() { return stake; },
     get busy() { return !!mine; },
+    // you are at the terminal watching your race (player.js holds you still)
+    get holding() { return holding(); },
+    holdHint: holdHint,
     get cheering() { return state === 'running' && here(); },
     // headless
     field: function () { return upcoming(); },

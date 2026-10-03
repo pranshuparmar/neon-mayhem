@@ -46,7 +46,9 @@ GAME.weather = (function () {
   function stepDrops(dt) {
     var cam = GAME.cameraObj;
     if (!lines || !cam) return;
-    lines.visible = rain > 0.02 && !GAME.player.interior;   // not indoors
+    // not indoors, nor under the showroom's roof
+    var dry = GAME.interiors && GAME.interiors.sheltered ? GAME.interiors.sheltered() : !!GAME.player.interior;
+    lines.visible = rain > 0.02 && !dry;
     if (!lines.visible) return;
     var cx = cam.position.x, cy = cam.position.y, cz = cam.position.z;
     var shown = Math.floor(N * Math.min(1, rain * 1.3) * (GAME.qualityCrowd ? Math.max(0.5, GAME.qualityCrowd()) : 1));
@@ -112,7 +114,7 @@ GAME.weather = (function () {
     if (flash < 0.01) flash = 0;
     stepDrops(dt);
     // (muffled to a patter on the roof indoors)
-    if (GAME.audio.rain) GAME.audio.rain(GAME.player.interior ? rain * 0.25 : rain);
+    if (GAME.audio.rain) GAME.audio.rain(GAME.interiors && GAME.interiors.sheltered && GAME.interiors.sheltered() ? rain * 0.25 : rain);
     // the lighting reads rain and flash (main.js applyTimeOfDay); it is only
     // re-run by the clock in AUTO time, so run it here while either is live
     if (rain > 0 || flash > 0 || was !== rain || lastApplied > 0) {

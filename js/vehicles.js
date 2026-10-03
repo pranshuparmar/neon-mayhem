@@ -704,7 +704,9 @@ GAME.vehicles = (function () {
           // it — the landing is a rooftop, and the rooftop is only so deep
           car.capPing = true;
           car.boostT = 0;
-          meterTo(car, ramp, car.speed < ramp.cap ? 80 : 0, dt);
+          // (an island booster only ever hauls you UP to its pace: arriving
+          // quicker, you keep what you brought)
+          if (!(ramp.capUp && car.speed >= ramp.cap)) meterTo(car, ramp, car.speed < ramp.cap ? 80 : 0, dt);
         } else {
           car.boostT = BOOST_TAIL;
           car.speed = Math.max(car.speed, 12);   // a standing start still gets launched

@@ -34,6 +34,8 @@ GAME.interiors = (function () {
   // business at the counter, walk out. One template per trade; each shop in
   // the world gets its own room from it at build time (shops.js has the
   // list), so both hardware stores and every station's desk have one.
+  // Gran Rosa Motors has none: its glass hall is walked into where it stands
+  // (shops.js builds it; the halls below keep the camera under its roof).
   var SHOP_ROOMS = {
     hardware: { w: 12, d: 10, h: 3.4, floor: 0x45464c, wall: 0x7a7a62, trim: 0x2a2a22, accent: 0xffd24a,
       hello: ' — guns on the wall, the counter at the back.' },
@@ -41,8 +43,6 @@ GAME.interiors = (function () {
       hello: ' — the racks are on the walls, the mirror at the back.' },
     barber: { w: 10, d: 9, h: 3.2, floor: 0xeeeeee, wall: 0xdcecf4, trim: 0x3a6a8a, accent: 0x8fd0ff,
       hello: ' — take the empty chair.' },
-    showroom: { w: 22, d: 16, h: 5.5, floor: 0xd4d8e4, wall: 0x2e3346, trim: 0x8dffd8, accent: 0x8dffd8,
-      hello: ' — the sales desk is at the back. What you buy waits for you outside.' },
     bribe: { w: 12, d: 10, h: 3.6, floor: 0x5c6272, wall: 0xb4bccc, trim: 0x22305a, accent: 0x4da3ff,
       hello: ' — the sergeant is at the desk.' }
   };
@@ -464,6 +464,7 @@ GAME.interiors = (function () {
     var bigZ = oz - d / 2 + 8;
     box(b, ox + w / 2 - 0.08, 3.75, bigZ, 0.12, 3.5, 6.8, 0x101018);
     screen(ox + w / 2 - 0.16, 3.75, bigZ, 6.4, 3.2);
+    room.screen = { x: ox + w / 2 - 0.16, y: 3.75, z: bigZ };
     glow(ox + w / 2 - 0.12, 2.0, bigZ, 0.06, 0.08, 6.8, 0x6fe08a);
     // the free terminal in the middle is yours
     ring(room, ox + w / 2 - 1.8, oz - d / 2 + 9, 0x6fe08a, 'GULL DOWNS — step up to bet on the horses', function () {
@@ -492,7 +493,7 @@ GAME.interiors = (function () {
   }
   function furnishShop(b, room) {
     var ox = room.ox, oz = room.oz, w = room.w, d = room.d, h = room.h, back = oz + d / 2;
-    var fn = { hardware: furnishHardware, dress: furnishThreads, barber: furnishBarber, showroom: furnishShowroom, bribe: furnishDesk }[room.shop];
+    var fn = { hardware: furnishHardware, dress: furnishThreads, barber: furnishBarber, bribe: furnishDesk }[room.shop];
     if (fn) fn(b, room, ox, oz, w, d, h, back);
     // a strip light or two across the ceiling, whatever the trade
     glow(ox, h - 0.08, oz, Math.min(6, w * 0.4), 0.06, 0.4, 0xfff2dc);
@@ -591,28 +592,6 @@ GAME.interiors = (function () {
     solid(ox - w / 2 + 0.6, oz - 0.5, 0.7, 3.0, 0.5);
     counterRing(room, ox + 2, back - 2.7, 'THE CHAIR — sit down for a cut');
   }
-  function furnishShowroom(b, room, ox, oz, w, d, h, back) {
-    // two of the stock under the lights, on turntables
-    [['sports', -4.5], ['superbike', 4.5]].forEach(function (c, k) {
-      var x = ox + c[1], z = oz - 0.5;
-      box(b, x, 0.04, z, 5.6, 0.08, 5.6, 0x3a3e4e);
-      var m = GAME.vehicles.buildMesh(c[0]);
-      if (m) {
-        m.traverse(function (o) {
-          if (o.isMesh && o.material) o.material = new THREE.MeshBasicMaterial({ color: o.material.color ? o.material.color.clone() : 0xffffff, vertexColors: !!o.material.vertexColors });
-        });
-        m.position.set(x, 0.08, z);
-        GAME.scene.add(m);
-        room.anim.push({ turntable: m, rate: k ? -0.25 : 0.25 });
-      }
-      solid(x, z, 4.6, 4.6, 1.4);
-      glow(x, h - 0.1, z, 1.4, 0.08, 1.4, 0xf4f8ff);
-    });
-    counter(b, room, ox, back, 4, 0x8dffd8, 0x2a2e3a, { look: { shirt: 0xf4f4f8, pants: 0x2a2a34, skin: 0xc89870, hair: 'slick', hairCol: 0x2a1a10 } },
-      'THE SALES DESK — step up to browse');
-    // the name in lights across the back
-    glow(ox, h - 1.0, back - 0.06, 8, 0.5, 0.04, 0x8dffd8);
-  }
   function furnishDesk(b, room, ox, oz, w, d, h, back) {
     counter(b, room, ox, back, 5, 0x22305a, 0x3a4a6a, { cop: true }, 'THE DESK — a word with the sergeant');
     // the badge on the wall behind him, and a WANTED board
@@ -690,9 +669,50 @@ GAME.interiors = (function () {
       lift.push({ id: s[0], at: at, to: L[s[1]], toId: s[1], mesh: m, label: s[2], armed: true });
     });
   }
+  // ---- its doors ----
+  // Each stop's doors, the car's and the landing's together, open while the
+  // car waits there and somebody is at the door, and shut for the ride: walk
+  // up and they part, step in and they close, and at the other end they open
+  // onto the street or the roof and close behind you as you walk off. Walk
+  // up to a stop the car is not at and it comes to you, down (or up) the
+  // glass. It used to be a box with no doors that you were inside of.
+  var DOOR_NEAR = 4.5, DOOR_TIME = 0.7, CALL_NEAR = 10, CALL_SPEED = 14;
+  var doorOpen = { street: 0, roof: 0 };
+  function stopY(id) { var L = GAME.city.towerLift; return id === 'roof' ? L.shaft.top : 0.02; }
+  function cabAt(id) { return Math.abs(GAME.city.towerLift.cab.position.y - stopY(id)) < 0.05; }
+  function moveDoor(id, want, dt) {
+    var D = GAME.city.towerLift.doors && GAME.city.towerLift.doors[id];
+    var v = U.clamp(doorOpen[id] + U.clamp(want - doorOpen[id], -dt / DOOR_TIME, dt / DOOR_TIME), 0, 1);
+    if (!D || (v === doorOpen[id] && D.placed)) return;
+    doorOpen[id] = v; D.placed = true;
+    var e = v * v * (3 - 2 * v);
+    D.cab.m.position.x = D.cab.x0 + (D.cab.x1 - D.cab.x0) * e;
+    D.landing.m.position.x = D.landing.x0 + (D.landing.x1 - D.landing.x0) * e;
+  }
+  function stepDoors(dt) {
+    var P = GAME.player, L = GAME.city.towerLift, called = null;
+    for (var k = 0; k < lift.length; k++) {
+      var s = lift[k], want = 0;
+      var near = P.state === 'alive' && Math.abs(P.pos.y - s.at.y) < 2.5 ? U.dist2(P.pos.x, P.pos.z, s.at.x, s.at.z) : 1e9;
+      if (ridingNow) {
+        // shut behind you as you set off; open on arrival, the car stopped
+        if (s.id === ridingNow.s.toId && ridingNow.t >= LIFT_RIDE - LIFT_DOORS) want = 1;
+      } else if (cabAt(s.id)) {
+        if (near < DOOR_NEAR * DOOR_NEAR) want = 1;
+      } else if (near < CALL_NEAR * CALL_NEAR) called = s.id;
+      moveDoor(s.id, want, dt);
+    }
+    // the car answers a call once the doors it is behind have shut
+    if (called && !ridingNow && doorOpen.street + doorOpen.roof === 0) {
+      var y = L.cab.position.y, ty = stopY(called), dy = ty - y;
+      var v = Math.min(CALL_SPEED, 1.5 + Math.abs(dy) * 1.5) * dt;
+      L.cab.position.y = Math.abs(dy) <= v ? ty : y + Math.sign(dy) * v;
+    }
+  }
   function stepLift(dt) {
     var P = GAME.player;
     if (!lift) return;
+    stepDoors(dt || 1 / 60);
     if (ridingNow) { stepRide(dt || 1 / 60); return; }
     for (var i = 0; i < lift.length; i++) lift[i].mesh.material.opacity = 0.5 + 0.25 * Math.sin(GAME.time * 3 + i);
     if (P.state !== 'alive' || P.inCar || P.swimming || P.parachuting || P.mantle) return;
@@ -737,7 +757,14 @@ GAME.interiors = (function () {
     // (kept between the car's front posts: swung further, a post stood
     // down the middle of the picture)
     var yaw = R.yaw0 * 0.34 * Math.sin(Math.min(1, R.t / LIFT_RIDE) * Math.PI * 0.9);
-    var pitch = -0.04 + 0.24 * Math.sin(k * Math.PI * 0.85) + 0.06 * k;
+    // facing the doors as they shut and as they open — the street door looks
+    // out the way the ride does, the roof door is behind it — turning to the
+    // view once under way, and back to the door coming in to the roof
+    var turnOut = R.s.id === 'roof' ? 1 - U.clamp((R.t - LIFT_DOORS) / 1.2, 0, 1) : 0;
+    var turnIn = R.s.toId === 'roof' ? U.clamp((R.t - (LIFT_RIDE - LIFT_DOORS - 1.2)) / 1.2, 0, 1) : 0;
+    var turn = Math.max(turnOut, turnIn);
+    yaw = yaw * (1 - turn) + R.yaw0 * Math.PI * (turn * turn * (3 - 2 * turn));
+    var pitch = (-0.04 + 0.24 * Math.sin(k * Math.PI * 0.85) + 0.06 * k) * (1 - turn);
     var ex = L.shaft.x - Math.sin(yaw) * 0.55, ez = L.shaft.z - Math.cos(yaw) * 0.55, ey = y + 1.62 + Math.sin(R.t * 1.7) * 0.01;
     var cam = GAME.cameraObj;
     cam.position.set(ex, ey, ez);
@@ -869,6 +896,8 @@ GAME.interiors = (function () {
       if (d2 < 16 && d2 < hd) { hd = d2; hint = r.label; }
       if (r.armed && d2 < 1.0 && !GAME.shopOpen) { r.armed = false; r.act(); return; }
     }
+    // watching your race at Gull Downs, what the screen says is the hint
+    if (GAME.derby && GAME.derby.holding) hint = GAME.derby.holdHint();
     GAME.hud.setPoiHint(hint);
     var t = GAME.time;
     for (var a = 0; a < room.anim.length; a++) {
@@ -902,19 +931,64 @@ GAME.interiors = (function () {
   // the floor you stand on.
   function onUpper(room) { return room.slab && GAME.player.pos.y >= room.slab.y - 1.0; }
   function ceiling(x, z) {
-    if (!cur) return null;
+    if (!cur) return hallCeiling(x, z);
     var room = cur.room, sl = room.slab;
     if (sl && !onUpper(room) && (GAME.player.pos.z > sl.minZ - 0.6 || z === undefined || z > sl.minZ - 0.6)) return sl.under - 0.3;
     return room.h - 0.3;
   }
   function camFloor(x, z) {
-    if (!cur || !onUpper(cur.room)) return null;
+    if (!cur) return hallFloor(x, z);
+    if (!onUpper(cur.room)) return null;
     var sl = cur.room.slab;
     return x > sl.minX && x < sl.maxX && z > sl.minZ - 0.3 && z < sl.maxZ ? sl.y + 0.45 : null;
   }
 
+  // ---------- halls ----------
+  // A building walked into where it stands, with no fade and no room out in
+  // the fog: the Gran Rosa Motors hall (shops.js builds it). Through its
+  // glass is the street, because it IS the street. All that is minded here
+  // is the roof: under it, the camera stays below the ceiling and the rain
+  // stays out; up on it, the camera stays above it.
+  // { minX, maxX, minZ, maxZ, under: the ceiling, roof: the top you stand on }
+  var halls = [];
+  function hallOf(x, z) {
+    for (var i = 0; i < halls.length; i++) {
+      var h = halls[i];
+      if (x > h.minX && x < h.maxX && z > h.minZ && z < h.maxZ) return h;
+    }
+    return null;
+  }
+  // under its roof: on the floor, or low enough on the stairs that the
+  // ceiling is still over your head
+  function underHall() {
+    var P = GAME.player, h = halls.length ? hallOf(P.pos.x, P.pos.z) : null;
+    return h && P.pos.y < h.under - 1.0 ? h : null;
+  }
+  function hallCeiling(x, z) {
+    var h = underHall();
+    if (!h || (x !== undefined && (x <= h.minX || x >= h.maxX || z <= h.minZ || z >= h.maxZ))) return null;
+    return h.under - 0.3;
+  }
+  function hallFloor(x, z) {
+    var P = GAME.player, h = halls.length ? hallOf(P.pos.x, P.pos.z) : null;
+    if (!h || P.pos.y < h.roof - 0.5 || hallOf(x, z) !== h) return null;
+    return h.roof + 0.45;
+  }
+
   return {
     build: build, update: update, enter: enter, enterable: enterable, reset: reset, ceiling: ceiling, camFloor: camFloor,
+    addHall: function (h) { halls.push(h); return h; },
+    // turn to the casino's big screen, for a race you have money on (derby.js)
+    faceScreen: function () {
+      var sc = cur && cur.room.screen, P = GAME.player;
+      if (!sc) return;
+      P.heading = Math.atan2(sc.x - P.pos.x, sc.z - P.pos.z);
+      P.moveSpeed = 0;
+      GAME.cam.yaw = P.heading; GAME.cam.pitch = 0.08;
+    },
+    // under a roof, indoors or in a hall: no rain falls here
+    sheltered: function () { return !!GAME.player.interior || !!underHall(); },
+    hall: function () { return hallOf(GAME.player.pos.x, GAME.player.pos.z); },
     get current() { return cur ? cur.room : null; },
     get door() { return cur ? cur.door : null; },
     get busy() { return !!pending || !!ridingNow; },
@@ -922,6 +996,7 @@ GAME.interiors = (function () {
     leave: exitRoom,
     // headless: the two lift stops
     lift: function () { return lift; },
+    liftDoors: function () { return doorOpen; },
     rooms: function () { return ROOMS; },
     bar: BAR
   };

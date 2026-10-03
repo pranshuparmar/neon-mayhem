@@ -222,7 +222,7 @@ GAME.city = (function () {
       // (an island ramp may sit on a gentle grade: its foot at `base`, the
       // ground under its lip at `base1`, and the deck rising on top of that)
       var b0 = r.base || 0, b1 = r.base1 !== undefined ? r.base1 : b0;
-      return { idx: r.idx, y: b0 + (b1 - b0 + r.h) * t, t: t, slope: (r.h + b1 - b0) / r.len, rot: r.rot, boost: r.boost, cap: r.cap };
+      return { idx: r.idx, y: b0 + (b1 - b0 + r.h) * t, t: t, slope: (r.h + b1 - b0) / r.len, rot: r.rot, boost: r.boost, cap: r.cap, capUp: r.capUp };
     }
     return null;
   };
@@ -1331,27 +1331,71 @@ GAME.city = (function () {
     glass.position.set(SHX, shTop / 2, SHZ);
     city.scene.add(glass);
     addSolid(SHX, SHZ, SHW, SHW, shTop);
-    // the car itself: glass on three sides and the door, a floor, a lit roof
+    // the car itself: glass east and west, a floor, a lit roof, and a door
+    // at each end — the street end opens at the lobby, the tower end at the
+    // roof. Each is half fixed glass and half a framed leaf that slides
+    // across behind it (interiors.js works them, with the landing doors in
+    // the shaft below, as you come and go).
     var cab = new THREE.Group(), CW = SHW - 0.35;
-    function cabPart(w, h, d, x, y, z, mat) { var m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); cab.add(m); }
-    var steel = new THREE.MeshBasicMaterial({ color: 0x9aa4c4 });
+    function cabPart(w, h, d, x, y, z, mat, into) { var m = new THREE.Mesh(sharedBoxGeo(w, h, d), mat); m.position.set(x, y, z); (into || cab).add(m); return m; }
+    var steel = sharedBasic(0x9aa4c4);
     var pane = new THREE.MeshBasicMaterial({ color: 0xbfe8ff, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
-    cabPart(CW, 0.12, CW, 0, 0.06, 0, new THREE.MeshBasicMaterial({ color: 0x6a7288 }));
+    // a sliding leaf: glass in a steel frame, a kick plate, and a lit edge
+    // where it meets the fixed half — glass alone would slide unseen
+    function leaf(w, h) {
+      var g = new THREE.Group();
+      cabPart(w, h, 0.02, 0, 0, 0, pane, g);
+      cabPart(0.07, h, 0.05, -w / 2, 0, 0, steel, g);
+      cabPart(0.07, h, 0.05, w / 2, 0, 0, steel, g);
+      cabPart(w, 0.07, 0.05, 0, h / 2, 0, steel, g);
+      cabPart(w, 0.26, 0.04, 0, -h / 2 + 0.13, 0, steel, g);
+      cabPart(0.03, h - 0.4, 0.06, -w / 2 + 0.06, 0, 0, sharedBasic(0x8fb4ff), g);
+      return g;
+    }
+    cabPart(CW, 0.12, CW, 0, 0.06, 0, sharedBasic(0x6a7288));
     cabPart(CW, 0.1, CW, 0, 2.75, 0, steel);
-    cabPart(CW - 0.6, 0.04, CW - 0.6, 0, 2.69, 0, new THREE.MeshBasicMaterial({ color: 0xfff2dc }));
+    cabPart(CW - 0.6, 0.04, CW - 0.6, 0, 2.69, 0, sharedBasic(0xfff2dc));
     [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (c) { cabPart(0.09, 2.7, 0.09, c[0] * CW / 2, 1.4, c[1] * CW / 2, steel); });
-    cabPart(CW, 2.6, 0.02, 0, 1.4, CW / 2, pane);
     cabPart(0.02, 2.6, CW, -CW / 2, 1.4, 0, pane);
     cabPart(0.02, 2.6, CW, CW / 2, 1.4, 0, pane);
-    cabPart(CW, 2.6, 0.02, 0, 1.4, -CW / 2, pane);
-    cabPart(CW - 0.2, 0.06, 0.06, 0, 1.0, CW / 2 - 0.12, steel);        // the rail you hold on the way up
+    // the rails you hold on the way up, along the sides (across the door
+    // they stood in the doorway)
+    cabPart(0.06, 0.06, CW - 0.4, -CW / 2 + 0.12, 1.0, 0, steel);
+    cabPart(0.06, 0.06, CW - 0.4, CW / 2 - 0.12, 1.0, 0, steel);
+    var doors = {};
+    [['street', 1], ['roof', -1]].forEach(function (f) {
+      var zf = f[1] * CW / 2;
+      cabPart(CW / 2, 2.6, 0.02, -CW / 4, 1.4, zf, pane);
+      cabPart(0.06, 2.6, 0.06, 0, 1.4, zf, steel);
+      var lf = leaf(CW / 2 - 0.04, 2.56);
+      lf.position.set(CW / 4, 1.4, zf + f[1] * 0.06);
+      cab.add(lf);
+      doors[f[0]] = { cab: { m: lf, x0: CW / 4, x1: -CW / 4 + 0.1 } };
+    });
     cab.position.set(SHX, 0.02, SHZ);
     city.scene.add(cab);
+    // and the landing doors in the shaft: at the street on the lobby side,
+    // up top on the tower side, framed in steel with a lit call button
+    [['street', 0.02, 1], ['roof', roofY, -1]].forEach(function (f) {
+      var zf = SHZ + f[2] * (SHW / 2 + 0.09), y0 = f[1], DW = SHW - 0.3;
+      batches.wood.addBox(SHX - DW / 2 - 0.06, y0 + 1.45, zf, 0.12, 2.9, 0.16, 0, 0x8a94b8, 0);
+      batches.wood.addBox(SHX + DW / 2 + 0.06, y0 + 1.45, zf, 0.12, 2.9, 0.16, 0, 0x8a94b8, 0);
+      batches.wood.addBox(SHX, y0 + 2.92, zf, DW + 0.24, 0.16, 0.16, 0, 0x8a94b8, 0);
+      batches.marks.addBox(SHX + DW / 2 + 0.36, y0 + 1.15, zf, 0.16, 0.3, 0.06, 0, 0x8fb4ff, 0);
+      var fixed = new THREE.Mesh(sharedBoxGeo(DW / 2, 2.8, 0.02), pane);
+      fixed.position.set(SHX - DW / 4, y0 + 1.42, zf);
+      city.scene.add(fixed);
+      var lf = leaf(DW / 2 - 0.04, 2.76);
+      lf.position.set(SHX + DW / 4, y0 + 1.42, zf + f[2] * 0.06);
+      city.scene.add(lf);
+      doors[f[0]].landing = { m: lf, x0: SHX + DW / 4, x1: SHX - DW / 4 + 0.1 };
+    });
     city.towerLift = {
       street: { x: SHX, z: SHZ + SHW / 2 + 1.2, y: 0, heading: 0, out: { x: SHX, z: SHZ + SHW / 2 + 2.6 } },
       roof: { x: SHX, z: HT.z + 12.4, y: roofY, heading: Math.PI, out: { x: SHX, z: HT.z + 11.0 } },
       shaft: { x: SHX, z: SHZ, top: roofY },
-      cab: cab
+      cab: cab,
+      doors: doors
     };
     // the find has to be findable: the tower shows from half the map, so the
     // helicopter on it exists at long range instead of popping in at 210 m —
@@ -1573,6 +1617,9 @@ GAME.city = (function () {
     // which drew sand over open water — a swimmer there was under the beach,
     // and a boat run in at it sat up on the "sand".
     var EDGE = 0.5;
+    // the bank: from the wet sand's height, starting `back` inside the edge,
+    // down to its toe `out` past it
+    var BANK = city.beachBank = { top: 0.2, toe: -1.2, back: 2, out: 2 };
     for (var sz = -500; sz < 500; sz += 20) {
       // one shade draw per strip, split or not — the rng stream feeds every
       // placement after this loop, and an extra draw would reshuffle the city
@@ -1584,9 +1631,15 @@ GAME.city = (function () {
         if (zb - za < 0.6) continue;
         var ea = city.shoreline(za) + EDGE, eb = city.shoreline(zb) + EDGE;
         sand.addQuad([SAND_X0, sy, za], [ea, sy, za], [eb, sy, zb], [SAND_X0, sy, zb], shade, [0, 1, 0]);
-        // darker wet band at the waterline, and the face down into the sea
-        sand.addQuad([ea - 6, 0.2, za], [ea, 0.2, za], [eb, 0.2, zb], [eb - 6, 0.2, zb], 0xb0a078, [0, 1, 0]);
-        sand.addQuad([ea, 0.2, za], [eb, 0.2, zb], [eb, -1.2, zb], [ea, -1.2, za], 0x8a7a58, [1, 0, 0]);
+        // darker wet sand toward the waterline, and the bank shelving away
+        // under the sea. The bank was a sheer face at the coast, half a
+        // metre of it standing out of the water: from a boat or a swimmer's
+        // eye the whole beach ended in a kerb, and it read as a wall. It
+        // leans out four metres now, meeting the water about at the coast,
+        // and its last metre and a half stays under the surface.
+        var K = BANK;
+        sand.addQuad([ea - 6, K.top, za], [ea - K.back, K.top, za], [eb - K.back, K.top, zb], [eb - 6, K.top, zb], 0xb0a078, [0, 1, 0]);
+        sand.addQuad([ea - K.back, K.top, za], [eb - K.back, K.top, zb], [eb + K.out, K.toe, zb], [ea + K.out, K.toe, za], 0xa29268, [K.top - K.toe, K.back + K.out, 0]);
       }
       sIdx++;
     }
@@ -2500,6 +2553,8 @@ GAME.city = (function () {
   // run-up behind, dry land ahead for the landing, and spread over the whole
   // island. Seeded, so they are in the same places every visit.
   var ISLA_STUNTS = 10;
+  // a third of them boosted, capped at a pace whose landing has been looked at
+  var ISLA_BOOSTS = 3, ISLA_BOOST_CAP = 44, ISLA_BOOST_RUN = 104;
   function rollIslaStuntSpots() {
     var I = city.isla;
     if (!I || !GAME.isla) return [];
@@ -2613,6 +2668,30 @@ GAME.city = (function () {
       }
       out.splice(oi, 0, swap || was);
     }
+    // Boosters, then — a third of them, as on the mainland, but only where
+    // the way down is fit for one. They were left off over here because a
+    // full booster fired off a hillside came down somewhere far below and
+    // too hard to live; these are picked from the jumps already placed (no
+    // jump moves, and none changes its number) for a long, dry, level run
+    // out past the lip, and they are capped: they haul you up to their pace
+    // and leave anything already quicker alone, so where you come down is
+    // somewhere this has looked.
+    for (var bi = 0, nb = 0; bi < out.length && nb < ISLA_BOOSTS; bi++) {
+      if (!boostLands(out[bi])) continue;
+      out[bi].boost = true; out[bi].cap = ISLA_BOOST_CAP; out[bi].capUp = true;
+      nb++;
+    }
+    function boostLands(sp) {
+      var fx = Math.sin(sp.rot), fz = Math.cos(sp.rot);
+      for (var f = 8; f <= ISLA_BOOST_RUN; f += 4) {
+        var lx = sp.x + fx * (sp.len / 2 + f), lz = sp.z + fz * (sp.len / 2 + f);
+        if (!land(lx, lz) || I.inland(lx, lz) < 0.02 || city.nearCrossing(lx, lz, 10)) return false;
+        var gy = I.groundY(lx, lz);
+        if (gy > sp.base1 + 0.5 + f * 0.03 || gy < sp.base1 - 6) return false;
+        if (solidNear(lx, lz, 2, gy + 1.5)) return false;
+      }
+      return true;
+    }
     return out;
   }
 
@@ -2690,7 +2769,7 @@ GAME.city = (function () {
 
       var rad = Math.max(s.w, s.len) / 2 + 2;
       city.ramps.push({
-        idx: i, x: s.x, z: s.z, rot: s.rot, w: s.w, len: s.len, h: s.h, base: s.base || 0, base1: s.base1, boost: !!s.boost, cap: s.cap,
+        idx: i, x: s.x, z: s.z, rot: s.rot, w: s.w, len: s.len, h: s.h, base: s.base || 0, base1: s.base1, boost: !!s.boost, cap: s.cap, capUp: !!s.capUp,
         isla: !!s.isla, islaN: s.isla ? islaN++ : -1,
         cos: c, sin: sn,
         minX: s.x - rad, maxX: s.x + rad, minZ: s.z - rad, maxZ: s.z + rad
