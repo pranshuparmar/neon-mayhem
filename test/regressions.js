@@ -97,7 +97,9 @@
 //       third of Isla Verde's jumps are capped boosters; a few drinks too
 //       many and the night swims (and wears off); a shot from the hip turns
 //       you to it and brings the gun up, both hands for a two-handed gun;
-//       the horn sounds for as long as it is held, over a dipped engine.
+//       the horn sounds for as long as it is held, over a dipped engine;
+//       all 25 jumps give the arsenal, kept and refilled free (unlimited
+//       ammo is for finishing everything), and older saves keep theirs.
 //   4y. AROUND THE GAME — messages stack; the district name keeps out of a
 //       mission's title; every overlay uses the game's face; the title says
 //       LOADING until it can answer; pause takes keys and ignores a missed
@@ -2130,6 +2132,7 @@ function withTimeout(p, ms) {
   var econ = await page.evaluate(function () {
     var M = GAME.missions, P = GAME.player, r = {};
     var bests0 = GAME.bests, complete0 = GAME.prefs.gameComplete, cash0 = P.cash;
+    var ammo0 = GAME.unlimitedAmmo, weapons0 = JSON.stringify(P.weapons), cur0 = P.currentWeapon;
     var desc = Object.getOwnPropertyDescriptor(GAME.stunts, 'complete');
     var descI = Object.getOwnPropertyDescriptor(GAME.stunts, 'islaComplete');
     var descT = Object.getOwnPropertyDescriptor(GAME.tapes, 'complete');
@@ -2144,8 +2147,11 @@ function withTimeout(p, ms) {
       GAME.city.unlockGunship = function () {};
       delete GAME.prefs.gameComplete;
       P.cash = 1000;
+      GAME.unlimitedAmmo = false;
       r.first = M.checkCompletion();
       r.paid = P.cash - 1000;
+      // ...and unlimited ammo, which used to be the stunt jumps' prize
+      r.unlimited = GAME.unlimitedAmmo === true && P.weapons.rifle && P.weapons.rifle.have;
       if (GAME.hud.dialogOpen()) GAME.hud.dialogKey('Enter');
       M.checkCompletion();
       r.paidTwice = P.cash - 1000 - r.paid;
@@ -2161,11 +2167,16 @@ function withTimeout(p, ms) {
       GAME.city.unlockGunship = gun0;
       P.cash = cash0;
       GAME.hud.cashChanged();
+      GAME.unlimitedAmmo = ammo0;
+      P.weapons = JSON.parse(weapons0, function (k, v) { return k === 'ammo' && v === null ? Infinity : v; });
+      P.currentWeapon = cur0;
+      GAME.combat.refreshWeaponHud();
     }
     return r;
   });
   check('economy: completing everything pays a million, once',
     econ.first === true && econ.paid === 1000000 && econ.paidTwice === 0, JSON.stringify(econ));
+  check('economy: and finishing everything is what gives unlimited ammo', econ.unlimited, JSON.stringify(econ));
   check('economy: and money still means something afterwards', econ.cashAfter === 500, 'cash a few seconds later: ' + econ.cashAfter);
 
   // A day lasted two and a half minutes, the night only changed the light,
@@ -6816,13 +6827,21 @@ function withTimeout(p, ms) {
   // ---------- 4: unlimited ammo reads as unlimited ----------
   var ammo = await page.evaluate(function () {
     GAME.test.fastForward(1);
+    // (and put back as it was: left switched on, every group after this ran
+    // with unlimited ammo, and a gun counter with nothing to sell)
+    var P = GAME.player, ammo0 = GAME.unlimitedAmmo, weapons0 = JSON.stringify(P.weapons), cur0 = P.currentWeapon;
     GAME.unlimitedAmmo = false;
     GAME.combat.giveWeapon('pistol', 40);
     GAME.combat.refreshWeaponHud();
     var finite = document.getElementById('weapon-line').textContent;
     GAME.unlimitedAmmo = true;
     GAME.combat.giveAllWeapons();
-    return { finite: finite, unlimited: document.getElementById('weapon-line').textContent };
+    var unlimited = document.getElementById('weapon-line').textContent;
+    GAME.unlimitedAmmo = ammo0;
+    P.weapons = JSON.parse(weapons0, function (k, v) { return k === 'ammo' && v === null ? Infinity : v; });
+    P.currentWeapon = cur0;
+    GAME.combat.refreshWeaponHud();
+    return { finite: finite, unlimited: unlimited };
   });
   check('ammo: a finite count still shows a number',
     /\d/.test(ammo.finite) && ammo.finite.indexOf('∞') < 0, JSON.stringify(ammo.finite));
@@ -7701,6 +7720,78 @@ function withTimeout(p, ms) {
     !!hn.noAudio || (hn.held.on && hn.held.horn > 0.12 && hn.held.horn > hn.held.engine * 8 && hn.held.engine < hn.engine * 0.6), JSON.stringify(hn));
   check('horn: let go, it stops; a tap is still a beep; and getting out lets go of it',
     !!hn.noAudio || (!hn.released.on && hn.released.horn < 0.02 && hn.tap && hn.tapEnds && hn.exitLets), JSON.stringify(hn));
+
+  // All 25 jumps used to hand out unlimited ammo: early, for driving, and the
+  // end of every fight after it. Their prize is the arsenal now — kept
+  // through a hospital or a cell, refilled free at any hardware counter —
+  // and unlimited ammo is for finishing everything (5a). A save that earned
+  // it the old way keeps it.
+  var ja = await page.evaluate(async function () {
+    var P = GAME.player, S = GAME.shops, St = GAME.stunts, r = {};
+    function ff(t) { GAME.test.fastForward(t); }
+    function wait(ms) { return new Promise(function (res) { setTimeout(res, ms); }); }
+    if (P.inCar) GAME.exitCar();
+    GAME.police.clearWanted();
+    var keep = { stunts: JSON.stringify(GAME.prefs.stunts || null), forever: GAME.prefs.ammoForever, ammo: GAME.unlimitedAmmo,
+      arsenal: GAME.jumpArsenal, weapons: JSON.stringify(P.weapons), cur: P.currentWeapon, cash: P.cash, truck: GAME.city.unlockMonsterTruck };
+    GAME.city.unlockMonsterTruck = function () {};
+    try {
+      // a save from before: every jump found, no version on the record
+      delete GAME.prefs.ammoForever;
+      GAME.unlimitedAmmo = false; GAME.jumpArsenal = false;
+      GAME.prefs.stunts = { found: {}, rewarded: true };
+      St.load();
+      r.oldSaveKeeps = GAME.prefs.ammoForever === true && GAME.unlimitedAmmo === true;
+      // one that found them all under the new prize
+      delete GAME.prefs.ammoForever;
+      GAME.unlimitedAmmo = false; GAME.jumpArsenal = false;
+      P.weapons = { fist: { have: true, ammo: Infinity } }; P.currentWeapon = 'fist';
+      GAME.prefs.stunts = { found: {}, rewarded: true, v: 2 };
+      St.load();
+      var FL = GAME.combat.FULL_LOAD;
+      r.arsenal = GAME.jumpArsenal === true && GAME.unlimitedAmmo === false && !GAME.prefs.ammoForever &&
+        ['pistol', 'smg', 'shotgun', 'rifle'].every(function (w) { return P.weapons[w] && P.weapons[w].have && P.weapons[w].ammo >= FL[w] && isFinite(P.weapons[w].ammo); });
+      // rounds get used up...
+      P.currentWeapon = 'smg';
+      var a0 = P.weapons.smg.ammo;
+      GAME.test.teleport(-150 + 7.5, 40); ff(0.4);
+      GAME.world.peds.slice().forEach(function (p) { if (Math.hypot(p.pos.x - P.pos.x, p.pos.z - P.pos.z) < 40) GAME.peds.removePed(p); });
+      GAME.input.lockGraceT = 0;
+      GAME.input.lmb = true; ff(0.5); GAME.input.lmb = false; ff(0.2);
+      r.spends = P.weapons.smg.ammo < a0;
+      // ...and the counter refills them for nothing
+      var hw = S.locations().filter(function (l) { return l.kind === 'hardware'; })[0];
+      S.open(hw);
+      var c0 = P.cash, b0 = P.weapons.smg.ammo;
+      var bought = S.buy('smg');
+      r.refill = bought !== false && P.cash === c0 && P.weapons.smg.ammo > b0;
+      S.close(); ff(0.2);
+      // and a hospital bed (no home here) leaves them with you
+      P.health = 100; P.armor = 0;
+      GAME.playerDamage(500, 'test');
+      for (var i = 0; i < 25 && P.state !== 'alive'; i++) {
+        GAME.input.keys['KeyR'] = true; ff(0.7); GAME.input.keys['KeyR'] = false;
+        if (P.state !== 'alive') await wait(400);
+      }
+      r.alive = P.state === 'alive';
+      r.keptThroughHospital = !!(P.weapons.rifle && P.weapons.rifle.have && P.weapons.smg && P.weapons.smg.have);
+    } finally {
+      GAME.city.unlockMonsterTruck = keep.truck;
+      GAME.prefs.stunts = JSON.parse(keep.stunts);
+      if (keep.forever === undefined) delete GAME.prefs.ammoForever; else GAME.prefs.ammoForever = keep.forever;
+      GAME.unlimitedAmmo = keep.ammo; GAME.jumpArsenal = keep.arsenal;
+      if (GAME.prefs.stunts) St.load();
+      GAME.unlimitedAmmo = keep.ammo; GAME.jumpArsenal = keep.arsenal;
+      P.weapons = JSON.parse(keep.weapons, function (k, v) { return k === 'ammo' && v === null ? Infinity : v; });
+      P.currentWeapon = keep.cur; P.cash = keep.cash;
+      GAME.combat.refreshWeaponHud(); GAME.hud.cashChanged();
+    }
+    return r;
+  });
+  check('jumps: a save that earned unlimited ammo from them keeps it', ja.oldSaveKeeps, JSON.stringify(ja));
+  check('jumps: now they give the full arsenal, with ammo that runs out', ja.arsenal && ja.spends, JSON.stringify(ja));
+  check('jumps: any hardware counter refills it for nothing', ja.refill, JSON.stringify(ja));
+  check('jumps: and it comes back with you from the hospital', ja.alive && ja.keptThroughHospital, JSON.stringify(ja));
 
   // ---------- 6: a rider follows the deck when it tilts ----------
   // vehicles.js pitches a chassis over a ramp (negative rotation.x lifts the

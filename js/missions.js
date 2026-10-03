@@ -21,21 +21,34 @@ GAME.stunts = (function () {
     return n;
   }
 
+  // The 25 jumps' prize is the full arsenal: kept through a hospital bed or
+  // a cell, refilled for nothing at any hardware counter. It used to be
+  // unlimited ammo, which came early (the jumps are a drive round town) and
+  // for driving, and once it did it switched off every shootout, every ammo
+  // pickup, the gun counter and losing your guns. Unlimited ammo is the
+  // prize for finishing everything now (missions.js, full completion). A
+  // save that earned it the old way keeps it: its record has no `v`.
+  var REWARD_V = 2;
   function load() {
     var s = (GAME.prefs && GAME.prefs.stunts) || null;
     if (s) {
       found = s.found || {}; rewarded = !!s.rewarded;
       islaFound = s.isla || {}; islaRewarded = !!s.islaRewarded;
+      if (rewarded && s.v !== REWARD_V) GAME.prefs.ammoForever = true;
     }
     if (rewarded) {
+      GAME.jumpArsenal = true;
+      GAME.combat.giveAllWeapons(GAME.combat.FULL_LOAD);
+      GAME.city.unlockMonsterTruck();   // the truck stays unlocked between sessions
+    }
+    if (GAME.prefs && GAME.prefs.ammoForever) {
       GAME.unlimitedAmmo = true;
       GAME.combat.giveAllWeapons();
-      GAME.city.unlockMonsterTruck();   // the truck stays unlocked between sessions
     }
   }
   function save() {
     if (!GAME.prefs) GAME.prefs = {};
-    GAME.prefs.stunts = { found: found, rewarded: rewarded, isla: islaFound, islaRewarded: islaRewarded };
+    GAME.prefs.stunts = { found: found, rewarded: rewarded, isla: islaFound, islaRewarded: islaRewarded, v: REWARD_V };
     GAME.save();
   }
 
@@ -89,11 +102,11 @@ GAME.stunts = (function () {
   function grantReward() {
     rewarded = true;
     GAME.track('all-stunt-jumps');
-    GAME.unlimitedAmmo = true;
-    GAME.combat.giveAllWeapons();
+    GAME.jumpArsenal = true;
+    GAME.combat.giveAllWeapons(GAME.combat.FULL_LOAD);
     GAME.addCash(50000);
     GAME.city.unlockMonsterTruck();
-    GAME.hud.message('ALL ' + total + ' STUNT JUMPS!  +$50,000  ·  every weapon with unlimited ammo  ·  MONSTER TRUCK unlocked at the airport', 8);
+    GAME.hud.message('ALL ' + total + ' STUNT JUMPS!  +$50,000  ·  every weapon, yours to keep, with free refills at the hardware counter  ·  MONSTER TRUCK unlocked at the airport', 8);
     GAME.share.show({
       slug: 'all-stunt-jumps',
       eyebrow: 'Costa Rosa · 1986',
@@ -103,7 +116,8 @@ GAME.stunts = (function () {
       stats: [
         { label: 'Jumps', value: total + ' / ' + total },
         { label: 'Payout', value: '$50,000' },
-        { label: 'Unlocked', value: 'MONSTER TRUCK' }
+        { label: 'Unlocked', value: 'MONSTER TRUCK' },
+        { label: 'Arsenal', value: 'KEPT · FREE REFILLS' }
       ]
     });
     // clearing every jump is the other way across the channel
@@ -2216,8 +2230,9 @@ GAME.missions = (function () {
   // ---------- full completion ----------
   // Every mission (races, rampages, deliveries, the lot) and every stunt
   // jump, both islands. Property is a pastime, not progress. The prize: the
-  // TALON gunship on the mainland helipad (and in the showroom), and a
-  // million dollars, once. It used to pin your cash at $9,999,999 for good,
+  // TALON gunship on the mainland helipad (and in the showroom), unlimited
+  // ammo in every gun (the end of the game is where a perk that ends every
+  // fight belongs), and a million dollars, once. It used to pin your cash at $9,999,999 for good,
   // which ended the economy: nothing cost anything again, and every payout
   // after that was a number that changed nothing.
   function namedDone() {
@@ -2234,6 +2249,10 @@ GAME.missions = (function () {
   var COMPLETION_BONUS = 1000000;
   function applyComplete() {
     GAME.city.unlockGunship();
+    if (!GAME.unlimitedAmmo) {
+      GAME.unlimitedAmmo = true;
+      GAME.combat.giveAllWeapons();
+    }
   }
   function checkCompletion() {
     if (GAME.prefs && GAME.prefs.gameComplete) { applyComplete(); return true; }
@@ -2248,7 +2267,7 @@ GAME.missions = (function () {
     GAME.haptics.win();
     GAME.hud.dialog({
       title: 'COSTA ROSA, COMPLETE',
-      body: 'Every mission, every race, every jump, every lost tape — both islands.\nThe TALON is warming up on the mainland helipad (guns live, rockets loaded), the showroom will sell you spares, and there is a million dollars in your pocket that was not there this morning.',
+      body: 'Every mission, every race, every jump, every lost tape — both islands.\nThe TALON is warming up on the mainland helipad (guns live, rockets loaded), the showroom will sell you spares, every gun you carry will never run dry again, and there is a million dollars in your pocket that was not there this morning.',
       ok: 'CARRY ON', cancel: false
     });
     return true;

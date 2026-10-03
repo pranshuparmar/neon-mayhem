@@ -215,6 +215,10 @@ GAME.shops = (function () {
     var P = GAME.player;
     function gun(id, name, price, ammo, ds) {
       var have = P.weapons[id] && P.weapons[id].have;
+      // every jump in the city found: the counter refills your arsenal for
+      // nothing; everything finished, there is nothing to refill
+      if (GAME.unlimitedAmmo && have) return { id: id, name: name + '  ·  ∞', ds: 'It never runs dry now.', price: 0, off: true };
+      if (GAME.jumpArsenal && have) return { id: id, name: name + '  ·  ammo +' + ammo, ds: 'On the house — you found every jump in the city.', price: 0 };
       return { id: id, name: name + (have ? '  ·  ammo +' + ammo : ''), ds: ds, price: price };
     }
     return [

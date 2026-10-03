@@ -487,11 +487,14 @@ GAME.combat = (function () {
     refreshWeaponHud();
   }
 
-  // the full arsenal — unlimited ammo is no use without something to fire it from
-  function giveAllWeapons() {
+  // the full arsenal — with no stock given, for unlimited ammo (which is no
+  // use without something to fire it from); given one, topped up to it
+  var FULL_LOAD = { pistol: 120, smg: 360, shotgun: 72, rifle: 90 };   // three boxes of each
+  function giveAllWeapons(stock) {
     var P = GAME.player;
     ['pistol', 'smg', 'shotgun', 'rifle'].forEach(function (w) {
-      P.weapons[w] = { have: true, ammo: Math.max(999, (P.weapons[w] && P.weapons[w].ammo) || 0) };
+      var want = stock ? stock[w] : 999;
+      P.weapons[w] = { have: true, ammo: Math.max(want, (P.weapons[w] && P.weapons[w].ammo) || 0) };
     });
     if (P.currentWeapon === 'fist') P.currentWeapon = 'pistol';
     refreshWeaponHud();
@@ -765,6 +768,7 @@ GAME.combat = (function () {
     initPickups: initPickups,
     giveWeapon: giveWeapon,
     giveAllWeapons: giveAllWeapons,
+    FULL_LOAD: FULL_LOAD,
     selectWeapon: selectWeapon,
     dropPickup: dropPickup,
     pickupShape: pickupShape,

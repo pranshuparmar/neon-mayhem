@@ -193,11 +193,12 @@ GAME.playerWasted = function (cause) {
   // didn't help, so the rule teaches itself
   var home = GAME.shops && GAME.shops.homeSpawn(P.pos.x, P.pos.z);
   var ownsElsewhere = !home && GAME.shops && GAME.shops.ownsAny();
+  var kept = GAME.jumpArsenal || GAME.unlimitedAmmo;   // the arsenal goes where you go
   var body = home
     ? 'You wake up at your place. Cash and weapons intact.'
     : ownsElsewhere
-      ? 'You wake up at the local hospital — your bed is on the other island. Weapons gone, cash intact.'
-      : 'You wake up at the hospital. Weapons gone, cash intact.';
+      ? 'You wake up at the local hospital — your bed is on the other island. ' + (kept ? 'Cash and weapons intact.' : 'Weapons gone, cash intact.')
+      : 'You wake up at the hospital. ' + (kept ? 'Cash and weapons intact.' : 'Weapons gone, cash intact.');
   // An explosion death gets its beat: the banner used to slam on in the very
   // frame the blast spawned, so dying in a burning car read as "I suddenly
   // died" — the fireball was behind the card. Let the slow-mo blast play,
@@ -225,7 +226,8 @@ GAME.playerBusted = function () {
   GAME.haptics.busted();
   var fine = Math.min(P.cash, 200);
   P.pendingFine = fine;
-  GAME.hud.showBig('busted', 'Released with a $' + fine + ' fine. Weapons confiscated.');
+  GAME.hud.showBig('busted', 'Released with a $' + fine + ' fine. ' +
+    (GAME.jumpArsenal || GAME.unlimitedAmmo ? 'Your guns come back with you.' : 'Weapons confiscated.'));
   GAME.missions.failActive('You got busted.');
 };
 
@@ -311,12 +313,13 @@ function respawnAfterScreen() {
         P.pos.set(sh.x, GAME.city.groundY(sh.x, sh.z), sh.z);
       }
     }
-    var keepGear = kind === 'wasted' && GAME.shops && GAME.shops.homeSpawn(P.pos.x, P.pos.z);
+    // every stunt jump found: the arsenal survives a hospital or cell visit
+    var keepGear = GAME.jumpArsenal || (kind === 'wasted' && GAME.shops && GAME.shops.homeSpawn(P.pos.x, P.pos.z));
     if (!keepGear) {
       P.weapons = { fist: { have: true, ammo: Infinity } };
       P.currentWeapon = 'fist';
     }
-    // every stunt jump found: the arsenal survives a hospital or cell visit
+    // everything finished: and it never runs dry
     if (GAME.unlimitedAmmo) GAME.combat.giveAllWeapons();
     GAME.combat.refreshWeaponHud();
     GAME.police.clearWanted();
