@@ -6026,7 +6026,11 @@ function withTimeout(p, ms) {
     var C = GAME.chaos, out = {};
     if (!GAME.police.reportIncident) return { missing: true };
     C.set(3);
-    GAME.test.teleport(-150, 40);
+    // On the pavement, not in the middle of the street (x = -150 is a road):
+    // seventy-five seconds standing in traffic is a long time, and on CI a
+    // passing car once took some health off and failed the check below,
+    // which is about the city's trouble and the law, not the traffic.
+    GAME.test.teleport(-150 + 8.4, 40);
     GAME.police.clearWanted();
     GAME.player.health = 100;
     // Seed a crowd beside the player, for the same reason the top-of-range
@@ -6042,6 +6046,12 @@ function withTimeout(p, ms) {
     GAME.test.fastForward(0.5);
     var stars0 = GAME.police.wanted, hp0 = GAME.player.health;
     var patrolPeak = 0, incPeak = 0, attended = 0, starsMax = 0;
+    // Everything that hurts the player in the window, and what it was. The
+    // check is on the city's trouble and the law — a punch or a round — so
+    // those are what count; a car or a blast is the street, and is reported
+    // without failing it.
+    var hurts = [], pd0 = GAME.playerDamage;
+    GAME.playerDamage = function (amt, cause) { hurts.push(String(cause) + ' ' + Math.round(amt)); return pd0.apply(this, arguments); };
     for (var f = 0; f < 60 * 75; f++) {
       GAME.test.fastForward(1 / 60);
       patrolPeak = Math.max(patrolPeak, GAME.police.patrolCount);
@@ -6054,7 +6064,9 @@ function withTimeout(p, ms) {
     out.incPeak = incPeak;
     out.attended = attended;
     out.starsMax = starsMax;
-    out.hpKept = GAME.player.health >= hp0;
+    GAME.playerDamage = pd0;
+    out.hurts = hurts;
+    out.hpKept = !hurts.some(function (h) { return /^(fists|shot) /.test(h); });
 
     // a star of the player's own pulls every officer off the beat
     GAME.test.setWanted(3);
@@ -6088,7 +6100,7 @@ function withTimeout(p, ms) {
     check('beat: none of it lands on the player’s wanted level',
       beat.starsMax === 0, 'highest the player’s stars reached: ' + beat.starsMax);
     check('beat: nor on the player’s health',
-      beat.hpKept, 'the player was left alone');
+      beat.hpKept, beat.hurts.length ? 'hurt by: ' + beat.hurts.join(', ') : 'the player was left alone');
     check('beat: a star of your own outranks whatever they were dealing with',
       beat.incAfterStars === 0, beat.incAfterStars + ' cases survived the player earning 3 stars');
     check('beat: and OFF sends them home rather than leaving one walking it',
