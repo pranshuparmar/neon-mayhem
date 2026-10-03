@@ -12,6 +12,16 @@
 
 A free, fan-made, browser-playable open-world tribute inspired by Grand Theft Auto: Vice City (2002). Everything in the project is original work — the sentence you just read is the only place the original game is named. No build step, no server, no accounts, no ads. Progress saves to `localStorage` and the whole thing runs offline.
 
+## What's new
+
+- 🌊 **The sea is playable** — swim, take a speedboat, run the BAY REGATTA and CONTRABAND jobs.
+- 🏠 **Walk-in interiors** — every shop, your homes (the villa has stairs), a wardrobe, and horse racing at the casino.
+- 🚓 **A city that answers** — shot-at drivers flee, fight or fire back; manhunts you can actually escape; rain, a 12-minute day and a live clock.
+- 📟 **Lola on call** — tips the first time you meet anything, and `L` for what to do next and the way there.
+- 📷 **A 1986 film camera** — `C` takes a print, `V` opens it full size, PHOTOS keeps the album.
+- 🛗 **New places and things to find** — a glass lift up the helipad tower, takedown missions, ten Isla Verde jumps and thirty lost tapes.
+- 🎮 **Every control, three ways** — keyboard (rebindable), a full controller layout and touch; see [Controls](#controls).
+
 ## The city
 
 - **Isla Rosa**, the neon mainland — a ~1 km² seeded city, identical on every visit: the Ocean Strip with its shops and casino pier, Centro Alto's towers, Puerto Viejo's harbor, Las Colinas — plus a curving beach, boardwalk, piers, a spinning ferris wheel, an airport, and an animated ocean under a full day/night cycle (a day lasts twelve real minutes) with a **live 24-hour clock** on the HUD. **Weather** rolls in and out: rain greys the sky, closes the fog in, loosens the roads and brings the odd fork of lightning. Nights and rain empty the streets a little, and shorten how far anybody sees what you do.
