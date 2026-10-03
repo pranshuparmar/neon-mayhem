@@ -2585,16 +2585,16 @@ function withTimeout(p, ms) {
     GAME.test.fastForward(0.3);
     function key(type, code) { window.dispatchEvent(new KeyboardEvent(type, { code: code, bubbles: true })); }
     try {
-      // rebinding: F moves to V, and the old key stops doing it
-      Cs.bind('KeyF', 'KeyV');
+      // rebinding: F moves to K, and the old key stops doing it
+      Cs.bind('KeyF', 'KeyK');
       I.pressed = {};
-      key('keydown', 'KeyV'); key('keyup', 'KeyV');
+      key('keydown', 'KeyK'); key('keyup', 'KeyK');
       r.vIsF = !!I.pressed.KeyF;
       I.pressed = {};
       key('keydown', 'KeyF'); key('keyup', 'KeyF');
       r.fIsNothing = !I.pressed.KeyF;
       // a key already in use swaps over rather than leaving a hole
-      Cs.bind('KeyQ', 'KeyV');
+      Cs.bind('KeyQ', 'KeyK');
       r.swap = { f: Cs.label('KeyF'), q: Cs.label('KeyQ') };
       GAME.test.fastForward(0.3);
       r.barSaysIt = (document.getElementById('controls-bar').innerHTML.indexOf('<b>Q</b> enter car') >= 0);
@@ -2664,7 +2664,7 @@ function withTimeout(p, ms) {
     return r;
   });
   check('controls: a rebound key does the job, and the old one stops', ctl.vIsF && ctl.fIsNothing, JSON.stringify(ctl));
-  check('controls: binding a key in use swaps it over', ctl.swap.f === 'Q' && ctl.swap.q === 'V', JSON.stringify(ctl.swap));
+  check('controls: binding a key in use swaps it over', ctl.swap.f === 'Q' && ctl.swap.q === 'K', JSON.stringify(ctl.swap));
   check('controls: the hint bar says the new key', ctl.barSaysIt);
   check('controls: reset puts it back', ctl.resetF === 'F');
   check('controls: mouse sensitivity scales the turn', ctl.sensRatio > 1.9 && ctl.sensRatio < 2.1, 'x' + ctl.sensRatio);
@@ -3903,6 +3903,27 @@ function withTimeout(p, ms) {
     shot && shot.type === 'image/jpeg' && shot.kb > 20 && (shot.w === shot.canvasW || shot.w === 1920 || shot.w === 1440), JSON.stringify(shot));
   check('camera: developed like an old print, the date in orange in the corner', shot && shot.orange > 20, JSON.stringify(shot && { orange: shot.orange }));
   check('camera: and a print slides in to say so', shot && shot.toast);
+  // The print opens the photo full size, and so does V (the mouse is aiming
+  // in play, so the print can't always be clicked); the world holds still
+  // while you look, and carries on when you close it.
+  var pview = await page.evaluate(function () {
+    var r = {}, a = GAME.photo.album(), last = a[a.length - 1];
+    var v = document.getElementById('photo-view'), img = document.getElementById('photo-view-img');
+    document.getElementById('photo-toast').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    r.fromPrint = GAME.photo.viewing === last && v.style.display === 'flex' && img.getAttribute('src') === last.url;
+    r.paused = !!GAME.paused;
+    GAME.onKeyDown('Escape');
+    r.closedToPlay = !GAME.photo.viewing && v.style.display === 'none' && !GAME.paused;
+    GAME.test.pressKey('KeyV', true); GAME.test.fastForward(1 / 60); GAME.test.pressKey('KeyV', false);
+    r.byKey = GAME.photo.viewing === last && v.style.display === 'flex';
+    GAME.onKeyDown('Escape');
+    r.keyClosed = !GAME.photo.viewing && !GAME.paused;
+    r.bindable = GAME.controls.ACTIONS.some(function (x) { return x[0] === 'KeyV'; });
+    return r;
+  });
+  check('camera: the print opens the photo full size, and the world holds still', pview.fromPrint && pview.paused, JSON.stringify(pview));
+  check('camera: closing it carries on with the game', pview.closedToPlay, JSON.stringify(pview));
+  check('camera: V opens the last one full size too, and it is rebindable', pview.byKey && pview.keyClosed && pview.bindable, JSON.stringify(pview));
   // saved from the album, by name
   var dlName = null;
   try {
@@ -3910,6 +3931,28 @@ function withTimeout(p, ms) {
     await page.evaluate(function () { GAME.togglePause(); GAME.photo.open(); document.querySelector('#photo-grid .ph-save').dispatchEvent(new MouseEvent('click', { bubbles: true })); });
     dlName = (await dl).suggestedFilename();
   } catch (e) { dlName = 'none: ' + String(e).slice(0, 80); }
+  // a photo in the album opens full size, with a DOWNLOAD of its own; Esc
+  // there goes back to the album, not the game
+  var aview = await page.evaluate(function () {
+    var r = {}, a = GAME.photo.album(), last = a[a.length - 1];
+    var card = document.querySelector('#photo-grid .ph-card');     // newest first
+    if (card) card.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    r.opened = GAME.photo.viewing === last && document.getElementById('photo-view-img').getAttribute('src') === last.url;
+    return r;
+  });
+  var viewDl = null;
+  try {
+    var dl3 = page.waitForEvent('download', { timeout: 6000 });
+    await page.evaluate(function () { document.getElementById('photo-view-save').dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    viewDl = (await dl3).suggestedFilename();
+  } catch (e) { viewDl = 'none: ' + String(e).slice(0, 80); }
+  var aview2 = await page.evaluate(function () {
+    GAME.onKeyDown('Escape');
+    return { backToAlbum: !GAME.photo.viewing && GAME.photo.albumOpen && !!GAME.paused };
+  });
+  check('camera: a photo in the album opens full size', aview.opened, JSON.stringify(aview));
+  check('camera: with a DOWNLOAD of its own', /^costa-rosa-1986-\d{8}-\d{6}\.jpg$/.test(viewDl || ''), viewDl);
+  check('camera: and Esc there goes back to the album', aview2.backToAlbum, JSON.stringify(aview2));
   var albumKeys = await page.evaluate(function () {
     var r = { open: GAME.photo.albumOpen && document.getElementById('photo-album').style.display === 'flex' };
     GAME.onKeyDown('Escape');

@@ -81,7 +81,7 @@ A free, fan-made, browser-playable open-world tribute inspired by Grand Theft Au
 - **Lola talks you through it.** The first time you pick up a lost tape, clear a stunt ramp, catch a star (or three), wake up in hospital or a cell, take a boat, a helicopter or a plane, end up swimming, use a respray, find a shift on offer, walk up to a shop, buy a place or walk into the casino, she pages you what it is and why it matters — once each, for the life of the save. **LOLA'S TIPS** on the pause screen turns her off for anybody who knows the town.
 - **Call Lola** (`L`, or **📟 ASK LOLA** on the pause screen — the way a controller or a phone reaches her) and she asks what she can do for you: what to do next (the nearest job you haven't done, and how far and which way), how to lose the law at the stars you have, where the money is, the way to a gun shop, THREADS, the barber, the showroom, your place, the casino, a hospital or the desk sergeant, what any of the city's things are, how far through Costa Rosa you are, and the controls. Where the answer is a place, she marks it on your map. The city holds still while you talk.
 - **The helipad tower's lift is glass, up the outside of the building.** Step on the ring at its door and ride it up through your own eyes — letterboxed, the street dropping away, the city opening out to the sea — and step out on the roof by the pad (any key, A on a controller, or a tap skips it). The roof's parapet holds you now; jump it and seventy metres is what it ought to be. Falls hurt in proportion and from about nineteen metres they kill, vest or no vest.
-- **You carry a camera** — an old film SLR. `C` (📷 on a touchscreen, the left stick click on a pad) takes a shot of the city as you see it, without the HUD, developed like a 1986 print: warm film, grain, darkened corners and the orange date in the corner. Shots go to **PHOTOS** on the pause screen, kept between visits (the last thirty-six), where you can save any of them — or switch on **AUTO-DOWNLOAD** and every shot is saved the moment you take it.
+- **You carry a camera** — an old film SLR. `C` (📷 on a touchscreen, the left stick click on a pad) takes a shot of the city as you see it, without the HUD, developed like a 1986 print: warm film, grain, darkened corners and the orange date in the corner. Click or tap the print that slides in — or press `V` — and the photo opens full size, with **DOWNLOAD** (the world holds still while you look). Shots go to **PHOTOS** on the pause screen, kept between visits (the last thirty-six), where any of them opens full size the same way and the arrows walk the album; save any you like — or switch on **AUTO-DOWNLOAD** and every shot is saved the moment you take it.
 
 ## Controls
 
@@ -139,6 +139,7 @@ A plane rolls down the runway on throttle and climbs once it's fast; airborne, t
 | Pause | `Esc` | START | ❚❚ |
 | Map | `P` | BACK | tap the radar |
 | Photo | `C` | L3 | 📷 |
+| See a photo full size | `V` (the last one) · click it in PHOTOS | START → PHOTOS → A | tap the print · tap it in PHOTOS |
 | Call Lola | `L` | START → 📟 ASK LOLA | ❚❚ → 📟 ASK LOLA |
 | Retry a failed run | `Y` | D-pad ↑ | RETRY |
 | Abandon a mission · clock off | `X` twice · pause → ABANDON | START → ABANDON | ❚❚ → ABANDON (JOB → END for a shift) |

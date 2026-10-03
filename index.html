@@ -302,7 +302,7 @@
   #photo-toast { position:fixed; right:calc(18px + env(safe-area-inset-right,0px)); top:150px; z-index:33; width:172px; padding:7px 7px 6px;
     background:#f4efe4; border-radius:3px; box-shadow:0 6px 22px rgba(0,0,0,.55); transform:translateX(130%) rotate(4deg);
     transition:transform .35s cubic-bezier(.2,.9,.3,1.2); pointer-events:none; }
-  #photo-toast.on { transform:translateX(0) rotate(2deg); }
+  #photo-toast.on { transform:translateX(0) rotate(2deg); pointer-events:auto; cursor:pointer; }
   #photo-toast img { display:block; width:100%; height:auto; background:#222; }
   #photo-toast-text { font:600 11px "Segoe UI",Arial,sans-serif; color:#3a3040; margin-top:5px; text-align:center; }
   #photo-album { position:fixed; inset:0; z-index:38; display:none; align-items:center; justify-content:safe center;
@@ -310,13 +310,21 @@
   #photo-album h2 { margin:4px 0 4px; color:#ffd27a; letter-spacing:4px; font-style:italic; }
   #photo-empty { font-size:14px; color:#9fb0c8; margin:18px 0; }
   #photo-grid { display:flex; flex-wrap:wrap; justify-content:center; gap:14px; width:min(94vw,900px); margin:10px 0; }
-  .ph-card { position:relative; width:190px; background:#f4efe4; padding:6px 6px 8px; border-radius:3px; box-shadow:0 4px 14px rgba(0,0,0,.5); }
+  .ph-card { position:relative; width:190px; background:#f4efe4; padding:6px 6px 8px; border-radius:3px; box-shadow:0 4px 14px rgba(0,0,0,.5); cursor:pointer; }
   .ph-card img { display:block; width:100%; height:auto; }
   .ph-when { font:600 11px "Courier New",monospace; color:#7a5030; margin:4px 0 2px; }
   .ph-card .mbtn { margin:2px 2px 0 0; padding:3px 9px; font-size:11.5px; }
   .ph-card .ph-save { background:#2e2240; border-color:#2e2240; color:#ffe7b0; }
   .ph-card.kfocus { outline:3px solid #ffd27a; outline-offset:2px; }
   .ph-card .ph-del { position:absolute; top:10px; right:10px; padding:1px 7px; background:rgba(10,4,20,.7); }
+  /* one photo at full size, from the print that slides in or the album */
+  #photo-view { position:fixed; inset:0; z-index:40; display:none; flex-direction:column; align-items:center; justify-content:center;
+    gap:10px; padding:12px; background:rgba(6,3,12,.95); }
+  #photo-view-img { box-sizing:border-box; max-width:min(96vw,1600px); max-height:calc(100vh - 112px); object-fit:contain;
+    background:#f4efe4; padding:8px; border-radius:3px; box-shadow:0 10px 40px rgba(0,0,0,.7); }
+  #photo-view-name { font:600 12px "Courier New",Courier,monospace; color:#ffd27a; text-align:center; }
+  #photo-view-bar { display:flex; flex-wrap:wrap; justify-content:center; gap:6px; }
+  #photo-view-save { background:#2e2240; border-color:#ffd27a; color:#ffe7b0; }
   #controls-screen { position:fixed; inset:0; z-index:37; display:none; align-items:center; justify-content:safe center;
     flex-direction:column; background:#08040f; overflow-y:auto; padding:14px 10px; color:#cfe6ff; }
   #controls-screen h2 { margin:4px 0 6px; color:#9df3ff; letter-spacing:4px; font-style:italic; }
@@ -505,9 +513,14 @@
 <div id="lola-screen"><div id="lola-card"><div id="lola-from">📟 LOLA</div><div id="lola-say"></div><div id="lola-opts"></div><div id="lola-hint"></div></div></div>
 <div id="cine"><div class="cine-bar cine-top"></div><div class="cine-bar cine-bot"><span id="cine-skip"></span></div></div>
 <div id="photo-toast"><img id="photo-toast-img" alt=""><div id="photo-toast-text"></div></div>
+<div id="photo-view">
+  <img id="photo-view-img" alt="">
+  <div id="photo-view-name"></div>
+  <div id="photo-view-bar"><span class="mbtn" id="photo-view-prev">‹ NEWER</span><span class="mbtn" id="photo-view-save">⤓ DOWNLOAD</span><span class="mbtn" id="photo-view-close">✕ CLOSE</span><span class="mbtn" id="photo-view-next">OLDER ›</span></div>
+</div>
 <div id="photo-album">
   <h2>📷 PHOTOS</h2>
-  <div style="font-size:12.5px;color:#9fb0c8;max-width:560px;text-align:center">Every shot you take with the camera. Save the ones you want to keep — they are kept here for you between visits, up to the last thirty-six.</div>
+  <div style="font-size:12.5px;color:#9fb0c8;max-width:560px;text-align:center">Every shot you take with the camera. Click or tap one to see it full size. Save the ones you want to keep — they are kept here for you between visits, up to the last thirty-six.</div>
   <div id="photo-empty">No photos yet — press the camera key (or 📷) while you play.</div>
   <div id="photo-grid"></div>
   <div><span class="mbtn" id="photo-auto">AUTO-DOWNLOAD: OFF</span><span class="mbtn" id="photo-all">⤓ SAVE ALL</span><span class="mbtn" id="photo-close">DONE</span></div>

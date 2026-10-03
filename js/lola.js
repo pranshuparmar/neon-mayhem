@@ -206,7 +206,7 @@ GAME.lola = (function () {
     if (touch()) return { say: 'Left thumb: wherever it lands is your stick. Right side: FIRE, JUMP and RUN on foot, the pedals in a car. EXIT gets you in and out, JOB starts a shift, 📢 is the horn, 📷 takes a photo. PAUSE has the map, your settings — and me.' };
     return { say: K('KeyW') + K('KeyA') + K('KeyS') + K('KeyD') + ' to move, the mouse to look, left click to fire and right click (or ' + K('Tab') + ') to lock on. ' +
       K('KeyF') + ' gets in and out, ' + K('Space') + ' jumps or climbs, ' + K('ShiftLeft') + ' sprints. ' + K('KeyJ') + ' starts a job, ' + K('KeyG') + ' the horn, ' +
-      K('KeyC') + ' a photo, ' + K('KeyP') + ' the map, and ' + K('KeyL') + ' gets me. CONTROLS on the pause screen rebinds the lot.' };
+      K('KeyC') + ' a photo (' + K('KeyV') + ' to see it), ' + K('KeyP') + ' the map, and ' + K('KeyL') + ' gets me. CONTROLS on the pause screen rebinds the lot.' };
   }
 
   function topLevel() {
