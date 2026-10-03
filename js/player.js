@@ -665,6 +665,8 @@ function stepDrunk(dt) {
 GAME.updatePlayer = function (dt) {
   var P = GAME.player, inp = GAME.input, T = inp.touch;
   stepDrunk(dt);
+  // a horn is let go of when you get out, crash out or come off
+  if (hornSounding && !(P.inCar && P.car && !P.car.dead && P.state === 'alive')) playerHorn(false);
   // riding the glass lift: the ride has the body and the camera (interiors.js)
   if (GAME.interiors && GAME.interiors.riding && GAME.interiors.riding()) return;
   if (P.state !== 'alive') {
@@ -1278,6 +1280,12 @@ function updateOnFoot(dt) {
 // a dead lightbar, and nobody could honk at anybody. The ice cream truck's
 // horn is its chimes, as the van's was in Vice City: on a round, the jingle
 // is what brings people to the hatch (missions.js).
+var hornSounding = false;
+function playerHorn(on, low) {
+  if (on === hornSounding) return;
+  hornSounding = on;
+  if (GAME.audio.hornHold) GAME.audio.hornHold(on, low);
+}
 function hornAndSiren(car, dt, T) {
   var press = GAME.keyPressed('KeyG') || T.horn;
   T.horn = false;
@@ -1293,9 +1301,13 @@ function hornAndSiren(car, dt, T) {
       GAME.audio.chime();
       if (GAME.missions.chimed) GAME.missions.chimed(car);
     }
-  } else if (press && (car.honkCd || 0) <= 0) {
-    car.honkCd = 0.35;
-    GAME.audio.horn(car.pos.x, car.pos.z, car.spec.l > 5);
+  } else {
+    // A horn sounds for as long as it is held, and a tap still gives a
+    // proper beep. It was a blip that died away under the engine.
+    if (press) car.hornMin = 0.25;
+    var want = GAME.key('KeyG') || !!T.hornHeld || (car.hornMin || 0) > 0;
+    if (car.hornMin > 0) car.hornMin -= dt;
+    playerHorn(want, car.spec.l > 5);
   }
   if (car.honkCd > 0) car.honkCd -= dt;
   // the bar: flashing with the siren on, dark with it off (police.js leaves

@@ -96,7 +96,8 @@
 //       you come and shut for the ride, and the car comes to your stop; a
 //       third of Isla Verde's jumps are capped boosters; a few drinks too
 //       many and the night swims (and wears off); a shot from the hip turns
-//       you to it and brings the gun up, both hands for a two-handed gun.
+//       you to it and brings the gun up, both hands for a two-handed gun;
+//       the horn sounds for as long as it is held, over a dipped engine.
 //   4y. AROUND THE GAME — messages stack; the district name keeps out of a
 //       mission's title; every overlay uses the game's face; the title says
 //       LOADING until it can answer; pause takes keys and ignores a missed
@@ -2531,8 +2532,10 @@ function withTimeout(p, ms) {
     S.maxTraffic = 0; S.maxParked = 0;
     var X = -150 + 3.1;
     GAME.world.cars.slice().forEach(function (c) { if (Math.hypot(c.pos.x + 150, c.pos.z) < 160) V.removeCar(c); });
-    var horns = 0, sirens = 0, horn0 = GAME.audio.horn, siren0 = GAME.audio.siren;
+    var horns = 0, sirens = 0, horn0 = GAME.audio.horn, siren0 = GAME.audio.siren, hold0 = GAME.audio.hornHold;
     GAME.audio.horn = function () { horns++; return horn0.apply(GAME.audio, arguments); };
+    // (the player's own is held: it counts when it starts sounding)
+    GAME.audio.hornHold = function (on) { if (on) horns++; return hold0.apply(GAME.audio, arguments); };
     GAME.audio.siren = function (v) { if (v > 0) sirens++; return siren0.apply(GAME.audio, arguments); };
     try {
       // a horn in an ordinary car
@@ -2578,7 +2581,7 @@ function withTimeout(p, ms) {
       cr.sirenOn = false;
       GAME.exitCar(); V.removeCar(cr);
     } finally {
-      GAME.audio.horn = horn0; GAME.audio.siren = siren0;
+      GAME.audio.horn = horn0; GAME.audio.siren = siren0; GAME.audio.hornHold = hold0;
       S.maxTraffic = keep.t; S.maxParked = keep.p;
       GAME.police.clearWanted();
     }
@@ -7657,6 +7660,47 @@ function withTimeout(p, ms) {
   check('guns: a shot from the hip turns you to it and brings the gun arm up', Math.abs(gp.pistol.heading - Math.PI / 2) < 0.2 && gp.pistol.armR < -1.2, JSON.stringify(gp));
   check('guns: a gun that takes two hands brings both up', gp.smg.armR < -1.2 && gp.smg.armL < -1.0, JSON.stringify(gp.smg));
   check('guns: and the arm comes down again after', gp.down > -0.5, JSON.stringify(gp));
+
+  // The horn was a blip that died away under the engine inside a quarter of
+  // a second. It sounds now for as long as it is held, a tap still gives a
+  // proper beep, the engine dips under it, and it lets go when you get out.
+  var hn = await page.evaluate(async function () {
+    var P = GAME.player, V = GAME.vehicles, A = GAME.audio, r = {};
+    function ff(t) { GAME.test.fastForward(t); }
+    function wait(ms) { return new Promise(function (res) { setTimeout(res, ms); }); }
+    if (P.inCar) GAME.exitCar();
+    GAME.police.clearWanted();
+    if (!A.ctx || !A.testMix) return { noAudio: true };
+    if (A.ctx.state !== 'running') { try { await A.ctx.resume(); } catch (e) { } }
+    if (A.ctx.state !== 'running') return { noAudio: true };
+    var car = V.spawnCar('sedan', -150 + 3.1, -60, 0, {});
+    GAME.seatInCar(car); ff(0.2);
+    // under way, the engine as it is
+    car.speed = 15; ff(1 / 60); await wait(500); ff(1 / 60);
+    r.engine = A.testMix().engine;
+    // lean on it: a second of horn, measured as it sounds
+    GAME.test.pressKey('KeyG');
+    for (var i = 0; i < 6; i++) { car.speed = 15; ff(1 / 60); await wait(150); }
+    var m = A.testMix();
+    r.held = { on: A.hornOn, horn: +m.horn.toFixed(3), engine: +m.engine.toFixed(4) };
+    GAME.test.pressKey('KeyG', false);
+    ff(1 / 60); await wait(400); ff(1 / 60);
+    r.released = { on: A.hornOn, horn: +A.testMix().horn.toFixed(4) };
+    // a tap is still a beep
+    GAME.test.pressKey('KeyG'); ff(1 / 60); GAME.test.pressKey('KeyG', false);
+    ff(0.15); r.tap = A.hornOn; ff(0.3); r.tapEnds = !A.hornOn;
+    // held as you get out: let go
+    GAME.test.pressKey('KeyG'); ff(0.1);
+    GAME.exitCar(); ff(0.1);
+    r.exitLets = !A.hornOn;
+    GAME.test.pressKey('KeyG', false);
+    V.removeCar(car);
+    return r;
+  });
+  check('horn: it sounds for as long as it is held, well over the engine, which dips under it',
+    !!hn.noAudio || (hn.held.on && hn.held.horn > 0.12 && hn.held.horn > hn.held.engine * 8 && hn.held.engine < hn.engine * 0.6), JSON.stringify(hn));
+  check('horn: let go, it stops; a tap is still a beep; and getting out lets go of it',
+    !!hn.noAudio || (!hn.released.on && hn.released.horn < 0.02 && hn.tap && hn.tapEnds && hn.exitLets), JSON.stringify(hn));
 
   // ---------- 6: a rider follows the deck when it tilts ----------
   // vehicles.js pitches a chassis over a ramp (negative rotation.x lifts the

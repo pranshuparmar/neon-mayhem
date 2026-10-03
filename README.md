@@ -119,7 +119,7 @@ Every action, on all three: keyboard and mouse, a controller (standard layout �
 | Steer | `A` / `D` | left stick | stick |
 | Handbrake · slide a boat · the monster truck's hop | `Space` | A | ⇋ |
 | Drive-by (with an SMG) | `Q` / `E` (left / right) · LMB (the side you look) | LB / RB | FIRE (the nearer side) |
-| Horn · a cruiser's siren · the ice cream chimes | `G` | R3 | 📢 |
+| Horn (sounds while held) · a cruiser's siren · the ice cream chimes | `G` | R3 | 📢 |
 | Radio station (and off) | `,` / `.` | D-pad ← / → | ♪ (next) |
 | Start · end a shift | `J` | X | JOB / END |
 | Get out · step off a boat | `F` | Y | EXIT |

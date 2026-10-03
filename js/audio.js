@@ -4,6 +4,7 @@ GAME.audio = (function () {
   var muted = false, musicOn = true, sfxOn = true;
   var noiseBuf = null;
   var engine = null, skidNode = null, sirenNode = null, rotorNode = null;
+  var hornNode = null, hornOn = false;
   var lastCrashT = -9, lastCrashV = 0;
   // The radio's own volume (down on foot and behind overlays), and when it
   // last went to zero.
@@ -174,6 +175,39 @@ GAME.audio = (function () {
     o.connect(g); g.connect(bus || sfxBus);
     o.start(t); o.stop(t + dur + 0.05);
     o.onended = function () { try { o.disconnect(); g.disconnect(); } catch (e) { } };
+  }
+
+  // A note held flat and let go cleanly, where tone() strikes and dies away.
+  // A horn is held: struck like a bell, it was down to a quarter of itself
+  // in a hundred and fifty milliseconds, under the engine.
+  function held(freq, dur, gain, type, bus) {
+    var t = ctx.currentTime;
+    var o = ctx.createOscillator(); o.type = type || 'square';
+    o.frequency.setValueAtTime(freq, t);
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(gain, t + 0.012);
+    g.gain.setValueAtTime(gain, t + dur - 0.06);
+    g.gain.linearRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(bus || sfxBus);
+    o.start(t); o.stop(t + dur + 0.05);
+    o.onended = function () { try { o.disconnect(); g.disconnect(); } catch (e) { } };
+  }
+  // The player's own horn: a voice of its own, sounding for as long as the
+  // button is held — two square notes a third apart, the edge taken off them
+  // — over an engine that dips while it sounds (engineState). Made the first
+  // time it is used.
+  var HORN_LEVEL = 0.16;
+  function initHorn() {
+    var g = ctx.createGain(); g.gain.value = 0;
+    var f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 2600; f.Q.value = 0.7;
+    var o1 = ctx.createOscillator(); o1.type = 'square'; o1.frequency.value = 410;
+    var o2 = ctx.createOscillator(); o2.type = 'square'; o2.frequency.value = 517;
+    var g1 = ctx.createGain(); g1.gain.value = 0.55;
+    var g2 = ctx.createGain(); g2.gain.value = 0.45;
+    o1.connect(g1); o2.connect(g2); g1.connect(f); g2.connect(f); f.connect(g); g.connect(sfxBus);
+    o1.start(); o2.start();
+    hornNode = { o1: o1, o2: o2, g: g };
   }
 
   // continuous engine voice, pitch driven by speed
@@ -427,6 +461,8 @@ GAME.audio = (function () {
     setListener: setListener,
     // headless hook, so the stereo image can be sampled without ears
     testPan: panAt,
+    // and the horn against the engine, as they stand right now
+    testMix: function () { return { horn: hornNode ? hornNode.g.gain.value : 0, engine: engineBus ? engineBus.gain.value : 0 }; },
     radio: radio,
     titleMusic: function (on) { if (on) title.start(); else title.stop(); },
     get titleMusicOn() { return title.on; },
@@ -467,7 +503,8 @@ GAME.audio = (function () {
       var air = on && (kind === 'heli' || kind === 'plane');
       // idle sits well back; it only leans in as you wind the revs out, so the
       // radio stays audible while cruising
-      engineBus.gain.setTargetAtTime(on && !air ? 0.024 + sn * 0.022 : 0, t, 0.12);
+      // (and it dips under your horn)
+      engineBus.gain.setTargetAtTime(on && !air ? (0.024 + sn * 0.022) * (hornOn ? 0.4 : 1) : 0, t, hornOn ? 0.03 : 0.12);
       if (on && !air) {
         var f = 45 + sn * 160;
         engine.o.frequency.setTargetAtTime(f, t, 0.08);
@@ -534,9 +571,19 @@ GAME.audio = (function () {
       var a = U.clamp(1 - d / 110, 0, 1);
       if (a <= 0.02) return;
       var b = spatialBus(x, z, 0.6), f = low ? 300 : 410;
-      tone(f, 0.45, 0.05 * a, 'square', 0, null, b);
-      tone(f * 1.26, 0.45, 0.04 * a, 'square', 0, null, b);
+      held(f, 0.4, 0.06 * a, 'square', b);
+      held(f * 1.26, 0.4, 0.048 * a, 'square', b);
     },
+    // the player's own horn, held down (or let go); `low` for a big vehicle
+    hornHold: function (on, low) {
+      if (!ctx) return;
+      if (!hornNode) { if (!on) return; initHorn(); }
+      var t = ctx.currentTime, f = low ? 300 : 410;
+      if (on) { hornNode.o1.frequency.setValueAtTime(f, t); hornNode.o2.frequency.setValueAtTime(f * 1.26, t); }
+      hornNode.g.gain.setTargetAtTime(on ? HORN_LEVEL : 0, t, on ? 0.01 : 0.035);
+      hornOn = !!on;
+    },
+    get hornOn() { return hornOn; },
     yelp: function (x, z) { if (ctx) tone(500 + Math.random() * 300, 0.18, 0.14, 'triangle', 900, null, spatialBus(x, z, 0.25)); },
     pickup: function () { if (ctx) { tone(880, 0.09, 0.2, 'sine'); tone(1320, 0.14, 0.2, 'sine', 0, ctx.currentTime + 0.08); } },
     // the ice cream chimes: a little run of bells, thin and carrying

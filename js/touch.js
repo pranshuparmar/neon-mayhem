@@ -187,7 +187,7 @@ GAME.touch = (function () {
     btns.driveby = mkBtn('FIRE', 232, 30, 68, { flag: 'driveByAuto' });
     btns.job = mkBtn('JOB', 116, 200, 54, { press: function () { T.job = true; } });
     btns.radio = mkBtn('♪', 200, 200, 50, { press: function () { GAME.switchRadio(1); } });
-    btns.horn = mkBtn('📢', 232, 112, 56, { press: function () { T.horn = true; } });
+    btns.horn = mkBtn('📢', 232, 112, 56, { flag: 'hornHeld', press: function () { T.horn = true; } });
     // the TALON's arsenal: chin gun and rockets, shown only in the gunship
     // (they drive the same fire/aim flags the gunship reads in aircraft.js)
     btns.gsGun = mkBtn('GUN', 232, 30, 68, { flag: 'fire' });
@@ -360,7 +360,7 @@ GAME.touch = (function () {
     var T = GAME.input.touch;
     T.gas = T.brake = T.handbrake = T.driveByAuto = T.rollL = T.rollR = false;
     T.fire = T.jump = T.aim = T.run = T.enter = false;
-    T.firePressed = T.weaponCycle = T.job = T.retry = T.photo = false;
+    T.firePressed = T.weaponCycle = T.job = T.retry = T.photo = T.hornHeld = false;
     for (var k in btns) {
       if (!btns[k]) continue;
       btns[k].classList.remove('held');
