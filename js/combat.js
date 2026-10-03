@@ -10,6 +10,9 @@ var WEAPONS = {
   rifle: { name: 'RIFLE', slot: 5, damage: 68, range: 150, rate: 0.85, auto: false, spread: 0.002 }
 };
 var WEAPON_ORDER = ['fist', 'pistol', 'smg', 'shotgun', 'rifle'];
+// how long the gun stays up after a shot from the hip (player.js), and which
+// guns take both hands
+var SHOT_POSE = 0.6, TWO_HANDED = { smg: true, shotgun: true, rifle: true };
 // the number keys that pick them, spelled out once rather than every tick
 var WEAPON_KEYS = WEAPON_ORDER.map(function (w, i) { return 'Digit' + (i + 1); });
 
@@ -459,6 +462,9 @@ GAME.combat = (function () {
           yaw = GAME.cam.yaw;
           if (aiming) P.heading = yaw;
         }
+        // fired from the hip as much as down the sights, the gun comes up
+        // the way the shot goes and the body turns to it (player.js poses it)
+        P.shotT = SHOT_POSE; P.shotYaw = yaw;
         fireGun(w, yaw, false);
       }
     }

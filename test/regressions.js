@@ -92,6 +92,11 @@
 //       helicopters on the roof, none of them drivable; stairs go up there.
 //       With money on a Gull Downs race you watch it from the terminal; the
 //       beach shelves into the sea instead of ending in a wall.
+//   5o. DOORS, BOOSTERS, DRINKS, THE GUN — the tower lift's doors part as
+//       you come and shut for the ride, and the car comes to your stop; a
+//       third of Isla Verde's jumps are capped boosters; a few drinks too
+//       many and the night swims (and wears off); a shot from the hip turns
+//       you to it and brings the gun up, both hands for a two-handed gun.
 //   4y. AROUND THE GAME — messages stack; the district name keeps out of a
 //       mission's title; every overlay uses the game's face; the title says
 //       LOADING until it can answer; pause takes keys and ignores a missed
@@ -7463,6 +7468,195 @@ function withTimeout(p, ms) {
   });
   check('beach: the sand shelves into the sea instead of standing out of it as a wall',
     !!bank && bank.run / (bank.top - bank.toe) >= 2 && bank.toe < bank.sea - 0.5, JSON.stringify(bank));
+
+  // ---------- 5o: the lift's doors, island boosters, one too many, the gun comes up ----------
+  // The glass lift was a box with no doors: step on the ring and you were in
+  // it. Now each stop has doors, the car's and the landing's, that part as
+  // you come, shut for the ride and open at the other end — and a car that
+  // is not at your stop comes to you.
+  var ld = await page.evaluate(function () {
+    var P = GAME.player, I = GAME.interiors, L = GAME.city.towerLift, r = {};
+    function ff(t) { GAME.test.fastForward(t); }
+    function walkTo(x, z, maxT) {
+      for (var w = 0; w < (maxT || 6) && !I.riding(); w += 1 / 60) {
+        var dx = x - P.pos.x, dz = z - P.pos.z;
+        if (dx * dx + dz * dz < 0.15) break;
+        P.heading = Math.atan2(dx, dz); GAME.cam.yaw = P.heading; GAME.test.pressKey('KeyW', true); ff(1 / 60);
+      }
+      GAME.test.pressKey('KeyW', false);
+    }
+    if (P.inCar) GAME.exitCar();
+    GAME.police.clearWanted();
+    if (!L || !L.doors) return { missing: true };
+    // the car waits up top: walking up to the street doors calls it down
+    L.cab.position.y = L.shaft.top;
+    GAME.test.teleport(L.street.x, L.street.z + 9); ff(0.3);
+    GAME.world.peds.slice().forEach(function (p) { if (Math.hypot(p.pos.x - L.street.x, p.pos.z - L.street.z) < 12) GAME.peds.removePed(p); });
+    r.shutWhileAway = I.liftDoors().street === 0 && I.liftDoors().roof === 0;
+    for (var k = 0; k < 12 && Math.abs(L.cab.position.y - 0.02) > 0.05; k++) ff(1);
+    r.cameDown = Math.abs(L.cab.position.y - 0.02) < 0.05;
+    walkTo(L.street.x, L.street.z + 2.2); ff(1);
+    var D = L.doors.street;
+    r.openAtDoor = I.liftDoors().street === 1 && Math.abs(D.cab.m.position.x - D.cab.x1) < 0.01 && Math.abs(D.landing.m.position.x - D.landing.x1) < 0.01;
+    // step on: they shut before the car moves
+    walkTo(L.street.x, L.street.z);
+    r.riding = I.riding();
+    ff(0.8);
+    r.shutForRide = I.liftDoors().street === 0 && L.cab.position.y < 0.2;
+    for (k = 0; k < 15 && I.riding(); k++) ff(1);
+    r.openOnRoof = !I.riding() && P.pos.y > 70 && I.liftDoors().roof > 0.5;
+    // walk off, and they close behind you
+    walkTo(L.roof.out.x, L.roof.out.z - 7);
+    ff(1.2);
+    r.shutBehind = I.liftDoors().roof === 0;
+    return r;
+  });
+  check('lift: its doors stay shut with nobody about, and the car comes to the stop you walk up to', ld.shutWhileAway && ld.cameDown, JSON.stringify(ld));
+  check('lift: the doors open as you come to them', ld.openAtDoor, JSON.stringify(ld));
+  check('lift: and shut before the ride sets off', ld.riding && ld.shutForRide, JSON.stringify(ld));
+  check('lift: up top they open onto the roof, and shut behind you as you walk off', ld.openOnRoof && ld.shutBehind, JSON.stringify(ld));
+
+  // Every jump on Isla Verde was a plain ramp. A third of them are boosters
+  // now — picked from where the jumps already were, for a long, level, dry
+  // run-out — and capped, so the landing is somewhere that was looked at.
+  var ib = await page.evaluate(function () {
+    var P = GAME.player, C = GAME.city, S = GAME.settings, r = {};
+    var wasOpen = GAME.isla.isOpen();
+    GAME.isla.setOpen(true);
+    var keep = { t: S.maxTraffic, p: S.maxParked };
+    S.maxTraffic = 0; S.maxParked = 0;
+    var isla = C.ramps.filter(function (q) { return q.isla; });
+    var boosts = isla.filter(function (q) { return q.boost; });
+    r.ramps = isla.length; r.boosters = boosts.length;
+    r.capped = boosts.every(function (q) { return q.cap > 30 && q.capUp; });
+    function run(ramp, type) {
+      if (P.inCar) GAME.exitCar();
+      P.health = 100; GAME.police.clearWanted();
+      var ux = Math.sin(ramp.rot), uz = Math.cos(ramp.rot);
+      var sx = ramp.x - ux * (ramp.len / 2 + 30), sz = ramp.z - uz * (ramp.len / 2 + 30);
+      GAME.test.teleport(sx - uz * 4, sz + ux * 4);
+      GAME.world.cars.slice().forEach(function (c) { if (U.dist2(c.pos.x, c.pos.z, ramp.x, ramp.z) < 250 * 250) GAME.vehicles.removeCar(c); });
+      var car = GAME.vehicles.spawnCar(type, sx, sz, ramp.rot, {});
+      car.pos.y = C.groundY(sx, sz);
+      GAME.test.enterNearestCar(car);
+      GAME.test.fastForward(0.7);
+      var o = { type: type };
+      if (!P.inCar) { GAME.vehicles.removeCar(car); return o; }
+      car.speed = car.spec.maxSpeed * 0.7;
+      o.arrive = +car.speed.toFixed(1);
+      var lipX = ramp.x + ux * ramp.len / 2, lipZ = ramp.z + uz * ramp.len / 2, wasDeck = false;
+      for (var i = 0; i < 60 * 9; i++) {
+        var deck = car.onRampIdx === ramp.idx && !(car.air > 0.05);
+        GAME.test.pressKey('KeyW', true);
+        GAME.test.fastForward(1 / 60);
+        if (deck) wasDeck = true;
+        if (car.sinking || (!wasDeck && i > 300)) break;
+        if (wasDeck && o.lip === undefined && car.air > 0) o.lip = +Math.hypot(car.airVX, car.airVZ).toFixed(1);
+        if (o.lip !== undefined && o.dist === undefined && !(car.air > 0)) {
+          o.dist = +Math.hypot(car.pos.x - lipX, car.pos.z - lipZ).toFixed(1);
+          GAME.test.pressKey('KeyW', false);
+          GAME.test.pressKey('KeyS', true);
+          GAME.test.fastForward(2.5);
+          GAME.test.pressKey('KeyS', false);
+          break;
+        }
+      }
+      GAME.test.pressKey('KeyW', false);
+      o.stillIn = P.inCar; o.alive = P.state === 'alive'; o.dry = !car.sinking && !C.isInWater(car.pos.x, car.pos.z);
+      if (P.inCar) GAME.exitCar();
+      GAME.vehicles.removeCar(car);
+      return o;
+    }
+    if (boosts.length) {
+      r.sedan = run(boosts[0], 'sedan');
+      r.bike = run(boosts[boosts.length - 1], 'superbike');
+    }
+    S.maxTraffic = keep.t; S.maxParked = keep.p;
+    GAME.isla.setOpen(wasOpen);
+    return r;
+  });
+  check('isla: a third of the island\'s jumps are boosters now, capped', ib.boosters >= 2 && ib.boosters <= Math.ceil(ib.ramps / 3) && ib.capped, JSON.stringify(ib));
+  check('isla: a booster hauls a car up to its pace off the lip', !!ib.sedan && ib.sedan.lip > ib.sedan.arrive + 8, JSON.stringify(ib.sedan));
+  check('isla: and leaves something already quicker alone', !!ib.bike && ib.bike.lip >= ib.bike.arrive - 1, JSON.stringify(ib.bike));
+  check('isla: both come down on dry land, aboard and alive',
+    !!ib.sedan && !!ib.bike && ib.sedan.dist > 20 && ib.sedan.stillIn && ib.sedan.alive && ib.sedan.dry && ib.bike.alive && ib.bike.dry,
+    JSON.stringify({ sedan: ib.sedan, bike: ib.bike }));
+
+  // The Lucky Gull's drinks patched you up and nothing else. They add up now:
+  // a few and the night swims, the bartender cuts you off near the top, and
+  // it wears off.
+  var dk = await page.evaluate(function () {
+    var P = GAME.player, S = GAME.shops, D = GAME.drunk, r = {};
+    function ff(t) { GAME.test.fastForward(t); }
+    if (P.inCar) GAME.exitCar();
+    GAME.police.clearWanted();
+    if (!D) return { missing: true };
+    D.sober();
+    P.cash = Math.max(P.cash, 5000);
+    // a stretch of pavement with nobody on it, to walk a straight line along
+    function wander() {
+      GAME.test.teleport(-150 + 7.5, 40); ff(0.4);
+      GAME.world.peds.slice().forEach(function (p) { if (Math.hypot(p.pos.x - P.pos.x, p.pos.z - P.pos.z) < 30) GAME.peds.removePed(p); });
+      P.heading = 0; GAME.cam.yaw = 0; ff(0.2);
+      var x0 = P.pos.x, worst = 0;
+      GAME.test.pressKey('KeyW', true);
+      for (var i = 0; i < 150; i++) { ff(1 / 60); worst = Math.max(worst, Math.abs(P.pos.x - x0)); }
+      GAME.test.pressKey('KeyW', false); ff(0.3);
+      return +worst.toFixed(2);
+    }
+    r.soberWalk = wander();
+    S.open(GAME.interiors.bar);
+    S.buy('cuba');
+    r.one = D.level === 0;
+    S.buy('punch'); S.buy('punch'); S.buy('punch');
+    r.level = +D.level.toFixed(2);
+    r.note = (document.getElementById('shop-note') || {}).textContent;
+    S.buy('special');
+    r.cut = D.cutOff && S.buy('cuba') === false && !!(S.selected && S.selected.off);
+    S.close(); ff(0.3);
+    r.colours = /hue-rotate/.test(GAME.renderer.domElement.style.filter);
+    r.drunkWalk = wander();
+    // and it wears off
+    ff(60 * 7);
+    r.sober = D.level === 0 && D.booze === 0 && GAME.renderer.domElement.style.filter === '';
+    r.walkAfter = wander();
+    return r;
+  });
+  check('bar: one drink is just a drink', dk.one, JSON.stringify(dk));
+  check('bar: a few more and the night swims — the colours run and the walk wanders', dk.level >= 0.5 && dk.colours && dk.drunkWalk > dk.soberWalk + 0.5, JSON.stringify(dk));
+  check('bar: the bartender cuts you off near the top', dk.cut, JSON.stringify(dk));
+  check('bar: and it wears off', dk.sober && dk.walkAfter < 0.3, JSON.stringify(dk));
+
+  // Fired from the hip, the shot went where the camera looked and the body
+  // went on facing where it walked, arms swinging. The gun comes up now.
+  var gp = await page.evaluate(function () {
+    var P = GAME.player, r = {};
+    function ff(t) { GAME.test.fastForward(t); }
+    if (P.inCar) GAME.exitCar();
+    GAME.police.clearWanted();
+    GAME.test.teleport(-150 + 7.5, 40); ff(0.4);
+    GAME.world.peds.slice().forEach(function (p) { if (Math.hypot(p.pos.x - P.pos.x, p.pos.z - P.pos.z) < 40) GAME.peds.removePed(p); });
+    GAME.combat.giveWeapon('pistol', 30); GAME.combat.giveWeapon('smg', 60);
+    var j = P.mesh.userData.joints;
+    function shoot(w) {
+      P.currentWeapon = w; GAME.combat.refreshWeaponHud();
+      P.heading = 0; GAME.cam.yaw = Math.PI / 2; ff(0.8);
+      GAME.input.lockGraceT = 0;
+      GAME.input.lmb = true; GAME.input.lmbPressed = true; ff(2 / 60); GAME.input.lmb = false;
+      ff(0.15);
+      return { heading: +P.heading.toFixed(2), armR: +j.armR.rotation.x.toFixed(2), armL: +j.armL.rotation.x.toFixed(2) };
+    }
+    r.pistol = shoot('pistol');
+    ff(1.2);
+    r.down = +j.armR.rotation.x.toFixed(2);
+    r.smg = shoot('smg');
+    ff(1.2);
+    P.currentWeapon = 'fist'; GAME.combat.refreshWeaponHud();
+    return r;
+  });
+  check('guns: a shot from the hip turns you to it and brings the gun arm up', Math.abs(gp.pistol.heading - Math.PI / 2) < 0.2 && gp.pistol.armR < -1.2, JSON.stringify(gp));
+  check('guns: a gun that takes two hands brings both up', gp.smg.armR < -1.2 && gp.smg.armL < -1.0, JSON.stringify(gp.smg));
+  check('guns: and the arm comes down again after', gp.down > -0.5, JSON.stringify(gp));
 
   // ---------- 6: a rider follows the deck when it tilts ----------
   // vehicles.js pitches a chassis over a ramp (negative rotation.x lifts the

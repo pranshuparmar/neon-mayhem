@@ -669,9 +669,50 @@ GAME.interiors = (function () {
       lift.push({ id: s[0], at: at, to: L[s[1]], toId: s[1], mesh: m, label: s[2], armed: true });
     });
   }
+  // ---- its doors ----
+  // Each stop's doors, the car's and the landing's together, open while the
+  // car waits there and somebody is at the door, and shut for the ride: walk
+  // up and they part, step in and they close, and at the other end they open
+  // onto the street or the roof and close behind you as you walk off. Walk
+  // up to a stop the car is not at and it comes to you, down (or up) the
+  // glass. It used to be a box with no doors that you were inside of.
+  var DOOR_NEAR = 4.5, DOOR_TIME = 0.7, CALL_NEAR = 10, CALL_SPEED = 14;
+  var doorOpen = { street: 0, roof: 0 };
+  function stopY(id) { var L = GAME.city.towerLift; return id === 'roof' ? L.shaft.top : 0.02; }
+  function cabAt(id) { return Math.abs(GAME.city.towerLift.cab.position.y - stopY(id)) < 0.05; }
+  function moveDoor(id, want, dt) {
+    var D = GAME.city.towerLift.doors && GAME.city.towerLift.doors[id];
+    var v = U.clamp(doorOpen[id] + U.clamp(want - doorOpen[id], -dt / DOOR_TIME, dt / DOOR_TIME), 0, 1);
+    if (!D || (v === doorOpen[id] && D.placed)) return;
+    doorOpen[id] = v; D.placed = true;
+    var e = v * v * (3 - 2 * v);
+    D.cab.m.position.x = D.cab.x0 + (D.cab.x1 - D.cab.x0) * e;
+    D.landing.m.position.x = D.landing.x0 + (D.landing.x1 - D.landing.x0) * e;
+  }
+  function stepDoors(dt) {
+    var P = GAME.player, L = GAME.city.towerLift, called = null;
+    for (var k = 0; k < lift.length; k++) {
+      var s = lift[k], want = 0;
+      var near = P.state === 'alive' && Math.abs(P.pos.y - s.at.y) < 2.5 ? U.dist2(P.pos.x, P.pos.z, s.at.x, s.at.z) : 1e9;
+      if (ridingNow) {
+        // shut behind you as you set off; open on arrival, the car stopped
+        if (s.id === ridingNow.s.toId && ridingNow.t >= LIFT_RIDE - LIFT_DOORS) want = 1;
+      } else if (cabAt(s.id)) {
+        if (near < DOOR_NEAR * DOOR_NEAR) want = 1;
+      } else if (near < CALL_NEAR * CALL_NEAR) called = s.id;
+      moveDoor(s.id, want, dt);
+    }
+    // the car answers a call once the doors it is behind have shut
+    if (called && !ridingNow && doorOpen.street + doorOpen.roof === 0) {
+      var y = L.cab.position.y, ty = stopY(called), dy = ty - y;
+      var v = Math.min(CALL_SPEED, 1.5 + Math.abs(dy) * 1.5) * dt;
+      L.cab.position.y = Math.abs(dy) <= v ? ty : y + Math.sign(dy) * v;
+    }
+  }
   function stepLift(dt) {
     var P = GAME.player;
     if (!lift) return;
+    stepDoors(dt || 1 / 60);
     if (ridingNow) { stepRide(dt || 1 / 60); return; }
     for (var i = 0; i < lift.length; i++) lift[i].mesh.material.opacity = 0.5 + 0.25 * Math.sin(GAME.time * 3 + i);
     if (P.state !== 'alive' || P.inCar || P.swimming || P.parachuting || P.mantle) return;
@@ -716,7 +757,14 @@ GAME.interiors = (function () {
     // (kept between the car's front posts: swung further, a post stood
     // down the middle of the picture)
     var yaw = R.yaw0 * 0.34 * Math.sin(Math.min(1, R.t / LIFT_RIDE) * Math.PI * 0.9);
-    var pitch = -0.04 + 0.24 * Math.sin(k * Math.PI * 0.85) + 0.06 * k;
+    // facing the doors as they shut and as they open — the street door looks
+    // out the way the ride does, the roof door is behind it — turning to the
+    // view once under way, and back to the door coming in to the roof
+    var turnOut = R.s.id === 'roof' ? 1 - U.clamp((R.t - LIFT_DOORS) / 1.2, 0, 1) : 0;
+    var turnIn = R.s.toId === 'roof' ? U.clamp((R.t - (LIFT_RIDE - LIFT_DOORS - 1.2)) / 1.2, 0, 1) : 0;
+    var turn = Math.max(turnOut, turnIn);
+    yaw = yaw * (1 - turn) + R.yaw0 * Math.PI * (turn * turn * (3 - 2 * turn));
+    var pitch = (-0.04 + 0.24 * Math.sin(k * Math.PI * 0.85) + 0.06 * k) * (1 - turn);
     var ex = L.shaft.x - Math.sin(yaw) * 0.55, ez = L.shaft.z - Math.cos(yaw) * 0.55, ey = y + 1.62 + Math.sin(R.t * 1.7) * 0.01;
     var cam = GAME.cameraObj;
     cam.position.set(ex, ey, ez);
@@ -948,6 +996,7 @@ GAME.interiors = (function () {
     leave: exitRoom,
     // headless: the two lift stops
     lift: function () { return lift; },
+    liftDoors: function () { return doorOpen; },
     rooms: function () { return ROOMS; },
     bar: BAR
   };

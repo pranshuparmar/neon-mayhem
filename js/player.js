@@ -615,8 +615,56 @@ GAME.ejectBike = function (impact) {
   GAME.hud.message('Thrown off the bike!', 2);
 };
 
+// ---------- one too many ----------
+// The Lucky Gull's drinks patch you up, and they add up. A couple and you
+// feel them; a few more and the night swims: the picture leans and runs with
+// colour, your feet wander off the line you meant, and the wheel pulls. It
+// wears off on its own (a drink's worth every forty-five seconds), and sleep,
+// a hospital or a cell clears your head at once. Near the top the bartender
+// stops serving (shops.js asks GAME.drunk.cutOff).
+var BOOZE_FADE = 1 / 45, BOOZE_MAX = 8;
+var booze = 0, drunkPainted = false;
+function drunkLevel() { return U.clamp((booze - 2) / 4, 0, 1); }
+GAME.drunk = {
+  get booze() { return booze; },
+  get level() { return drunkLevel(); },
+  get cutOff() { return booze >= BOOZE_MAX - 1; },
+  // a drink's strength in drinks; says how far gone you were and are
+  drink: function (n) {
+    var before = drunkLevel();
+    booze = Math.min(BOOZE_MAX, booze + n);
+    return { before: before, after: drunkLevel() };
+  },
+  sober: function () { booze = 0; paintDrunk(0); }
+};
+// the colours run (a CSS filter on the canvas: the HUD stays readable, and a
+// photo is taken from the frame as drawn, sober)
+function paintDrunk(lv) {
+  var cv = GAME.renderer && GAME.renderer.domElement;
+  if (!cv) return;
+  if (lv <= 0) {
+    if (drunkPainted) { cv.style.filter = ''; drunkPainted = false; }
+    return;
+  }
+  var t = GAME.time;
+  cv.style.filter = 'hue-rotate(' + Math.round(Math.sin(t * 0.35) * 80 * lv) + 'deg) saturate(' + (1 + 0.9 * lv).toFixed(2) +
+    ') blur(' + (lv * (0.5 + 0.4 * Math.sin(t * 1.1))).toFixed(2) + 'px)';
+  drunkPainted = true;
+}
+var drunkSaid = 0;
+function stepDrunk(dt) {
+  if (GAME.player.state !== 'alive') booze = 0;      // wasted or busted: you come round sober
+  else if (booze > 0) booze = Math.max(0, booze - BOOZE_FADE * dt);
+  var lv = drunkLevel();
+  paintDrunk(lv);
+  // said once as it takes hold, and once as it lets go
+  if (lv > 0 && !drunkSaid) { drunkSaid = 1; GAME.hud.message('One too many — the night has started to swim.', 3); }
+  else if (lv === 0 && drunkSaid) { drunkSaid = 0; if (GAME.player.state === 'alive') GAME.hud.message('Your head clears.', 2.5); }
+}
+
 GAME.updatePlayer = function (dt) {
   var P = GAME.player, inp = GAME.input, T = inp.touch;
+  stepDrunk(dt);
   // riding the glass lift: the ride has the body and the camera (interiors.js)
   if (GAME.interiors && GAME.interiors.riding && GAME.interiors.riding()) return;
   if (P.state !== 'alive') {
@@ -636,7 +684,7 @@ GAME.updatePlayer = function (dt) {
   enterHint(dt);
   if (P.entering) { stepEnter(dt); updateCamera(dt); return; }
   if (P.parachuting) { GAME.aircraft.updateParachute(dt); updateCamera(dt); return; }
-  if (P.inCar) updateDriving(dt);
+  if (P.inCar) { P.shotT = 0; updateDriving(dt); }
   else updateOnFoot(dt);
 
   // pickups
@@ -1016,6 +1064,9 @@ function updateOnFoot(dt) {
     var wx = Math.sin(camYaw) * mz - Math.cos(camYaw) * mx;
     var wz = Math.cos(camYaw) * mz + Math.sin(camYaw) * mx;
     var moveH = Math.atan2(wx, wz);
+    // (drunk, your feet have their own idea of the line)
+    var dlv = drunkLevel();
+    if (dlv > 0) moveH += (Math.sin(GAME.time * 1.6) * 0.5 + Math.sin(GAME.time * 0.61 + 1) * 0.3) * dlv;
     if (!aiming) P.heading = U.angleLerp(P.heading, moveH, Math.min(1, dt * 10));
     P.moveH = moveH;
   }
@@ -1024,7 +1075,13 @@ function updateOnFoot(dt) {
     // where the bullets will actually go, not wherever the camera drifted
     var lockT = GAME.combat.lockTarget;
     P.heading = lockT ? Math.atan2(lockT.pos.x - P.pos.x, lockT.pos.z - P.pos.z) : GAME.cam.yaw;
+  } else if (P.shotT > 0) {
+    // fired from the hip: the body turns to the shot while the legs keep
+    // going where you are going
+    P.heading = U.angleLerp(P.heading, P.shotYaw, Math.min(1, dt * 18));
   }
+  var shotPose = P.shotT > 0;
+  if (shotPose) P.shotT -= dt;
 
   var h = (mag > 0.05) ? P.moveH : P.heading;
   var nx = P.pos.x + Math.sin(h) * P.moveSpeed * dt * (mag > 0.05 ? 1 : 0);
@@ -1178,24 +1235,35 @@ function updateOnFoot(dt) {
     j.armR.rotation.x = -1.75 * ext;
     j.armL.rotation.x = -s * 0.5;
     j.torso.rotation.y = -0.35 * ext;
-  } else if (aiming && P.currentWeapon !== 'fist') {
+  } else if ((aiming || shotPose) && P.currentWeapon !== 'fist') {
     j.torso.rotation.y = 0;
     // the arm follows the lock in elevation too — raised at a rooftop
-    // target, dropped at someone below, level otherwise
-    var armT = GAME.combat.lockTarget;
+    // target, dropped at someone below, level otherwise. A shot from the hip
+    // brings it up the same way for a moment, with the kick of the round in
+    // it; a gun that takes two hands brings the other one up under it.
+    var armT = GAME.combat.lockTarget, armX;
     if (armT) {
       var adx = armT.pos.x - P.pos.x, adz = armT.pos.z - P.pos.z;
       var ad = Math.sqrt(adx * adx + adz * adz) || 1;
       var aimUp = Math.atan2((armT.pos.y + 1.1) - (P.pos.y + 1.35), ad);
-      j.armR.rotation.x = -Math.PI / 2 - U.clamp(aimUp, -0.7, 0.7);
+      armX = -Math.PI / 2 - U.clamp(aimUp, -0.7, 0.7);
     } else {
-      j.armR.rotation.x = -Math.PI / 2 + GAME.cam.pitch * 0.5;
+      armX = -Math.PI / 2 + GAME.cam.pitch * 0.5;
     }
-    j.armL.rotation.x = -s * 0.4;
+    var kick = shotPose ? U.clamp((P.shotT - (SHOT_POSE - 0.14)) / 0.12, 0, 1) : 0;
+    j.armR.rotation.x = armX - kick * 0.22;
+    if (TWO_HANDED[P.currentWeapon]) {
+      j.armL.rotation.x = armX + 0.12 - kick * 0.15;
+      j.armL.rotation.z = -0.32;
+    } else {
+      j.armL.rotation.x = -s * 0.4;
+      j.armL.rotation.z = 0;
+    }
   } else {
     j.torso.rotation.y = 0;
     j.armL.rotation.x = -s * 0.8;
     j.armR.rotation.x = s * 0.8;
+    j.armL.rotation.z = 0;
   }
 
   if (wantsEnter()) {
@@ -1302,6 +1370,9 @@ function updateDriving(dt) {
     if (GAME.pad.on) { th += GAME.pad.rt - GAME.pad.lt; st -= GAME.pad.lx; }   // triggers and stick
     c.throttle = U.clamp(th, -1, 1);
     c.steer = U.clamp(st, -1, 1);
+    // and the wheel pulls, under way, with a few drinks in you
+    var dlc = drunkLevel();
+    if (dlc > 0 && Math.abs(car.speed) > 2) c.steer = U.clamp(c.steer + (Math.sin(GAME.time * 0.8) * 0.3 + Math.sin(GAME.time * 2.1) * 0.12) * dlc, -1, 1);
     // the monster truck's party trick: Space launches it straight up
     var wantHop = GAME.key('Space') || T.handbrake;
     if (car.spec.monster) {
@@ -1508,4 +1579,12 @@ function updateCamera(dt) {
   // risen over a wall at your back, look out ahead of you, not down at the crown
   var lookAhead = (aiming ? 4 : 0) + tight * 3;
   GAME.cameraObj.lookAt(fx + Math.sin(cam.yaw) * lookAhead, lookY, fz + Math.cos(cam.yaw) * lookAhead);
+  // one too many: the picture leans and drifts (not with SHAKE: OFF — the
+  // colours still run, but nothing moves that you did not move)
+  var dl = drunkLevel();
+  if (dl > 0 && !(GAME.prefs && GAME.prefs.noShake)) {
+    var tt = GAME.time;
+    GAME.cameraObj.rotateZ((Math.sin(tt * 0.9) * 0.07 + Math.sin(tt * 2.3) * 0.015) * dl);
+    GAME.cameraObj.rotateY(Math.sin(tt * 0.47) * 0.04 * dl);
+  }
 }

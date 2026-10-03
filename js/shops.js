@@ -328,20 +328,29 @@ GAME.shops = (function () {
 
   // The Lucky Gull's bar: a drink puts you back together, a dear one with
   // your vest done up as well.
+  // (and every one of them goes to your head: player.js, GAME.drunk)
+  var BAR_PROOF = { cuba: 1, punch: 1.5, special: 2.5 };
   function barItems() {
     var P = GAME.player;
-    return [
+    var rows = [
       { id: 'cuba', name: 'CUBA LIBRE', price: 40, ds: P.health >= 100 ? 'You’re fine — but it’s a nice drink.' : 'A good long swallow: +35 health.' },
       { id: 'punch', name: 'NEON PUNCH', price: 120, ds: 'Back on your feet: health full.' },
       { id: 'special', name: 'THE GULL SPECIAL', price: 400, ds: 'Health full and armor strapped on. Don’t ask what’s in it.' }
     ];
+    if (GAME.drunk && GAME.drunk.cutOff) {
+      rows.forEach(function (r) { r.off = true; r.ds = 'The bartender has cut you off. Come back when you can see straight.'; });
+    }
+    return rows;
   }
   function buyBar(id) {
     var P = GAME.player;
     if (id === 'cuba') P.health = Math.min(100, P.health + 35);
     else P.health = 100;
     if (id === 'special') P.armor = 100;
-    note(id === 'special' ? 'The bartender winks.' : 'Cheers.');
+    var d = GAME.drunk ? GAME.drunk.drink(BAR_PROOF[id] || 1) : null;
+    note(!d || d.after === 0 ? (id === 'special' ? 'The bartender winks.' : 'Cheers.')
+      : d.after < 0.5 ? 'You feel that one.' : d.after < 1 ? 'The room has started to swim.'
+        : 'The bar is spinning, and everything is neon.');
     GAME.track('bar-drink');
   }
 
@@ -383,6 +392,7 @@ GAME.shops = (function () {
       GAME.prefs.lastHome = loc.sh.id;   // and the next load starts here (startSpawn)
       close();
       GAME.hud.fade(function () {
+        if (GAME.drunk) GAME.drunk.sober();     // and you wake up with a clear head
         // eight hours pass behind the blackout: a third of the day wheel,
         // the law loses interest, taken pickups age toward their return,
         // and the body resets. The bed outranks a pinned sky — "respecting"
@@ -953,8 +963,10 @@ GAME.shops = (function () {
         var ux = Math.sin(r.rot), uz = Math.cos(r.rot);
         var lx = r.x + ux * r.len / 2, lz = r.z + uz * r.len / 2;
         // (a metered ramp keeps the corridor it had when it was dressed as
-        // a booster, so taking the dress off moved no shop)
-        var L = r.boost || r.cap ? 260 : 90;
+        // a booster, so taking the dress off moved no shop; an island
+        // booster is capped, and flies eighty metres at the most — given the
+        // full booster's corridor, it moved the Marina Villa)
+        var L = r.capUp ? 130 : r.boost || r.cap ? 260 : 90;
         var t = ((cx - lx) * ux + (cz - lz) * uz) / L;
         if (t < -0.15 || t > 1) continue;
         var px = lx + ux * t * L, pz = lz + uz * t * L;
