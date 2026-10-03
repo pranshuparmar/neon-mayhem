@@ -70,9 +70,8 @@
 //       time you meet it, once, and the pause screen switches her off; C
 //       takes a photo of the frame, developed like a 1986 print, into an
 //       album you save from (or straight to your downloads), kept between visits.
-//   5j. WALK-IN BUSINESSES — the gun shop, THREADS, the barber, the showroom
-//       and the sergeant's desk are rooms you walk into, the menu at the
-//       counter; a wardrobe at home holds two outfits from the start and all
+//   5j. WALK-IN BUSINESSES — the gun shop, THREADS, the barber and the
+//       sergeant's desk are rooms you walk into, the menu at the counter; a wardrobe at home holds two outfits from the start and all
 //       you buy; the casino's terminals run horse races at posted odds.
 //   5k. HOMES LIKE THEIR OUTSIDES — buying a place takes you in; the flat is
 //       one room, the condo's bedroom is through a door, the villa has stairs
@@ -87,6 +86,12 @@
 //       D-pad down changes weapon without calling Lola, a held button lets go
 //       of the key it pressed, and the prompts name the pad's buttons; and a
 //       touchscreen can barrel-roll the plane like the other two.
+//   5n. GRAN ROSA MOTORS, WALKED INTO — the glass hall is entered where it
+//       stands, through doors that part; the street is through the glass;
+//       every land vehicle on its price list is on the floor and both
+//       helicopters on the roof, none of them drivable; stairs go up there.
+//       With money on a Gull Downs race you watch it from the terminal; the
+//       beach shelves into the sea instead of ending in a wall.
 //   4y. AROUND THE GAME — messages stack; the district name keeps out of a
 //       mission's title; every overlay uses the game's face; the title says
 //       LOADING until it can answer; pause takes keys and ignores a missed
@@ -2195,6 +2200,14 @@ function withTimeout(p, ms) {
     GAME.setTimeMode('day');
     var far0 = GAME.scene.fog.far;
     function slide(wet) {
+      // The street to itself: a passing car or a walker in the line of the
+      // slide pushed the car and took the slip with it (wet 5.46 against a
+      // steady 5.87 once on CI, under the 10% the check asks for). And the
+      // weather holds whatever was set — under CLEAR the rain was easing off
+      // through the run.
+      GAME.world.cars.slice().forEach(function (c) { if (Math.hypot(c.pos.x + 150 - 3.1, c.pos.z + 200) < 140) GAME.vehicles.removeCar(c); });
+      GAME.world.peds.slice().forEach(function (p) { if (Math.hypot(p.pos.x + 150 - 3.1, p.pos.z + 200) < 140) GAME.peds.removePed(p); });
+      W.setMode(wet ? 'rain' : 'clear', true);
       W.testSet(wet);
       GAME.test.fastForward(0.1);
       var car = GAME.vehicles.spawnCar('sedan', -150 + 3.1, -200, 0, {});
@@ -3988,7 +4001,7 @@ function withTimeout(p, ms) {
 
   // ---------- 5j: walk-in businesses, a wardrobe, and Gull Downs ----------
   // The bar raised the bar: every business is a room now — the gun shop,
-  // THREADS, the barber, the showroom and the sergeant's desk — with
+  // THREADS, the barber and the sergeant's desk — with
   // somebody behind the counter and the menu at the counter. Whatever you
   // own hangs in a wardrobe at home (two outfits from the start, and
   // everything bought since), and the slot machines at the Lucky Gull are
@@ -4008,7 +4021,8 @@ function withTimeout(p, ms) {
       GAME.test.pressKey('KeyW', false);
       GAME.test.fastForward(0.7);
     }
-    ['hardware0', 'dress0', 'barber0', 'showroom0', 'bribe0'].forEach(function (id) {
+    // (the showroom is walked into where it stands: 5n)
+    ['hardware0', 'dress0', 'barber0', 'bribe0'].forEach(function (id) {
       var r = { id: id };
       if (S.isOpen) S.close();
       var loc = S.locations().filter(function (l) { return l.id === id; })[0];
@@ -7242,6 +7256,213 @@ function withTimeout(p, ms) {
   check('pad: the TALON fires its chin gun on RB and rockets on LB', pad.chinGun && pad.rockets && pad.lmbLetGo);
   check('pad: A carries on from WASTED', pad.continued && pad.keyRLetGo);
   check('pad: back on the keyboard the prompts say keys', padAfter.keyLabel === 'F' && padAfter.alive, JSON.stringify(padAfter));
+
+  // ---------- 5n: Gran Rosa Motors walked into, your race watched, the beach's edge ----------
+  // The showroom's front is all glass, and its inside was a room out in
+  // the fog: look back at the glass from in there and it was a wall. Now
+  // the hall is walked into where it stands. The street is through the
+  // glass, every machine on the price list that runs on wheels is on the
+  // floor, the two helicopters are on the roof, and stairs go up to them.
+  // None of it can be driven.
+  var gr = await page.evaluate(function () {
+    var P = GAME.player, S = GAME.shops, I = GAME.interiors, r = {};
+    if (P.inCar) GAME.exitCar();
+    GAME.police.clearWanted();
+    if (S.isOpen) S.close();
+    function ff(t) { GAME.test.fastForward(t); }
+    function walkTo(x, z, maxT) {
+      for (var w = 0; w < (maxT || 10); w += 1 / 60) {
+        var dx = x - P.pos.x, dz = z - P.pos.z;
+        if (dx * dx + dz * dz < 0.2 || GAME.shopOpen) break;
+        P.heading = Math.atan2(dx, dz); GAME.cam.yaw = P.heading;
+        GAME.test.pressKey('KeyW', true);
+        ff(1 / 60);
+      }
+      GAME.test.pressKey('KeyW', false);
+      ff(0.3);
+    }
+    var H = S.hall(), loc = S.locations().filter(function (l) { return l.id === 'showroom0'; })[0];
+    if (!H || !loc) return { missing: true };
+    function inside(x, z) { return x > H.minX && x < H.maxX && z > H.minZ && z < H.maxZ; }
+    r.noRoom = !I.enterable(loc) && !I.rooms().some(function (rm) { return rm.id === 'showroom0'; });
+    r.matInside = inside(loc.at.x, loc.at.z);
+    // the sale list, read off the counter
+    S.open(loc);
+    var ids = [], seen = {};
+    for (var k = 0; k < 20 && S.selected && !seen[S.selected.id]; k++) {
+      seen[S.selected.id] = true; ids.push(S.selected.id);
+      S.key('ArrowDown');
+    }
+    S.close(); ff(0.2);
+    var T = GAME.vehicles.TYPES;
+    r.landForSale = ids.filter(function (id) { return T[id] && !T[id].heli; }).sort().join(',');
+    r.airForSale = ids.filter(function (id) { return T[id] && T[id].heli; }).sort().join(',');
+    var stock = S.hallStock();
+    r.floor = stock.filter(function (s) { return !s.roof; }).map(function (s) { return s.type; }).sort().join(',');
+    r.roof = stock.filter(function (s) { return s.roof; }).map(function (s) { return s.type; }).sort().join(',');
+    r.floorInside = stock.every(function (s) { return inside(s.x, s.z) && s.mesh.position.y < (s.roof ? H.roof + 0.5 : H.under - 2) && (s.roof ? s.mesh.position.y > H.roof - 0.1 : true); });
+    // nothing on display is a vehicle in the world
+    r.notCars = stock.every(function (s) { return GAME.world.cars.every(function (c) { return c.mesh !== s.mesh; }); });
+    // the hall's own frame: `a` along the glass from the door, `b` in from it
+    var d = H.door, n = H.inward;
+    function at(a, b) { return { x: d.x + n.z * a + n.x * b, z: d.z - n.x * a + n.z * b }; }
+    function go(a, b, maxT) { var q = at(a, b); walkTo(q.x, q.z, maxT); }
+    var st = H.stairs, sa = (st.x - d.x) * n.z - (st.z - d.z) * n.x;
+    // the glass: the street sees in (and the law with it); the side wall does not
+    var o1 = at(-4, -12), o2 = at(-4, 3);
+    r.seeThrough = GAME.city.hash.segmentClear(o1.x, o1.z, o2.x, o2.z, 1.5);
+    var mx = (H.minX + H.maxX) / 2, mz = (H.minZ + H.maxZ) / 2;
+    r.wallBlocks = !GAME.city.hash.segmentClear(mx, mz, mx + n.z * 30, mz - n.x * 30, 1.5);
+    // in through the doors, which part as you come and close behind you
+    var o3 = at(0, -7);
+    GAME.test.teleport(o3.x, o3.z); ff(0.5);
+    r.shutAtFirst = S.hallDoor() < 0.05;
+    go(0, -1.2);
+    r.openAtDoor = S.hallDoor() > 0.9;
+    go(0, 4);
+    r.walkedIn = I.hall() === H && inside(P.pos.x, P.pos.z) && Math.abs(P.pos.y - H.floor) < 0.3 && !I.current && !P.interior;
+    r.sheltered = I.sheltered();
+    r.ceiling = I.ceiling(P.pos.x, P.pos.z);
+    go(0, 9);
+    ff(1.5);
+    r.shutBehind = S.hallDoor() < 0.05;
+    // at the sales desk, the counter is the shop
+    walkTo(loc.at.x, loc.at.z);
+    r.desk = GAME.shopOpen && S.current === loc;
+    if (S.isOpen) S.close();
+    ff(0.3);
+    // and F beside the stock gets you nowhere
+    var mono = stock.filter(function (s) { return s.type === 'monster'; })[0];
+    if (mono) {
+      walkTo(mono.x - n.x * 4.2, mono.z - n.z * 4.2, 8);
+      GAME.test.pressKey('KeyF', true); ff(0.1); GAME.test.pressKey('KeyF', false); ff(1.0);
+      r.fNoCar = !P.inCar && !P.entering;
+    }
+    // up the stairs to the roof, at a walk
+    var hp0 = P.health;
+    go(sa - 3, 1.5, 14);
+    walkTo(st.x, st.z);
+    for (var t = 0; t < 14 && P.pos.y < H.roof - 0.05; t += 1 / 60) {
+      P.heading = Math.atan2(st.topX - P.pos.x, st.topZ - P.pos.z); GAME.cam.yaw = P.heading;
+      GAME.test.pressKey('KeyW', true); ff(1 / 60);
+    }
+    GAME.test.pressKey('KeyW', false); ff(0.3);
+    r.climbed = P.pos.y > H.roof - 0.1;
+    // across the roof behind the helicopters, to over the sales desk: no
+    // shop up here
+    walkTo(st.topX, st.topZ);
+    var top = (st.topX - d.x) * n.x + (st.topZ - d.z) * n.z;
+    go(sa - 3, top);
+    go(0, 13.6);
+    walkTo(loc.at.x, loc.at.z);
+    r.roofWalk = Math.abs(P.pos.y - H.roof) < 0.1 && inside(P.pos.x, P.pos.z) && Math.hypot(P.pos.x - loc.at.x, P.pos.z - loc.at.z) < 1.5;
+    r.noShopOnRoof = !GAME.shopOpen;
+    r.roofCam = I.camFloor(P.pos.x, P.pos.z) === H.roof + 0.45 && I.ceiling(P.pos.x, P.pos.z) === null && !I.sheltered();
+    // F by the TALON does not fly it away either
+    var gun = stock.filter(function (s) { return s.type === 'gunship'; })[0];
+    if (gun) {
+      var ga = (gun.x - d.x) * n.z - (gun.z - d.z) * n.x, gb = (gun.x - d.x) * n.x + (gun.z - d.z) * n.z;
+      go(0, gb - 3.7); go(ga, gb - 3.7);
+      r.byTalon = Math.hypot(P.pos.x - gun.x, P.pos.z - gun.z) < 4.2;
+      GAME.test.pressKey('KeyF', true); ff(0.1); GAME.test.pressKey('KeyF', false); ff(1.0);
+      r.fNoHeli = r.byTalon && !P.inCar && !P.entering && Math.abs(P.pos.y - H.roof) < 0.1;
+    }
+    // the parapet holds: walk at the street side and stay up
+    go(0, 2.5); go(0, -3, 4);
+    r.parapet = Math.abs(P.pos.y - H.roof) < 0.1 && inside(P.pos.x, P.pos.z);
+    // and back down the way you came
+    go(sa - 3, 2); go(sa - 3, top); walkTo(st.topX, st.topZ);
+    for (var t2 = 0; t2 < 14 && P.pos.y > H.floor + 0.05; t2 += 1 / 60) {
+      P.heading = Math.atan2(st.x - P.pos.x, st.z - P.pos.z); GAME.cam.yaw = P.heading;
+      GAME.test.pressKey('KeyW', true); ff(1 / 60);
+    }
+    GAME.test.pressKey('KeyW', false); ff(0.5);
+    r.down = Math.abs(P.pos.y - H.floor) < 0.1 && inside(P.pos.x, P.pos.z);
+    r.unhurt = P.health >= hp0 && P.state === 'alive';
+    return r;
+  });
+  check('showroom: Gran Rosa Motors has no room out in the fog, and its desk is in the hall', gr.noRoom && gr.matInside, JSON.stringify(gr));
+  check('showroom: every machine on the price list that runs on wheels is on the floor',
+    !!gr.landForSale && gr.floor === gr.landForSale, gr.floor + ' / for sale: ' + gr.landForSale);
+  check('showroom: and both helicopters are up on the roof', !!gr.airForSale && gr.roof === gr.airForSale && gr.floorInside, gr.roof + ' / for sale: ' + gr.airForSale);
+  check('showroom: none of it is a vehicle you can take', gr.notCars && gr.fNoCar && gr.fNoHeli, JSON.stringify({ notCars: gr.notCars, f: gr.fNoCar, heli: gr.fNoHeli }));
+  check('showroom: the street is through the glass, and the side wall is a wall', gr.seeThrough && gr.wallBlocks);
+  check('showroom: the doors part as you come up and close behind you', gr.shutAtFirst && gr.openAtDoor && gr.shutBehind);
+  check('showroom: you walk in where it stands, under its roof', gr.walkedIn && gr.sheltered && gr.ceiling !== null && gr.ceiling < 9);
+  check('showroom: the sales desk is the counter', gr.desk);
+  check('showroom: the stairs go up to the roof', gr.climbed);
+  check('showroom: up there it is a roof — walked across, over the desk without its menu, the camera kept above it', gr.roofWalk && gr.noShopOnRoof && gr.roofCam);
+  check('showroom: the parapet holds, and the stairs bring you back down unhurt', gr.parapet && gr.down && gr.unhurt);
+
+  // Gull Downs: with money down you watched your race from wherever you
+  // liked — the bar, the door, the street — and a race ran on for nobody.
+  // Now you stand at the terminal facing the big screen until the result is
+  // in; the jump key skips ahead, and then you are your own again.
+  var gh = await page.evaluate(function () {
+    var P = GAME.player, I = GAME.interiors, S = GAME.shops, D = GAME.derby, r = {};
+    function ff(t) { GAME.test.fastForward(t); }
+    function walkTo(x, z, maxT) {
+      for (var w = 0; w < (maxT || 8); w += 1 / 60) {
+        var dx = x - P.pos.x, dz = z - P.pos.z;
+        if (dx * dx + dz * dz < 0.2 || I.busy || GAME.shopOpen) break;
+        P.heading = Math.atan2(dx, dz); GAME.cam.yaw = P.heading;
+        GAME.test.pressKey('KeyW', true);
+        ff(1 / 60);
+      }
+      GAME.test.pressKey('KeyW', false);
+      ff(0.3);
+    }
+    function moved(keys, t) {
+      var x0 = P.pos.x, z0 = P.pos.z;
+      keys.forEach(function (k) { GAME.test.pressKey(k, true); });
+      ff(t);
+      keys.forEach(function (k) { GAME.test.pressKey(k, false); });
+      ff(0.2);
+      return Math.hypot(P.pos.x - x0, P.pos.z - z0);
+    }
+    if (P.inCar) GAME.exitCar();
+    if (S.isOpen) S.close();
+    GAME.police.clearWanted();
+    var cas = S.locations().filter(function (l) { return l.kind === 'casino'; })[0];
+    GAME.test.teleport(cas.at.x + 8, cas.at.z); ff(0.4);
+    walkTo(cas.at.x, cas.at.z); ff(0.5);
+    var room = I.current;
+    r.inside = !!room && room.kind === 'casino';
+    if (!r.inside) return r;
+    for (var k = 0; k < 60 && D.bet; k++) ff(1);
+    var ring = room.rings.filter(function (x) { return /GULL DOWNS/.test(x.label); })[0];
+    walkTo(ring.x - 2.5, ring.z); walkTo(ring.x, ring.z);
+    r.opens = GAME.shopOpen && S.current && S.current.kind === 'derby';
+    P.cash = Math.max(P.cash, 5000);
+    S.buy('horse1');
+    ff(0.1);
+    r.held = !!D.bet && D.holding && !GAME.shopOpen;
+    var sc = room.screen, want = Math.atan2(sc.x - P.pos.x, sc.z - P.pos.z);
+    r.facing = Math.abs(Math.atan2(Math.sin(P.heading - want), Math.cos(P.heading - want))) < 0.05;
+    r.stays = moved(['KeyW', 'KeyA', 'ShiftLeft'], 2) < 0.05 && P.pos.y < 0.3;
+    r.hint = (document.getElementById('poi-hint').textContent || '').slice(0, 60);
+    // the jump key skips ahead — to the off, then over the line
+    for (k = 0; k < 12 && D.bet; k++) { GAME.test.pressKey('Space', true); ff(0.15); GAME.test.pressKey('Space', false); ff(0.15); }
+    r.skipped = !D.bet && k < 12;
+    r.readResult = D.holding;
+    ff(3);
+    r.free = !D.holding;
+    r.walks = moved(['KeyS'], 1) > 1;
+    I.leave(); ff(1.2);
+    return r;
+  });
+  check('Gull Downs: with money down you stand at the terminal, facing the screen', gh.inside && gh.opens && gh.held && gh.facing && gh.stays, JSON.stringify(gh));
+  check('Gull Downs: the screen says it is your race, and the jump key skips ahead', /YOUR RACE/.test(gh.hint) && gh.skipped, JSON.stringify(gh));
+  check('Gull Downs: the result is read, and then you can walk again', gh.readResult && gh.free && gh.walks, JSON.stringify(gh));
+
+  // The beach ended at the water in a sheer face, half a metre of it out of
+  // the sea: from a boat the whole strip was a wall. It shelves in now.
+  var bank = await page.evaluate(function () {
+    var b = GAME.city.beachBank;
+    return b ? { top: b.top, toe: b.toe, run: b.back + b.out, sea: GAME.city.seaLevel } : null;
+  });
+  check('beach: the sand shelves into the sea instead of standing out of it as a wall',
+    !!bank && bank.run / (bank.top - bank.toe) >= 2 && bank.toe < bank.sea - 0.5, JSON.stringify(bank));
 
   // ---------- 6: a rider follows the deck when it tilts ----------
   // vehicles.js pitches a chassis over a ramp (negative rotation.x lifts the

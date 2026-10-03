@@ -1573,6 +1573,9 @@ GAME.city = (function () {
     // which drew sand over open water — a swimmer there was under the beach,
     // and a boat run in at it sat up on the "sand".
     var EDGE = 0.5;
+    // the bank: from the wet sand's height, starting `back` inside the edge,
+    // down to its toe `out` past it
+    var BANK = city.beachBank = { top: 0.2, toe: -1.2, back: 2, out: 2 };
     for (var sz = -500; sz < 500; sz += 20) {
       // one shade draw per strip, split or not — the rng stream feeds every
       // placement after this loop, and an extra draw would reshuffle the city
@@ -1584,9 +1587,15 @@ GAME.city = (function () {
         if (zb - za < 0.6) continue;
         var ea = city.shoreline(za) + EDGE, eb = city.shoreline(zb) + EDGE;
         sand.addQuad([SAND_X0, sy, za], [ea, sy, za], [eb, sy, zb], [SAND_X0, sy, zb], shade, [0, 1, 0]);
-        // darker wet band at the waterline, and the face down into the sea
-        sand.addQuad([ea - 6, 0.2, za], [ea, 0.2, za], [eb, 0.2, zb], [eb - 6, 0.2, zb], 0xb0a078, [0, 1, 0]);
-        sand.addQuad([ea, 0.2, za], [eb, 0.2, zb], [eb, -1.2, zb], [ea, -1.2, za], 0x8a7a58, [1, 0, 0]);
+        // darker wet sand toward the waterline, and the bank shelving away
+        // under the sea. The bank was a sheer face at the coast, half a
+        // metre of it standing out of the water: from a boat or a swimmer's
+        // eye the whole beach ended in a kerb, and it read as a wall. It
+        // leans out four metres now, meeting the water about at the coast,
+        // and its last metre and a half stays under the surface.
+        var K = BANK;
+        sand.addQuad([ea - 6, K.top, za], [ea - K.back, K.top, za], [eb - K.back, K.top, zb], [eb - 6, K.top, zb], 0xb0a078, [0, 1, 0]);
+        sand.addQuad([ea - K.back, K.top, za], [eb - K.back, K.top, zb], [eb + K.out, K.toe, zb], [ea + K.out, K.toe, za], 0xa29268, [K.top - K.toe, K.back + K.out, 0]);
       }
       sIdx++;
     }

@@ -995,6 +995,10 @@ function updateOnFoot(dt) {
   if (GAME.key('KeyD')) mx += 1;
   if (T.active) { mx += T.stickX; mz += -T.stickY; }
   if (GAME.pad.on) { mx += GAME.pad.lx; mz += -GAME.pad.ly; }   // the left stick
+  // money down at Gull Downs: you stand at the terminal and watch your race
+  // (derby.js; the jump button skips ahead instead)
+  var held = !!(GAME.derby && GAME.derby.holding);
+  if (held) { mx = 0; mz = 0; }
   var mag = Math.min(1, U.len(mx, mz));
   if (P.carHurtCd > 0) P.carHurtCd -= dt;
   // Run is a CHOICE: Shift on desktop, the RUN toggle on touch. Full stick
@@ -1114,14 +1118,15 @@ function updateOnFoot(dt) {
   }
   // Space jumps when you're on your feet (running gives you a longer hop)
   var grounded = P.pos.y <= surf + 0.06;
-  var wantJump = GAME.key('Space') || T.jump;
+  var jumpDown = GAME.key('Space') || T.jump, wantJump = jumpDown && !held;
   if (grounded && wantJump && !P.jumpLatch && tryMantle(surf)) { P.jumpLatch = true; return; }
   if (grounded && wantJump && !P.jumpLatch) {
     P.velY = 7.2 + Math.min(P.moveSpeed, 6) * 0.22;
     P.pos.y = surf + 0.07;
     GAME.audio.punch();
   }
-  P.jumpLatch = wantJump;
+  // (a skip held as the race ends is not a jump the moment you are let go)
+  P.jumpLatch = jumpDown;
   P.airborne = P.pos.y > surf + 0.06;
   if (P.airborne) {
     P.velY = (P.velY || 0) - 22 * dt;

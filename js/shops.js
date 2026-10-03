@@ -9,6 +9,9 @@ GAME.shops = (function () {
   var lastWX = null, lastWZ = null;   // where the walk-in scan last saw the player
   var lastUnlocked = null;   // island gate state at the last walk-in scan
   var spinProps = [];   // slow turntables: the showroom's display car, etc.
+  // the Gran Rosa Motors hall (buildHall): its interiors.js entry, its
+  // sliding doors, and what stands on its floor and its roof
+  var hall = null, hallDoor = null, hallStock = [], inHall = false, hallHello = -1e9;
 
   // sign-atlas slots for the storefront names — indexes into city.js SIGN_TEXTS,
   // which appends these nine in this exact order after 'ISLA ROSA' (slot 33)
@@ -691,6 +694,255 @@ GAME.shops = (function () {
       if (mat) for (var mm in mat) mo[mm] = mat[mm];
       return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshBasicMaterial(mo));
     }
+    // ---- Gran Rosa Motors, inside ----
+    // The hall is walked into where it stands, through sliding doors in the
+    // glass — it used to be a room out in the fog, so from inside the glass
+    // front was a blank wall. Now the street through the glass is the
+    // street, and the street sees in. On the floor, each under its own
+    // light, every machine on the price list that runs on wheels; at the
+    // back the sales desk, whose mat is the shop's; up the stairs on the
+    // left, the roof, and the two helicopters standing on their pads. All
+    // of it is stock, not traffic: nothing here can be driven, and what you
+    // buy waits outside on the forecourt.
+    // `a` runs along the glass from the door, `b` back from it.
+    function buildHall(loc, placed, S, gy, fx, fz, px2) {
+      var dir = placed.dir, flip = dir.x !== 0;
+      var IN = S.w / 2 - 1, BACK = S.d - 1;          // the inside faces of the walls
+      var ROOF = gy + S.h, UNDER = ROOF - 0.6, PARA = 1.1;
+      // the stairs up the left-hand wall as you come in, and the hole in the
+      // roof over the top of them (cut where the ceiling would meet your head)
+      var SA0 = IN - 2.2, SB0 = 3.2, SB1 = 15.2, HB0 = 11.2;
+      var DESK = 15.7, MAT = 12.8, WALL = 0x343a4c, MINT = 0x8dffd8;
+      var inward = Math.atan2(dir.x, dir.z), along = Math.atan2(px2.x, px2.z);
+      function X(a, b) { return fx + px2.x * a + dir.x * b; }
+      function Z(a, b) { return fz + px2.z * a + dir.z * b; }
+      // a box: `wa` along the glass, `db` back from it, `h` tall from y0
+      function lbox(a, b, y0, wa, h, db, color) {
+        trims.addBox(X(a, b), y0 + h / 2, Z(a, b), flip ? db : wa, h, flip ? wa : db, 0, color, 0);
+      }
+      function lquad(a, b, y, wa, db, color) {
+        trims.addGroundQuad(X(a, b), y, Z(a, b), flip ? db : wa, flip ? wa : db, 0, color);
+      }
+      function lsolid(a0, a1, b0, b1, top, tag, minY, noLOS) {
+        return GAME.city.addSolid(X((a0 + a1) / 2, (b0 + b1) / 2), Z((a0 + a1) / 2, (b0 + b1) / 2),
+          flip ? b1 - b0 : a1 - a0, flip ? a1 - a0 : b1 - b0, top, tag || 'building', noLOS, minY);
+      }
+      // a round plinth: a top and a rim of twenty-four facets
+      function disc(x, z, r, y0, h, color) {
+        var y1 = y0 + h, N = 24;
+        for (var q = 0; q < N; q++) {
+          var t0 = q / N * Math.PI * 2, t1 = (q + 1) / N * Math.PI * 2, tm = (t0 + t1) / 2;
+          var x0 = x + Math.cos(t0) * r, z0 = z + Math.sin(t0) * r, x1 = x + Math.cos(t1) * r, z1 = z + Math.sin(t1) * r;
+          trims.addQuad([x0, y1, z0], [x1, y1, z1], [x, y1, z], [x, y1, z], color, [0, 1, 0]);
+          trims.addQuad([x0, y0, z0], [x1, y0, z1], [x1, y1, z1], [x0, y1, z0], color, [Math.cos(tm), 0, Math.sin(tm)]);
+        }
+      }
+      // the stock glows like it is under the lamps, not parked in a cave
+      function unlit(m) {
+        m.traverse(function (o) {
+          if (o.isMesh && o.material && o.material.isMeshLambertMaterial) {
+            o.material = new THREE.MeshBasicMaterial({ color: o.material.color.clone(), vertexColors: !!o.material.vertexColors });
+          }
+        });
+      }
+
+      // ---- what stops you: three walls, and the glass either side of the
+      // door, which the law can see you through. Each runs up past the roof
+      // to make its parapet; the stock's solids start under the floor, so
+      // nobody climbs onto a car on display.
+      lsolid(-IN - 1, IN + 1, BACK, S.d, ROOF + PARA);
+      lsolid(-IN - 1, -IN, 0, BACK, ROOF + PARA);
+      lsolid(IN, IN + 1, 0, BACK, ROOF + PARA);
+      lsolid(-IN - 1, -1.75, -0.45, 0.4, ROOF + PARA, 'building', undefined, true);
+      lsolid(1.75, IN + 1, -0.45, 0.4, ROOF + PARA, 'building', undefined, true);
+      lsolid(-IN - 1, IN + 1, 0.4, 0.95, ROOF + PARA, 'building', gy + 5.9);   // the header, walked under
+      // bollards: a door for people (and a bike), not for a car
+      [-0.95, 0.95].forEach(function (ba) {
+        lbox(ba, -0.95, gy, 0.3, 0.95, 0.3, 0x3a3f52);
+        lbox(ba, -0.95, gy + 0.95, 0.34, 0.12, 0.34, MINT);
+        lsolid(ba - 0.15, ba + 0.15, -1.1, -0.8, gy + 1.0, 'prop');
+      });
+      lquad(0, -1.6, gy + 0.08, 3.4, 2.2, 0x1f3a36);
+
+      // ---- the floor, the walls and the ceiling, all lit from within
+      lquad(0, BACK / 2, gy + 0.05, IN * 2, BACK, 0xd4d8e4);
+      for (var ga = -IN + 4; ga < IN; ga += 4) lquad(ga, BACK / 2, gy + 0.09, 0.06, BACK, 0xb4b8c6);
+      for (var gb = 4; gb < BACK; gb += 4) lquad(0, gb, gy + 0.09, IN * 2, 0.06, 0xb4b8c6);
+      lbox(0, BACK - 0.05, gy, IN * 2, UNDER - gy, 0.1, WALL);
+      [-1, 1].forEach(function (ws) {
+        lbox(ws * (IN - 0.05), (0.4 + BACK) / 2, gy, 0.1, UNDER - gy, BACK - 0.4, WALL);
+        lbox(ws * (IN - 0.12), (0.4 + BACK) / 2, gy, 0.04, 0.14, BACK - 0.4, MINT);
+      });
+      lbox(0, BACK - 0.12, gy, IN * 2, 0.14, 0.04, MINT);
+      // the roof: a slab you can stand on, a ceiling of light panels under
+      // it, and the hole the stairs come up through
+      function roofPiece(a0, a1, b0, b1, sb0) {
+        lbox((a0 + a1) / 2, (b0 + b1) / 2, UNDER, a1 - a0, ROOF - UNDER, b1 - b0, 0x3e4352);
+        lbox((a0 + a1) / 2, (b0 + b1) / 2, UNDER - 0.05, a1 - a0, 0.05, b1 - b0, 0xe6eaf2);
+        lsolid(a0, a1, sb0 || b0, b1, ROOF, 'building', UNDER);
+      }
+      roofPiece(-IN, SA0, 0.95, BACK);
+      roofPiece(SA0, IN, 0.95, HB0);
+      // (where the stairs arrive, the slab's edge would be a kerb to whoever
+      // is a stride from the top, their feet still a step below it: the
+      // landing is a deck to walk out onto, and the slab starts past it)
+      roofPiece(SA0, IN, SB1, BACK, SB1 + 0.6);
+      GAME.city.addDeck({ x: X((SA0 + IN) / 2, (SB1 + BACK) / 2), z: Z((SA0 + IN) / 2, (SB1 + BACK) / 2),
+        w: IN - SA0, len: BACK - SB1, rot: inward, y0: ROOF, y1: ROOF, floor: true });
+      for (var sl = -IN + 3; sl < SA0 - 1; sl += 5.5) lbox(sl + 1.5, 7.5, UNDER - 0.09, 3.0, 0.04, 9, 0xfffaf0);
+      // the parapet round the top, standing on the walls (the old flat cap
+      // was a lid; you can walk up here now)
+      lbox(0, 0.325, ROOF, IN * 2 + 2.6, PARA, 1.25, 0x241a36);
+      lbox(0, BACK + 0.65, ROOF, IN * 2 + 2.6, PARA, 1.3, 0x241a36);
+      [-1, 1].forEach(function (ps) {
+        lbox(ps * (IN + 0.65), (0.95 + BACK) / 2, ROOF, 1.3, PARA, BACK - 0.95, 0x241a36);
+      });
+
+      // ---- the sales desk, the salesman behind it, and the shop's mat
+      // in front of it: the counter is where the doormat used to be
+      lbox(0, DESK, gy, 6, 1.05, 0.9, 0x2a2e3a);
+      lbox(0, DESK, gy + 1.05, 6.2, 0.06, 1.0, MINT);
+      lsolid(-3.1, 3.1, DESK - 0.5, DESK + 0.5, gy + 1.1, 'prop', gy - 0.5);
+      var sales = GAME.peds.buildPedMesh({ look: { shirt: 0xf4f4f8, pants: 0x2a2a34, skin: 0xc89870, hair: 'slick', hairCol: 0x2a1a10 } });
+      sales.position.set(X(0, DESK + 0.85), gy, Z(0, DESK + 0.85));
+      sales.rotation.y = inward + Math.PI;
+      scene.add(sales);
+      lbox(0, BACK - 0.13, gy + 1.0, 14, 3.4, 0.06, 0xffe9cc);
+      lbox(0, BACK - 0.13, gy + 5.0, 9, 0.5, 0.06, MINT);
+      loc.at = { x: X(0, MAT), z: Z(0, MAT) };
+      // a corner to wait in, and green in the corners
+      lbox(-IN + 2.2, BACK - 1.6, gy, 2.6, 0.45, 0.9, 0xf0f0f4);
+      lbox(-IN + 2.2, BACK - 1.15, gy, 2.6, 0.95, 0.25, 0xf0f0f4);
+      lbox(-IN + 2.2, BACK - 3.0, gy, 1.4, 0.4, 0.8, 0x2a2e3a);
+      lsolid(-IN, -IN + 3.6, BACK - 3.5, BACK, gy + 1.0, 'prop', gy - 0.5);
+      [[-IN + 0.7, 1.4], [SA0 - 1.0, BACK - 0.7]].forEach(function (pl) {
+        lbox(pl[0], pl[1], gy, 0.7, 0.6, 0.7, 0x5a4a3a);
+        lbox(pl[0], pl[1], gy + 0.6, 1.0, 1.2, 1.0, 0x3aa860);
+        lsolid(pl[0] - 0.45, pl[0] + 0.45, pl[1] - 0.45, pl[1] + 0.45, gy + 1.8, 'prop', gy - 0.5);
+      });
+
+      // ---- the stock: every machine on the price list with wheels, on a
+      // plinth under its own light, three of them turning
+      // [type, a, b, facing (0: nose at the glass; 'along': side-on), turn rate, plinth radius]
+      [['monster', -10.5, 6.0, 0.6, 0.16, 3.4],
+        ['limo', -8.6, 13.0, 'along', 0, 0],
+        ['buggy', 7.2, 5.8, -0.5, -0.22, 2.5],
+        ['motorcycle', 5.0, 12.0, 0.9, 0, 1.4],
+        ['superbike', 9.6, 12.0, -0.3, 0.3, 1.6]].forEach(function (st) {
+        var a = st[1], b = st[2], r = st[5], cx = X(a, b), cz = Z(a, b);
+        var m = GAME.vehicles.buildMesh(st[0]);
+        if (!m) return;
+        unlit(m);
+        m.position.set(cx, gy + 0.2, cz);
+        m.rotation.y = st[3] === 'along' ? along : inward + Math.PI + st[3];
+        scene.add(m);
+        if (st[4]) spinProps.push({ mesh: m, rate: st[4] });
+        var hi = new THREE.Box3().setFromObject(m).max.y;
+        if (r) {
+          disc(cx, cz, r + 0.12, gy, 0.12, MINT);
+          disc(cx, cz, r, gy, 0.2, 0xe8ecf2);
+          lsolid(a - r, a + r, b - r, b + r, hi, 'prop', gy - 0.5);
+        } else {
+          lbox(a, b, gy, 8.6, 0.12, 3.2, MINT);
+          lbox(a, b, gy, 8.4, 0.2, 3.0, 0xe8ecf2);
+          lsolid(a - 3.8, a + 3.8, b - 1.2, b + 1.2, hi, 'prop', gy - 0.5);
+        }
+        lbox(a, b, UNDER - 0.14, 1.8, 0.04, 1.8, 0xf6f8ff);
+        hallStock.push({ type: st[0], x: cx, z: cz, mesh: m });
+      });
+
+      // ---- the stairs: fifty steps up the left-hand wall, a glass
+      // balustrade on the open side, and a closet under the top
+      var steps = 50, run = SB1 - SB0, rise = ROOF - gy, tread = run / steps;
+      GAME.city.addDeck({ x: X((SA0 + IN) / 2, (SB0 + SB1) / 2), z: Z((SA0 + IN) / 2, (SB0 + SB1) / 2),
+        w: IN - SA0, len: run, rot: inward, y0: gy, y1: ROOF, floor: true });
+      for (var sp = 0; sp < steps; sp++) {
+        lbox((SA0 + IN) / 2, SB0 + tread * (sp + 0.5), gy, IN - SA0, rise * (sp + 1) / steps, tread, sp % 2 ? 0xe4e8f0 : 0xc4c8d4);
+      }
+      // the open side: nobody walks off it, or in under it — up to the
+      // ceiling, then a rail round the hole on the roof, then the closet
+      lsolid(SA0 - 0.25, SA0, SB0, HB0, UNDER, 'prop');
+      lsolid(SA0 - 0.25, SA0, HB0, SB1, ROOF + 1.0, 'prop');
+      lsolid(SA0 - 0.25, SA0, SB1, BACK, UNDER, 'prop');
+      lsolid(SA0, IN, HB0 - 0.15, HB0 + 0.1, ROOF + 1.0, 'prop', UNDER);
+      lbox(SA0 - 0.125, (SB1 + BACK) / 2, gy, 0.25, UNDER - gy, BACK - SB1, WALL);
+      lbox(SA0 - 0.26, (SB1 + BACK) / 2, gy, 0.03, 2.2, 1.0, 0x22283a);
+      var slope = Math.atan2(rise, run), slen = Math.hypot(rise, run);
+      var bal = new THREE.Group();
+      bal.rotation.y = inward;
+      bal.position.set(X(SA0 - 0.1, (SB0 + SB1) / 2), gy + rise / 2, Z(SA0 - 0.1, (SB0 + SB1) / 2));
+      var hrail = new THREE.Mesh(sharedBoxGeo(0.08, 0.08, slen), sharedBasic(MINT));
+      hrail.position.y = 1.0; hrail.rotation.x = -slope;
+      var pane = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.85, slen), new THREE.MeshBasicMaterial({ color: 0x9fd8e8, transparent: true, opacity: 0.22 }));
+      pane.position.y = 0.5; pane.rotation.x = -slope;
+      bal.add(hrail); bal.add(pane);
+      scene.add(bal);
+      for (var bp = 0; bp <= 6; bp++) lbox(SA0 - 0.1, SB0 + run * bp / 6, gy + rise * bp / 6, 0.06, 1.0, 0.06, MINT);
+      // the rail round the hole, up on the roof
+      lbox(SA0 - 0.1, (HB0 + SB1) / 2, ROOF + 0.96, 0.08, 0.08, SB1 - HB0, MINT);
+      lbox((SA0 + IN) / 2, HB0, ROOF + 0.96, IN - SA0, 0.08, 0.08, MINT);
+      [HB0, (HB0 + SB1) / 2].forEach(function (rb) { lbox(SA0 - 0.1, rb, ROOF, 0.06, 1.0, 0.06, MINT); });
+      lbox(IN - 0.1, HB0, ROOF, 0.06, 1.0, 0.06, MINT);
+
+      // ---- the roof: a pad for each helicopter, lit round its rim, and
+      // the two of them standing on it — for show, like the rest
+      [['helicopter', -9.0, 8.6, -1], ['gunship', 5.0, 8.6, 1]].forEach(function (hc) {
+        var a = hc[1], b = hc[2], cx = X(a, b), cz = Z(a, b);
+        disc(cx, cz, 5.4, ROOF, 0.05, 0x2a2e3a);
+        lbox(a - 1.1, b, ROOF, 0.45, 0.1, 3.2, 0xf0f0f4);
+        lbox(a + 1.1, b, ROOF, 0.45, 0.1, 3.2, 0xf0f0f4);
+        lbox(a, b, ROOF, 1.8, 0.1, 0.45, 0xf0f0f4);
+        for (var q = 0; q < 12; q++) {
+          var t = q / 12 * Math.PI * 2;
+          trims.addBox(cx + Math.cos(t) * 5.1, ROOF + 0.11, cz + Math.sin(t) * 5.1, 0.26, 0.12, 0.26, 0, q % 2 ? MINT : 0xffe14f, 0);
+        }
+        var m = GAME.vehicles.buildMesh(hc[0]);
+        if (!m) return;
+        unlit(m);
+        // noses out to either end of the roof, tails to the middle, and the
+        // body (nose to tail-boom tip) centred on its pad
+        var ha = a + hc[3] * 1.8;
+        m.position.set(X(ha, b), ROOF + 0.05, Z(ha, b));
+        m.rotation.y = hc[3] > 0 ? along : along + Math.PI;
+        if (m.userData.rotor) m.userData.rotor.rotation.y = 0.5;    // parked, blades off the line
+        scene.add(m);
+        m.updateMatrixWorld(true);
+        // solid where it is: the cabin (with the gunship's pylons), and the
+        // thin boom behind it — one box round the lot walled off the gap
+        // between the two tails
+        var body = m.userData.bodyMesh, hw = 1.1;
+        if (body) {
+          if (!body.geometry.boundingBox) body.geometry.computeBoundingBox();
+          hw = body.geometry.boundingBox.max.x;
+        }
+        [[-hw, -2.6, hw, 1.95], [-0.32, -5.5, 0.32, -2.6]].forEach(function (lb) {
+          var bx = new THREE.Box3(new THREE.Vector3(lb[0], 0, lb[1]), new THREE.Vector3(lb[2], 2.45, lb[3])).applyMatrix4(m.matrixWorld);
+          GAME.city.addSolid((bx.min.x + bx.max.x) / 2, (bx.min.z + bx.max.z) / 2, bx.max.x - bx.min.x, bx.max.z - bx.min.z,
+            bx.max.y, 'prop', false, ROOF - 0.2);
+        });
+        hallStock.push({ type: hc[0], x: m.position.x, z: m.position.z, mesh: m, roof: true });
+      });
+      // lamps on the roof's corners
+      [[-IN + 0.6, 1.6], [-IN + 0.6, BACK - 0.6], [IN - 0.6, 1.6]].forEach(function (lp) {
+        lbox(lp[0], lp[1], ROOF, 0.16, 2.4, 0.16, 0x3a3f52);
+        lbox(lp[0], lp[1], ROOF + 2.4, 0.4, 0.3, 0.4, 0xfff2c8);
+      });
+
+      // ---- the doors: two glass leaves that part as you come up to them
+      var leaves = [-1, 1].map(function (ls) {
+        var m = neonBox(flip ? 0.08 : 1.7, 3.35, flip ? 1.7 : 0.08, 0xbfe8f0, { transparent: true, opacity: 0.3 });
+        m.position.set(X(ls * 0.85, 0.06), gy + 1.72, Z(ls * 0.85, 0.06));
+        scene.add(m);
+        return { m: m, side: ls };
+      });
+      hallDoor = { leaves: leaves, x: X(0, 0), z: Z(0, 0), y: gy, px: px2, ox: X(0, 0.06), oz: Z(0, 0.06), open: 0 };
+      // and what the camera and the rain need to know (interiors.js)
+      var c0x = X(-IN, 0.4), c0z = Z(-IN, 0.4), c1x = X(IN, BACK), c1z = Z(IN, BACK);
+      hall = GAME.interiors.addHall({ minX: Math.min(c0x, c1x), maxX: Math.max(c0x, c1x), minZ: Math.min(c0z, c1z), maxZ: Math.max(c0z, c1z),
+        under: UNDER, roof: ROOF, floor: gy, loc: loc, door: { x: X(0, 0), z: Z(0, 0) }, inward: { x: dir.x, z: dir.z },
+        stairs: { x: X((SA0 + IN) / 2, SB0 - 0.8), z: Z((SA0 + IN) / 2, SB0 - 0.8), topX: X((SA0 + IN) / 2, SB1 + 0.9), topZ: Z((SA0 + IN) / 2, SB1 + 0.9) } });
+    }
+
     // ramps were placed before the shops existed, and their placement vetted
     // an empty air corridor past the lip — don't build a wall into it now
     function corridorClear(cx, cz, sx, sz) {
@@ -808,8 +1060,9 @@ GAME.shops = (function () {
       // showroom is the exception: a glass hall is glass because there is
       // NOTHING behind the pane but the hall — with the normal shell, the
       // glazing sat over a textured wall and read as an apartment block
-      // wearing a windscreen. It gets back and side walls, a roof, and an
-      // open front for the glass; everyone else keeps the full box.
+      // wearing a windscreen. It gets back and side walls and an open front
+      // for the glass, and is walked into where it stands (buildHall: its
+      // roof, its floor and what is on it); everyone else keeps the full box.
       if (loc.kind === 'showroom') {
         var bwx = placed.cx + dir.x * (S.d / 2 - 0.5), bwz = placed.cz + dir.z * (S.d / 2 - 0.5);
         walls.addBox(bwx, gy + S.h / 2 - 0.25, bwz, dir.x !== 0 ? 1 : S.w, S.h + 0.5, dir.x !== 0 ? S.w : 1, 0, S.wall, 28);
@@ -818,14 +1071,11 @@ GAME.shops = (function () {
             placed.cz + px2.z * ss * (S.w / 2 - 0.5),
             dir.x !== 0 ? S.d : 1, S.h + 0.5, dir.x !== 0 ? 1 : S.d, 0, S.wall, 28);
         });
-        // roof slab recessed inside the wall heads — flush with them, every
-        // shared edge and top plane shimmered in the flicker audit
-        walls.addBox(placed.cx, gy + S.h - 0.48, placed.cz, dir.x !== 0 ? S.d - 2.4 : S.w - 2.4, 0.6, dir.x !== 0 ? S.w - 2.4 : S.d - 2.4, 0, 0x2e3346, 0);
       } else {
         walls.addBox(placed.cx, gy + S.h / 2 - 0.25, placed.cz, placed.sx, S.h + 0.5, placed.sz, 0, S.wall, 28);
+        trims.addBox(placed.cx, gy + S.h + 0.22, placed.cz, placed.sx + 0.6, 0.34, placed.sz + 0.6, 0, 0x241a36, 0);
+        GAME.city.addSolid(placed.cx, placed.cz, placed.sx, placed.sz, gy + S.h);
       }
-      trims.addBox(placed.cx, gy + S.h + 0.22, placed.cz, placed.sx + 0.6, 0.34, placed.sz + 0.6, 0, 0x241a36, 0);
-      GAME.city.addSolid(placed.cx, placed.cz, placed.sx, placed.sz, gy + S.h);
       if (loc.kind !== 'showroom') {
         // door
         onFace(0.09, 0, gy + 1.5, doorW, 3.0, 0.18, 0x120c1e);
@@ -952,9 +1202,18 @@ GAME.shops = (function () {
         // pennants across the forecourt and a rotating totem out by the road
         // the pane itself: barely-there blue, framed like real curtain glass —
         // header beam above, corner posts and slim mullions, mint entry posts
-        var glz = neonBox(dir.x !== 0 ? 0.14 : S.w - 2, 5.6, dir.x !== 0 ? S.w - 2 : 0.14, 0x9fd8e8, { transparent: true, opacity: 0.18 });
-        glz.position.set(fx - dir.x * 0.12, gy + 3.1, fz - dir.z * 0.12);
-        scene.add(glz);
+        // The glass stops at the door now: two panes either side of it and a
+        // transom over it, and the door itself two leaves that slide apart
+        // as you come up to them (update, below).
+        [-1, 1].forEach(function (gs) {
+          var pw = S.w / 2 - 1 - 1.7;
+          var glz = neonBox(dir.x !== 0 ? 0.14 : pw, 5.6, dir.x !== 0 ? pw : 0.14, 0x9fd8e8, { transparent: true, opacity: 0.18 });
+          glz.position.set(fx - dir.x * 0.12 + px2.x * gs * (1.7 + pw / 2), gy + 3.1, fz - dir.z * 0.12 + px2.z * gs * (1.7 + pw / 2));
+          scene.add(glz);
+        });
+        var tsm = neonBox(dir.x !== 0 ? 0.14 : 3.4, 2.25, dir.x !== 0 ? 3.4 : 0.14, 0x9fd8e8, { transparent: true, opacity: 0.18 });
+        tsm.position.set(fx - dir.x * 0.12, gy + 4.78, fz - dir.z * 0.12);
+        scene.add(tsm);
         onFace(-0.5, 0, gy + (5.9 + S.h) / 2, S.w - 2.2, S.h - 5.9, 0.9, 0x2e3346);
         [-1, 1].forEach(function (mp) {
           onFace(0.02, mp * (S.w / 2 - 0.9), gy + 3.1, 0.8, 5.6, 0.8, 0x2e3346);
@@ -966,36 +1225,12 @@ GAME.shops = (function () {
         // inner face shared the glass's and the two banded strips flickered.
         // And it is muted on purpose: painted the marker's own mint it read
         // as one enormous glowing doormat across the whole front, as if the
-        // entry highlight were the width of the building. The doormat ring
-        // at the door is the entry; the skirt is just plinth.
-        onFace(0.3, 0, gy + 0.35, S.w - 1.6, 0.7, 0.3, 0x2a544c);
-        // the hall glows from within: lit ceiling, a bright back wall to
-        // silhouette the stock, a pale floor and a spot under each machine
-        trims.addBox(placed.cx, gy + S.h - 0.8, placed.cz, dir.x !== 0 ? 9 : S.w - 5, 0.3, dir.x !== 0 ? S.w - 5 : 9, 0, 0xfff2dc, 0);
-        trims.addBox(placed.cx + dir.x * (S.d / 2 - 1.2), gy + 2.6, placed.cz + dir.z * (S.d / 2 - 1.2),
-          dir.x !== 0 ? 0.2 : S.w - 4, 3.4, dir.x !== 0 ? S.w - 4 : 0.2, 0, 0xffe9cc, 0);
-        trims.addGroundQuad(placed.cx, gy + 0.06, placed.cz, dir.x !== 0 ? 11 : S.w - 4, dir.x !== 0 ? S.w - 4 : 11, 0, 0x686874);
-        [-5.5, 5.5].forEach(function (alo, ai) {
-          var icx = placed.cx + px2.x * alo + dir.x * 1.0, icz = placed.cz + px2.z * alo + dir.z * 1.0;
-          trims.addGroundQuad(icx, gy + 0.08, icz, 5.4, 3.6, 0, 0xd8d0c2);
-          var icar = GAME.vehicles.buildMesh(ai ? 'sports' : 'sedan');
-          if (icar) {
-            // showroom lighting: the stock glows like it's under the lamps,
-            // not parked in a cave — unlit materials read lit through glass
-            icar.traverse(function (o) {
-              if (o.isMesh && o.material) {
-                var src = o.material;
-                o.material = new THREE.MeshBasicMaterial({
-                  color: src.color ? src.color.clone() : 0xffffff,
-                  vertexColors: !!src.vertexColors
-                });
-              }
-            });
-            icar.position.set(icx, gy + 0.1, icz);
-            icar.rotation.y = Math.atan2(dir.x, dir.z) + (ai ? 0.5 : -0.4);
-            scene.add(icar);
-          }
+        // entry highlight were the width of the building. It stops either
+        // side of the door, which you walk through.
+        [-1, 1].forEach(function (ks) {
+          onFace(0.3, ks * (S.w / 4 + 0.6), gy + 0.35, S.w / 2 - 2.8, 0.7, 0.3, 0x2a544c);
         });
+        buildHall(loc, placed, S, gy, fx, fz, px2);
         // chrome band, breathing
         var chase = neonBox(dir.x !== 0 ? 0.2 : S.w - 0.8, 0.35, dir.x !== 0 ? S.w - 0.8 : 0.2, 0xf0f6ff, { transparent: true, opacity: 0.9 });
         chase.position.set(fx - dir.x * 0.34, gy + S.h - 0.35, fz - dir.z * 0.34);
@@ -1583,6 +1818,7 @@ GAME.shops = (function () {
       if (m.loc.kind === 'safehouse' && owns(m.loc.sh.id)) m.ring.material.opacity = 0.35;
     }
     for (var sp = 0; sp < spinProps.length; sp++) spinProps[sp].mesh.rotation.y += dt * spinProps[sp].rate;
+    if (hallDoor) stepHall(dt);
     if (GAME.shopOpen || !GAME.started || P.state !== 'alive') return;
     // a walk-in must be WALKED in. Feet cover under a metre per tick, so a
     // multi-metre move between scans is a teleport — waking up at your own
@@ -1597,7 +1833,10 @@ GAME.shops = (function () {
       var loc = locations[k];
       if (loc.isla && !unlocked) continue;
       var d2 = U.dist2(P.pos.x, P.pos.z, loc.at.x, loc.at.z);
-      if (d2 > 5.5 * 5.5) { leftSince[loc.id] = true; continue; }
+      // (a mat is on the floor it is on: up on the showroom's roof, over
+      // the sales desk, you are not at the sales desk)
+      if (loc.atY === undefined) loc.atY = GAME.city.groundY(loc.at.x, loc.at.z);
+      if (d2 > 5.5 * 5.5 || P.pos.y > loc.atY + 3) { leftSince[loc.id] = true; continue; }
       if (P.inCar || d2 > 2.6 * 2.6) continue;
       if (leftSince[loc.id] === false) continue;   // still standing where it closed
       if (leftSince[loc.id] === undefined || jumped) { leftSince[loc.id] = false; continue; }
@@ -1611,6 +1850,44 @@ GAME.shops = (function () {
       open(loc);
       return;
     }
+  }
+
+  // The hall's doors part for you, or for anybody on foot coming through
+  // (a cop on your tail walked through shut glass), and close behind; and
+  // walking in, you are told where things are.
+  var doorWho = 0;
+  function stepHall(dt) {
+    var D = hallDoor, P = GAME.player, near = false;
+    if (Math.abs(P.pos.y - D.y) < 3 && U.dist2(P.pos.x, P.pos.z, D.x, D.z) < 5 * 5) near = true;
+    else if (D.open > 0 || (doorWho = (doorWho + 1) % 10) === 0) {
+      // (the rest of the street is asked a few times a second while shut)
+      var peds = GAME.world.peds;
+      for (var i = 0; i < peds.length && !near; i++) {
+        var pd = peds[i];
+        if (pd.dead || !pd.pos) continue;
+        if (U.dist2(pd.pos.x, pd.pos.z, D.x, D.z) < 3.5 * 3.5 && Math.abs(pd.pos.y - D.y) < 3) near = true;
+      }
+    }
+    var was = D.open;
+    D.open = U.clamp(D.open + (near ? 2.4 : -1.6) * dt, 0, 1);
+    if (D.open !== was || !D.placed) {
+      D.placed = true;
+      var e = D.open * D.open * (3 - 2 * D.open);
+      for (var k = 0; k < D.leaves.length; k++) {
+        var lf = D.leaves[k], a = lf.side * (0.85 + 1.65 * e);
+        lf.m.position.x = D.ox + D.px.x * a;
+        lf.m.position.z = D.oz + D.px.z * a;
+      }
+    }
+    var inside = !!hall && P.state === 'alive' && !P.inCar && GAME.interiors.hall() === hall && P.pos.y < hall.under;
+    if (inside && !inHall) {
+      GAME.track('showroom-hall');
+      if (GAME.time - hallHello > 45) {
+        hallHello = GAME.time;
+        GAME.hud.message('GRAN ROSA MOTORS — the sales desk is at the back. The stairs on the left go up to the roof and the helicopters.', 4);
+      }
+    }
+    inHall = inside;
   }
 
   // the nearest doormat's label for the shared POI hint line
@@ -1632,7 +1909,7 @@ GAME.shops = (function () {
     if (best !== hintLoc || forSale !== hintForSale || inCar !== hintInCar) {
       hintLoc = best; hintForSale = forSale; hintInCar = inCar;
       hintOut.text = best.name + (forSale ? ' · $' + best.sh.price.toLocaleString() : '') +
-        ' — step onto the light' + (inCar ? ' (on foot)' : '');
+        (best.kind === 'showroom' ? ' — walk in: the light is at the sales desk' : ' — step onto the light') + (inCar ? ' (on foot)' : '');
     }
     hintOut.d = bd;
     return hintOut;
@@ -1693,6 +1970,11 @@ GAME.shops = (function () {
     get current() { return openShop; },
     get selected() { return openShop ? items(openShop)[sel] : null; },
     locations: function () { return locations; },
+    // the Gran Rosa Motors hall: its bounds and stairs, what is on display,
+    // and how far its doors stand open
+    hall: function () { return hall; },
+    hallStock: function () { return hallStock; },
+    hallDoor: function () { return hallDoor ? hallDoor.open : null; },
     wardrobe: { SHIRTS: SHIRTS, PANTS: PANTS, HAIRSTYLES: HAIRSTYLES, HAIRCOLORS: HAIRCOLORS, SKINTONES: SKINTONES },
     closet: closet
   };
