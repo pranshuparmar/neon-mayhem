@@ -1,8 +1,8 @@
 GAME.audio = (function () {
-  var ctx = null, master, sfxBus, radioBus, engineBus, verb;
+  var ctx = null, master, sfxBus, radioBus, engineBus, ambBus, verb;
   var sfxSwitch = null, musicSwitch = null;
   var muted = false, musicOn = true, sfxOn = true;
-  var noiseBuf = null;
+  var noiseBuf = null, brownBuf = null;
   var engine = null, skidNode = null, sirenNode = null, rotorNode = null;
   var hornNode = null, hornOn = false;
   var lastCrashT = -9, lastCrashV = 0;
@@ -24,6 +24,18 @@ GAME.audio = (function () {
     var buf = ctx.createBuffer(1, len, ctx.sampleRate);
     var d = buf.getChannelData(0);
     for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+  // Brown noise (white run through a leaky integrator): the low roar a city,
+  // a road or the surf is made of. Its own buffer, longer than the white one
+  // and not a multiple of it, so a bed that loops it all day has no beat.
+  function makeBrownBuffer() {
+    var len = Math.floor(ctx.sampleRate * 3.7);
+    var buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    var d = buf.getChannelData(0), v = 0;
+    for (var i = 0; i < len; i++) { v = (v + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = v * 3.5; }
+    // ease the seam, so the loop point is not a click
+    for (var k = 0; k < 2048; k++) { var w = k / 2048; d[k] *= w; d[len - 1 - k] *= w; }
     return buf;
   }
   // `keep`, when given, is how much of the tail to actually store: the curve
@@ -67,6 +79,10 @@ GAME.audio = (function () {
     var engTone = ctx.createBiquadFilter(); engTone.type = 'lowpass'; engTone.frequency.value = 900;
     engineBus.connect(engTone); engTone.connect(sfxSwitch);
     noiseBuf = makeNoiseBuffer();
+    brownBuf = makeBrownBuffer();
+    // the world going on around you (ambience.js): an effect like any other,
+    // so SFX: OFF and mute take it too, on a bus of its own for its trim
+    ambBus = ctx.createGain(); ambBus.gain.value = 1; ambBus.connect(sfxSwitch);
     // a 1.8 s tail stored to 1.2 s: by then it is down to 3% (-30 dB), the
     // rest holds 0.03% of its energy, and a third of the buffer — and of the
     // convolver's work — goes with it
@@ -463,6 +479,31 @@ GAME.audio = (function () {
     testPan: panAt,
     // and the horn against the engine, as they stand right now
     testMix: function () { return { horn: hornNode ? hornNode.g.gain.value : 0, engine: engineBus ? engineBus.gain.value : 0 }; },
+    // what the ambience is built from (ambience.js)
+    amb: {
+      get bus() { return ambBus; },
+      get white() { return noiseBuf; },
+      get brown() { return brownBuf; },
+      pan: function (x, z) { return panAt(x, z); },
+      noise: function (dur, freq, gain, type, when, bus) { noiseBurst(dur, freq, gain, type, when, bus || ambBus); },
+      tone: function (freq, dur, gain, type, slideTo, when, bus) { tone(freq, dur, gain, type, slideTo, when, bus || ambBus); },
+      // a one-shot placed in the world, on the ambience bus
+      at: function (x, z, life) {
+        if (!ctx.createStereoPanner) return ambBus;
+        var p = ctx.createStereoPanner();
+        p.pan.value = panAt(x, z);
+        p.connect(ambBus);
+        setTimeout(function () { try { p.disconnect(); } catch (e) { } }, (life + 0.3) * 1000);
+        return p;
+      }
+    },
+    // headless hook: listen to everything that reaches the speakers
+    meter: function () {
+      if (!ctx) return null;
+      var an = ctx.createAnalyser(); an.fftSize = 2048;
+      master.connect(an);
+      return an;
+    },
     radio: radio,
     titleMusic: function (on) { if (on) title.start(); else title.stop(); },
     get titleMusicOn() { return title.on; },

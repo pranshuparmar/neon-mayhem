@@ -52,6 +52,7 @@ A plane rolls down the runway on throttle and climbs once it's fast; airborne, t
 | Action | Keyboard & mouse | Controller | Touch |
 |---|---|---|---|
 | Pause | `Esc` | START | ❚❚ |
+| Resume | `Esc` · RESUME · a click anywhere off the buttons | START · RESUME | RESUME · a tap anywhere off the buttons |
 | Map | `P` | BACK | tap the radar |
 | Photo | `C` | L3 | 📷 |
 | See a photo full size | `V` (the last one) · click it in PHOTOS | START → PHOTOS → A | tap the print · tap it in PHOTOS |

@@ -132,6 +132,9 @@ function serve() {
   var churn = { geometriesStart: -1, geometriesEnd: -2, time0: 0, time1: 0, alive: false };
   if (booted) {
     churn = await page.evaluate(function () {
+      // Lola's welcome answered, as in the regression suite: a fresh save is
+      // asked whether it wants showing around, and the question holds the game
+      (GAME.prefs = GAME.prefs || {}).guide = 'done';
       GAME.test.start();
       GAME.weather.setMode('clear', true);   // dry, as in the regression suite
       for (var i = 0; i < 240; i++) GAME.tick(1 / 60);

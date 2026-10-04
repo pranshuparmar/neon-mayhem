@@ -105,6 +105,7 @@ GAME.lola = (function () {
   // -- the answers --
   function nextThing() {
     var M = GAME.missions, a = M && M.active;
+    if (!a && GAME.guide && GAME.guide.step) return { say: GAME.guide.now() };
     if (a) {
       return { say: 'You\'re on ' + a.def.name + ' right now: ' + (M.objectiveText() || 'see it through') +
         '. Finish it — or ' + (touch() || onPad() ? 'ABANDON on the pause screen' : K('KeyX') + ' twice') + ' if you want out.' };
@@ -210,10 +211,13 @@ GAME.lola = (function () {
   }
 
   function topLevel() {
-    var w = GAME.police && GAME.police.wanted > 0;
+    var w = GAME.police && GAME.police.wanted > 0, law;
     var list = [
       { label: '🧭 WHAT SHOULD I DO NEXT?', fn: function () { answer(nextThing()); } },
-      { label: w ? '🚨 I\'VE GOT THE LAW ON ME' : '🚨 HOW DO I LOSE THE LAW?', fn: function () { answer(theLaw()); } },
+      // her guided first day (guide.js), for anyone who turned it down or
+      // walked off part way, until it has been seen through once
+      GAME.guide && GAME.guide.canStart() ? { label: '🎓 SHOW ME THE ROPES', fn: function () { close(); GAME.guide.begin(); } } : null,
+      law = { label: w ? '🚨 I\'VE GOT THE LAW ON ME' : '🚨 HOW DO I LOSE THE LAW?', fn: function () { answer(theLaw()); } },
       { label: '💰 WHERE\'S THE MONEY?', fn: function () { answer(money()); } },
       { label: '📍 TAKE ME SOMEWHERE', fn: function () { answer(takeMe()); } },
       { label: '📖 TELL ME ABOUT…', fn: function () { answer(explain()); } },
@@ -221,7 +225,9 @@ GAME.lola = (function () {
       { label: '🎮 REMIND ME OF THE CONTROLS', fn: function () { answer(controlsHelp()); } },
       { label: '👋 NOTHING, THANKS', fn: close }
     ];
-    if (w) { var law = list.splice(1, 1)[0]; list.unshift(law); }
+    list = list.filter(Boolean);
+    // with the law on you, that comes first
+    if (w) { list.splice(list.indexOf(law), 1); list.unshift(law); }
     var h = GAME.timeOfDay !== undefined && GAME.timeOfDay < 0.35 ? 'Up late, kid?' : 'Hey, kid.';
     return { say: h + (w ? ' Sounds busy where you are.' : '') + ' What can I do for you?', list: list, top: true };
   }
@@ -248,11 +254,12 @@ GAME.lola = (function () {
     });
     var cur = box.children[sel];
     if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest' });
-    $('lola-hint').textContent = touch() ? 'Tap one' : '↑↓ and Enter, or click  ·  Esc to go back';
+    $('lola-hint').textContent = touch() ? 'Tap one' : '↑↓ and Enter, or click  ·  Esc ' + (v.escSays || 'to go back');
   }
   function show(v) { view = v; sel = 0; render(); }
   function answer(v) { if (GAME.audio) GAME.audio.cashTick(); show(v); }
-  function pick() { var o = opts[sel]; if (o) o.fn(); }
+  // a choice is an answer: whatever it does, closing after it is not a no
+  function pick() { var o = opts[sel]; if (o) { onClose = null; o.fn(); } }
   function open() {
     if (GAME.lolaOpen || !GAME.started || GAME.mapOpen || GAME.shopOpen || GAME.shareOpen) return false;
     if (GAME.player.state !== 'alive') return false;
@@ -266,12 +273,24 @@ GAME.lola = (function () {
     if (GAME.track) GAME.track('lola-called');
     return true;
   }
+  // Open on a question of somebody else's (guide.js), rather than her menu.
+  // Closing it without an answer — Esc, L, B — is an answer too: onClose.
+  var onClose = null;
+  function offer(v) {
+    if (!open()) return false;
+    onClose = v.onClose || null;
+    show(v);
+    return true;
+  }
   function close() {
     if (!GAME.lolaOpen) return;
+    var then = onClose;
+    onClose = null;
     GAME.lolaOpen = false;
     $('lola-screen').style.display = 'none';
     if (GAME.syncOverlayMusic) GAME.syncOverlayMusic();
     if (GAME.regainPointer) GAME.regainPointer();
+    if (then) then();
   }
   function key(code) {
     if (code === 'ArrowDown' || code === 'KeyS') { sel = (sel + 1) % opts.length; render(); }
@@ -285,6 +304,7 @@ GAME.lola = (function () {
     first: first,
     setTips: setTips,
     open: open,
+    offer: offer,
     close: close,
     key: key,
     get isOpen() { return !!GAME.lolaOpen; },
