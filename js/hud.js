@@ -73,9 +73,43 @@ GAME.hud = (function () {
       $('game-modal-cancel').addEventListener(ev, function (e) { e.stopPropagation(); e.preventDefault(); closeDialog(false); });
     });
 
-    // pause: RESUME or Esc carries on. A tap anywhere used to as well, so a
-    // finger or a click that just missed a button threw you back into the
-    // game; the background now does nothing.
+    // pause: RESUME, Esc, or a click or tap on the empty screen around the
+    // menu carries on. Only the empty part: a press that just missed a button
+    // (within a finger's width of one, which covers every gap between them)
+    // does nothing, and neither does a drag that scrolled a short screen.
+    var NEAR_MISS = 16;
+    function offTheButtons(x, y) {
+      var bs = el['pause-screen'].querySelectorAll('.mbtn');
+      for (var i = 0; i < bs.length; i++) {
+        var r = bs[i].getBoundingClientRect();
+        if (!r.width) continue;   // hidden (ABANDON with nothing running)
+        if (x > r.left - NEAR_MISS && x < r.right + NEAR_MISS && y > r.top - NEAR_MISS && y < r.bottom + NEAR_MISS) return false;
+      }
+      return true;
+    }
+    function pauseBackground(e, x, y) {
+      var ps = el['pause-screen'];
+      if (!GAME.paused || e.target.closest('a, input')) return false;
+      if (x >= ps.getBoundingClientRect().left + ps.clientWidth) return false;   // its scrollbar
+      return offTheButtons(x, y);
+    }
+    el['pause-screen'].addEventListener('click', function (e) {
+      if (pauseBackground(e, e.clientX, e.clientY)) GAME.togglePause();
+    });
+    var pauseTouch = null;
+    el['pause-screen'].addEventListener('touchstart', function (e) {
+      var t = e.changedTouches[0];
+      pauseTouch = e.touches.length === 1 ? { x: t.clientX, y: t.clientY } : null;
+    }, { passive: true });
+    el['pause-screen'].addEventListener('touchend', function (e) {
+      var t = e.changedTouches[0], s = pauseTouch;
+      pauseTouch = null;
+      if (!s || Math.abs(t.clientX - s.x) > 10 || Math.abs(t.clientY - s.y) > 10) return;
+      if (!pauseBackground(e, t.clientX, t.clientY)) return;
+      // no synthetic click after it, to land on whatever is under the menu
+      e.preventDefault();
+      GAME.togglePause();
+    });
     function pauseBtn(id, fn) {
       var b = $(id);
       ['click', 'touchend'].forEach(function (ev) {
@@ -1598,6 +1632,14 @@ GAME.hud = (function () {
       el['pause-screen'].style.display = p ? 'flex' : 'none';
       if (api.paintAbandon) api.paintAbandon(true);
       if (p) { pauseSel = 0; paintPauseSel(); }
+      // a phone has no Esc and no arrow keys to mention (and a touchscreen
+      // laptop can go back to its mouse between pauses)
+      var ph = $('pause-hint');
+      if (p && ph) {
+        if (ph.__mouse === undefined) ph.__mouse = ph.innerHTML;
+        if (GAME.isTouch) ph.textContent = 'Tap RESUME, or anywhere off the buttons, to carry on';
+        else ph.innerHTML = ph.__mouse;
+      }
       var sj = $('pause-stunts');
       if (sj && GAME.stunts) {
         var ST = GAME.stunts, isOpen = !GAME.isla || GAME.isla.isOpen();

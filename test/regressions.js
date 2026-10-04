@@ -1969,9 +1969,11 @@ function withTimeout(p, ms) {
     r.hintPx = parseFloat(getComputedStyle($('controls-bar')).fontSize);
     // the title answers when it says it will
     r.title = { cls: $('press-enter').className, text: $('press-enter').textContent };
-    // pause: the background is not a RESUME button, and the keys work
+    // pause: a click that just misses a button is not a RESUME (the empty
+    // screen is, below), and the keys work
     GAME.togglePause();
-    $('pause-screen').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    var ps = $('pause-screen'), rb = $('pause-resume').getBoundingClientRect();
+    ps.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: rb.right + 6, clientY: rb.top + rb.height / 2 }));
     r.stillPaused = GAME.paused === true;
     r.lockHintUnderPause = $('lock-hint').style.display;
     GAME.onKeyDown('ArrowRight');
@@ -1982,6 +1984,26 @@ function withTimeout(p, ms) {
     // with no mouse capture (this page never takes one) it says how to get it
     GAME.test.fastForward(0.1);
     r.lockHint = $('lock-hint').style.display;
+    // the empty pause screen resumes on a click or a tap, but a drag that
+    // scrolled a short screen is not a tap
+    GAME.togglePause();
+    ps.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 8, clientY: 8 }));
+    r.clickResumed = GAME.paused === false;
+    var pauseTouch = function (x0, y0, x1, y1) {
+      var a = new Touch({ identifier: 21, target: ps, clientX: x0, clientY: y0 });
+      var b = new Touch({ identifier: 21, target: ps, clientX: x1, clientY: y1 });
+      ps.dispatchEvent(new TouchEvent('touchstart', { touches: [a], changedTouches: [a], bubbles: true }));
+      ps.dispatchEvent(new TouchEvent('touchend', { touches: [], changedTouches: [b], bubbles: true, cancelable: true }));
+    };
+    GAME.togglePause();
+    pauseTouch(8, 200, 8, 120);
+    r.dragStill = GAME.paused === true;
+    pauseTouch(8, 8, 9, 10);
+    r.tapResumed = GAME.paused === false;
+    if (GAME.paused) GAME.togglePause();
+    // the touches switched the page to touch: a mouse switches it back
+    window.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'mouse', bubbles: true }));
+    r.mouseBack = GAME.isTouch === false;
     // the map zooms, names its missions, and tells a beaten one from a new one
     GAME.bests = GAME.bests || {};
     var bestKeep = GAME.bests.race0;
@@ -2097,7 +2119,10 @@ function withTimeout(p, ms) {
   check('ux: the title says LOADING until it can answer, then asks for a press',
     /id="press-enter" class="loading"/.test(html) && ux.title.cls.indexOf('loading') < 0 && /PRESS ENTER|TAP TO START/.test(ux.title.text),
     JSON.stringify(ux.title));
-  check('ux: a click on the pause background does not resume', ux.stillPaused);
+  check('ux: a click just beside a pause button does not resume', ux.stillPaused);
+  check('ux: a click or a tap on the empty pause screen resumes, a scrolling drag does not',
+    ux.clickResumed && ux.dragStill && ux.tapResumed && ux.mouseBack,
+    'click=' + ux.clickResumed + ' drag stays=' + ux.dragStill + ' tap=' + ux.tapResumed + ' mouse back=' + ux.mouseBack);
   check('ux: the pause buttons answer the arrows and Enter',
     ux.lit === 'pause-map' && ux.resumedByEnter, 'lit=' + ux.lit + ' resumed=' + ux.resumedByEnter);
   check('ux: no mouse capture says CLICK TO LOOK AROUND, but not under an overlay',
