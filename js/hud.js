@@ -1330,6 +1330,8 @@ GAME.hud = (function () {
   function stepTips(dt) {
     var pr = GAME.prefs || {};
     if (pr.tipsSeen || !GAME.started) return;
+    // Lola's welcome (guide.js) covers both, in her own words and her order
+    if (pr.guide) { pr.tipsSeen = true; return; }
     // a save with missions in it already knows all this
     for (var k in (GAME.bests || {})) { GAME.prefs = pr; pr.tipsSeen = true; return; }
     var before = tipT;

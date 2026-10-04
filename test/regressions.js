@@ -106,6 +106,13 @@
 //       is a voice on its own side; people murmur only when they are about;
 //       a car's cabin and a room muffle it all; the island has crickets at
 //       night and the sea has gulls by day; an overlay silences it.
+//   5q. LOLA'S FIRST DAY — a fresh save is asked whether it wants showing
+//       around (closing her is no, and says the island is shut; a save with
+//       a job done is never asked); shown around, a parked car is marked, the
+//       ring is routed, BEACH RUN runs kinder (three drops, 150 s) and a
+//       failure or a retry stays kind; paid, she waits out the card and sends
+//       you to CORTES CUTS, and after the chair the wider picture; driving
+//       off or abandoning lets you go, and her menu has the way back.
 //   4y. AROUND THE GAME — messages stack; the district name keeps out of a
 //       mission's title; every overlay uses the game's face; the title says
 //       LOADING until it can answer; pause takes keys, ignores a click that
@@ -332,6 +339,11 @@ function withTimeout(p, ms) {
     // And Lola's first-time tips off: every group below measures the pager
     // as it was before she had them. Group 5i turns them on for itself.
     if (GAME.lola) GAME.lola.setTips(false);
+    // And her welcome answered: a fresh save is offered a guided first day
+    // (guide.js), and her question would hold the game and take the keys
+    // three seconds in. Every group below measures the game as it was
+    // before she offered; group 5q asks it for itself.
+    GAME.prefs.guide = 'done';
     GAME.test.fastForward(1);
     var a = GAME.audio;
     var engine0 = a.engineState, skid0 = a.skid, siren0 = a.siren, vol0 = a.radio.setVolume;
@@ -1401,6 +1413,7 @@ function withTimeout(p, ms) {
     return window.GAME && GAME.test && GAME.city && GAME.city.nodes && GAME.city.nodes.length > 0;
   }, null, { timeout: 90000 });
   var hybrid = await hpage.evaluate(function () {
+    GAME.prefs.guide = 'done';   // her welcome answered, as on the main page
     GAME.test.start();
     GAME.test.fastForward(0.5);
     var layer = document.getElementById('touch-layer');
@@ -7947,7 +7960,8 @@ function withTimeout(p, ms) {
       calls.length = 0;
       GAME.test.pressKey('KeyW', true); ff(3); GAME.test.pressKey('KeyW', false);
       r.strokes = count(function (c) { return c.dur === 0.3; });
-      ff(1.5); calls.length = 0; ff(4);
+      // a lap every 1.4 to 2.6 s: seven seconds holds at least two
+      ff(1.5); calls.length = 0; ff(7);
       r.laps = count(function (c) { return c.dur === 0.6; });
       r.swimStrokesWhileTreading = count(function (c) { return c.dur === 0.3; });
       GAME.test.teleport(rp.x, rp.z); ff(0.8);
@@ -8002,6 +8016,182 @@ function withTimeout(p, ms) {
     JSON.stringify({ swimming: amb.swimming, strokes: amb.strokes, laps: amb.laps, treadingStrokes: amb.swimStrokesWhileTreading }));
   check('sound: crickets on the island at night, none by day', amb.crickets.day === 0 && amb.crickets.night > 0.001, JSON.stringify(amb.crickets));
   check('sound: pause silences the city, and play brings it back', amb.pausedSilent && amb.back);
+
+  // ---------- 5q: Lola's first day ----------
+  var gd = await page.evaluate(async function () {
+    var r = {}, P = GAME.player, G = GAME.guide, L = GAME.lola, M = GAME.missions, S = GAME.shops, C = GAME.city;
+    var ff = function (s) { GAME.test.fastForward(s); };
+    var keepPrefs = JSON.stringify(GAME.prefs), keepBests = JSON.stringify(GAME.bests || {}), keepCash = P.cash, keepTouch = GAME.isTouch;
+    // a new save's island is shut (groups above may have opened it)
+    var keepIsla = GAME.isla.isOpen();
+    GAME.isla.setOpen(false);
+    var pages = [], msgs = [], pg0 = GAME.hud.pager, ms0 = GAME.hud.message;
+    GAME.hud.pager = function (f, t) { pages.push(String(t)); return pg0.apply(GAME.hud, arguments); };
+    GAME.hud.message = function (t) { msgs.push(String(t)); return ms0.apply(GAME.hud, arguments); };
+    function hud() { return document.getElementById('mission-hud').style.display === 'none' ? '' : document.getElementById('mission-obj').textContent; }
+    var courier = M.DEFS.filter(function (d) { return d.id === 'courier2'; })[0];
+    var barber = S.locations().filter(function (l) { return l.kind === 'barber'; })[0];
+    function freshSave() {
+      GAME.bests = {};
+      delete GAME.prefs.guide; delete GAME.prefs.tipsSeen;
+      GAME.prefs.storyIntro = false;
+    }
+    function settle() {
+      if (L.isOpen) L.close();
+      if (M.active) M.abandon();
+      if (GAME.shopOpen) S.close();
+      if (GAME.interiors.current) GAME.interiors.reset();
+      if (P.inCar) GAME.exitCar();
+      GAME.police.clearWanted();
+      ff(0.5);
+    }
+    try {
+      settle();
+      GAME.test.teleport(356, 40); ff(0.5);
+      // --- a fresh save is asked, three seconds in, and the old hints keep quiet ---
+      freshSave(); pages.length = 0; msgs.length = 0;
+      ff(1);
+      r.asked = L.isOpen && GAME.prefs.guide === 'offered';
+      r.choices = L.options();
+      L.key('Escape');   // closing her without an answer is finding your own way
+      ff(8);
+      r.skipped = !L.isOpen && GAME.prefs.guide === 'skipped';
+      r.skipLine = pages.filter(function (t) { return /Isla Verde/.test(t) && /shut/.test(t); })[0] || '';
+      r.oldHints = msgs.filter(function (t) { return /coloured rings|bridges east/.test(t); }).length;
+      // --- a save with a job done is never asked: the old welcome line ---
+      GAME.bests = { race0: 40 }; delete GAME.prefs.guide; GAME.prefs.storyIntro = false; pages.length = 0;
+      ff(0.5);
+      r.oldSave = { asked: L.isOpen, welcome: pages.some(function (t) { return /Start with a race/.test(t); }) };
+      settle();
+      // --- the way back in: her menu, until it has been seen through ---
+      GAME.bests = {}; GAME.prefs.guide = 'skipped';
+      L.open(); r.ropesOnMenu = L.options().some(function (o) { return /SHOW ME THE ROPES/.test(o); });
+      pages.length = 0;
+      L.choose(/SHOW ME THE ROPES/); ff(0.3);
+      r.ride = { step: G.step, car: !!G.car, hud: hud(), near: G.car ? Math.round(Math.hypot(G.car.pos.x - P.pos.x, G.car.pos.z - P.pos.z)) : -1,
+        islandTease: pages.some(function (t) { return /Isla Verde/.test(t) && /shut/.test(t) && !/four/.test(t); }) };
+      GAME.isTouch = true; r.touchWords = G.now(); GAME.isTouch = keepTouch;
+      // --- in the car: off to the ring, on the map ---
+      GAME.test.enterNearestCar(G.car); ff(1.5);
+      var nd = GAME.nav && GAME.nav.dest;
+      r.ring = { step: G.step, routed: !!nd && Math.hypot(nd.x - courier.start.x, nd.z - courier.start.z) < 2, hud: hud() };
+      // --- the ring starts the same job, made kinder ---
+      var car = P.car;
+      car.pos.set(courier.start.x, C.groundY(courier.start.x, courier.start.z), courier.start.z); car.speed = 0;
+      ff(1.5);
+      var a = M.active;
+      r.job = a ? { id: a.def.id, drops: a.stops.length, time: a.def.time, sameJob: a.def.orig === courier, step: G.step } : null;
+      r.realJobUntouched = courier.drops === 4 && courier.time === 115;
+      // --- a failed first run: back to the ring, and a retry is the same kinder run ---
+      ff(4);
+      // and fail it a kilometre from the ring: that is not walking off
+      P.car.pos.set(-350, C.groundY(-350, 300), 300); P.car.speed = 0; ff(0.2);
+      a.timeLeft = 0; ff(0.5);
+      r.failed = { step: G.step, active: !!M.active, line: pages.some(function (t) { return /Happens to everybody/.test(t); }) };
+      GAME.test.pressKey('KeyY', true); ff(1 / 60); GAME.test.pressKey('KeyY', false); ff(1.5);
+      a = M.active;
+      r.retry = a ? { drops: a.stops.length, step: G.step } : null;
+      // --- the drops done: paid, then the card, then off to the barber ---
+      ff(4);
+      for (var k = 0; k < 4 && M.active; k++) {
+        a = M.active;
+        var s = a.stops[a.cpIndex];
+        P.car.pos.set(s[0], C.groundY(s[0], s[1]), s[1]); P.car.speed = 0;
+        ff(1.2);
+      }
+      r.won = { step: G.step, best: GAME.bests.courier2 !== undefined, card: !!GAME.shareOpen };
+      pages.length = 0;
+      ff(3);
+      r.waitsForCard = G.step === 'paid';
+      // a run can end a kilometre from the barber: that is not walking off
+      P.car.pos.set(-350, C.groundY(-350, 300), 300); P.car.speed = 0; ff(0.2);
+      GAME.share.hide(); ff(2);
+      nd = GAME.nav && GAME.nav.dest;
+      r.barber = { step: G.step, routed: !!nd && Math.hypot(nd.x - barber.at.x, nd.z - barber.at.z) < 2, hud: hud(),
+        line: pages.some(function (t) { return /CORTES CUTS/.test(t); }) };
+      // --- in the chair: a cut with the pay, and then the wider picture ---
+      settle();
+      GAME.test.teleport(barber.at.x + 3, barber.at.z); ff(0.3);
+      GAME.interiors.enter(barber); ff(1.5);
+      r.inside = G.step;
+      var cash0 = P.cash;
+      S.open(barber); ff(0.2);
+      var cut = S.wardrobe.HAIRSTYLES.filter(function (h) { return h.id !== GAME.prefs.outfit.hairStyle; })[0];
+      pages.length = 0;
+      S.buy('style_' + cut.id); ff(0.2);
+      S.close(); ff(0.5);
+      r.done = { step: G.step, pref: GAME.prefs.guide, paid: cash0 - P.cash, hud: hud(),
+        pointers: pages.some(function (t) { return /races, rampages and takedowns/.test(t) && /four/.test(t) && /stunt jump/.test(t); }) };
+      L.open(); r.ropesAfter = L.options().some(function (o) { return /SHOW ME THE ROPES/.test(o); }); L.close();
+      settle();
+      // --- walking off part way lets you go, with the way back ---
+      GAME.prefs.guide = 'left';
+      GAME.test.teleport(356, 40); ff(0.5);
+      G.begin(); ff(0.3);
+      GAME.test.enterNearestCar(G.car); ff(1.5);
+      pages.length = 0;
+      GAME.test.teleport(-300, -300); ff(0.6);
+      r.wandered = { step: G.step, pref: GAME.prefs.guide, line: pages.some(function (t) { return /SHOW ME THE ROPES/.test(t); }) };
+      settle();
+      // --- and so does abandoning the run ---
+      GAME.test.teleport(356, 40); ff(0.5);
+      G.begin(); ff(0.3);
+      GAME.test.enterNearestCar(G.car); ff(1.5);
+      P.car.pos.set(courier.start.x, C.groundY(courier.start.x, courier.start.z), courier.start.z); P.car.speed = 0;
+      ff(1.5);
+      var started = !!M.active;
+      M.abandon(); ff(0.3);
+      r.abandoned = { started: started, step: G.step, pref: GAME.prefs.guide };
+      // --- outside her day, BEACH RUN is BEACH RUN ---
+      r.untouched = G.jobFor(courier) === courier;
+      // --- and once the island is open, she says so instead of teasing it ---
+      GAME.isla.setOpen(true);
+      GAME.prefs.guide = 'left'; pages.length = 0;
+      G.begin(); ff(0.3);
+      r.openIsland = { tease: pages.some(function (t) { return /shut/.test(t); }) };
+      settle();
+      G.skip(); ff(0.2);
+      r.openIsland.skipTease = pages.some(function (t) { return /shut/.test(t); });
+    } finally {
+      GAME.hud.pager = pg0; GAME.hud.message = ms0;
+      if (G.step) G.skip();
+      settle();
+      GAME.isla.setOpen(keepIsla);
+      GAME.isTouch = keepTouch;
+      GAME.prefs = JSON.parse(keepPrefs); GAME.bests = JSON.parse(keepBests);
+      P.cash = keepCash; GAME.hud.cashChanged();
+      S.applyOutfit();
+      if (GAME.nav) GAME.nav.clear();
+      GAME.hud.missionEnd();
+      GAME.save();
+    }
+    return r;
+  });
+  check('guide: a fresh save is asked — show me around, or find my own way', gd.asked &&
+    gd.choices.length === 2 && /SHOW ME AROUND/.test(gd.choices[0]) && /OWN WAY/.test(gd.choices[1]), JSON.stringify(gd.choices));
+  check('guide: closing her is finding your own way, told the island is shut, and the old hints keep quiet',
+    gd.skipped && !!gd.skipLine && gd.oldHints === 0, JSON.stringify({ skipped: gd.skipped, line: gd.skipLine, oldHints: gd.oldHints }));
+  check('guide: a save with a job done is not asked, and keeps the old welcome', !gd.oldSave.asked && gd.oldSave.welcome, JSON.stringify(gd.oldSave));
+  check('guide: SHOW ME THE ROPES on her menu starts it: a car marked close by, the button named',
+    gd.ropesOnMenu && gd.ride.step === 'ride' && gd.ride.car && gd.ride.near < 100 && /Get in the car/.test(gd.ride.hud) && gd.ride.islandTease &&
+    /ENTER/.test(gd.touchWords), JSON.stringify({ menu: gd.ropesOnMenu, ride: gd.ride, touch: gd.touchWords }));
+  check('guide: in the car, the ring is routed on the map', gd.ring.step === 'ring' && gd.ring.routed && /ring/.test(gd.ring.hud), JSON.stringify(gd.ring));
+  check('guide: the ring starts BEACH RUN made kinder — three drops, 150 s — and leaves the real one alone',
+    gd.job && gd.job.id === 'courier2' && gd.job.drops === 3 && gd.job.time === 150 && gd.job.sameJob && gd.job.step === 'job' && gd.realJobUntouched,
+    JSON.stringify(gd.job));
+  check('guide: a failed run goes back to the ring, and a retry is the same kinder run',
+    gd.failed.step === 'ring' && !gd.failed.active && gd.failed.line && gd.retry && gd.retry.drops === 3 && gd.retry.step === 'job',
+    JSON.stringify({ failed: gd.failed, retry: gd.retry }));
+  check('guide: paid, she waits out the card, then routes you to CORTES CUTS',
+    gd.won.step === 'paid' && gd.won.best && gd.won.card && gd.waitsForCard && gd.barber.step === 'barber' && gd.barber.routed && gd.barber.line && /CORTES CUTS/.test(gd.barber.hud),
+    JSON.stringify({ won: gd.won, wait: gd.waitsForCard, barber: gd.barber }));
+  check('guide: a cut with the pay, then the other rings, the island rule and how to call her',
+    gd.inside === 'counter' && gd.done.step === null && gd.done.pref === 'done' && gd.done.paid === 150 && gd.done.pointers && gd.done.hud === '' && !gd.ropesAfter,
+    JSON.stringify({ inside: gd.inside, done: gd.done, ropesAfter: gd.ropesAfter }));
+  check('guide: driving off lets you go, with the way back', gd.wandered.step === null && gd.wandered.pref === 'left' && gd.wandered.line, JSON.stringify(gd.wandered));
+  check('guide: so does abandoning the run', gd.abandoned.started && gd.abandoned.step === null && gd.abandoned.pref === 'left', JSON.stringify(gd.abandoned));
+  check('guide: outside her day BEACH RUN is untouched', gd.untouched);
+  check('guide: with the island open she does not call it shut', !gd.openIsland.tease && !gd.openIsland.skipTease, JSON.stringify(gd.openIsland));
 
   // ---------- 6: a rider follows the deck when it tilts ----------
   // vehicles.js pitches a chassis over a ramp (negative rotation.x lifts the
@@ -9440,6 +9630,7 @@ function withTimeout(p, ms) {
     return window.GAME && GAME.test && GAME.city && GAME.city.nodes && GAME.city.nodes.length > 0;
   }, null, { timeout: 90000 });
   var stick = await tpage.evaluate(function () {
+    GAME.prefs.guide = 'done';   // her welcome answered, as on the main page
     GAME.test.start();
     GAME.test.fastForward(1);
     var zone = document.getElementById('tstick-zone');

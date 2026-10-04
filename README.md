@@ -23,7 +23,7 @@ A free, fan-made tribute inspired by Grand Theft Auto: Vice City (2002). Everyth
 - 🏠 **Walk in** — every shop, a casino with horse racing, a glass car showroom, and homes you can buy.
 - 🔍 **Hunt** — 25 stunt jumps and 30 lost mixtapes hidden around both islands.
 - 📻 **Turn up the radio** — three synth stations, every note made live in your browser.
-- 📟 **Ask Lola** — she tips you off the first time you meet anything, and `L` asks her what to do next.
+- 📟 **Ask Lola** — she can show you around on day one, tips you off the first time you meet anything, and `L` asks her what to do next.
 - 📷 **Take pictures** — an old film camera that prints the city like it's 1986.
 
 Want the details? **[Read the full tour →](docs/FEATURES.md)**
@@ -45,6 +45,7 @@ Want the details? **[Read the full tour →](docs/FEATURES.md)**
 
 ## What's new
 
+- 🎓 **Lola's first day** — a new game can be shown around: a ride, a first delivery, then a new look at the barber with the pay.
 - 🏠 **Walk-in interiors** — every shop, your homes, the casino's horse races, and a glass showroom with the helicopters on its roof.
 - 🌊 **The sea** — swim, take a speedboat, run the BAY REGATTA and CONTRABAND jobs.
 - 🚓 **A city that answers** — drivers who flee or fire back, manhunts you can escape, rain and a live clock.

@@ -1560,6 +1560,7 @@ GAME.missions = (function () {
 
   function finish(win, reason) {
     var d = active.def;
+    if (GAME.guide) GAME.guide.finished(d, win, reason === ABANDONED);
     if (d.id === 'icecream') clearIceServed();   // the wasted/failed path skips endJob
     var reward = active.reward || d.reward || 0;
     if (win) {
@@ -1724,7 +1725,8 @@ GAME.missions = (function () {
       }
     }
     // whichever marker that was waits until you have left it (see START_SPEED)
-    if (active && active.def) leaveFirst = active.def;
+    // (a gentler copy of a job — guide.js — still means its own ring)
+    if (active && active.def) leaveFirst = active.def.orig || active.def;
     active = null;
     abandonAsk = 0;
     cpMarker.visible = false;
@@ -1889,6 +1891,8 @@ GAME.missions = (function () {
     GAME.prefs = GAME.prefs || {};
     GAME.prefs.storyIntro = true;
     GAME.save();
+    // a brand new save: she offers to show you around instead (guide.js)
+    if (GAME.guide && GAME.guide.offer()) return;
     lola('Welcome to Costa Rosa, kid. I\'m Lola — I run the strip. You need work, I have work: the rings on your map are mine. Start with a race, and win it.', 9);
   }
 
@@ -1977,7 +1981,8 @@ GAME.missions = (function () {
         // no cheesing a street race from a helicopter or plane
         if (d.type === 'race' && air) continue;
         if (inRing && slow && leaveFirst !== d) {
-          start(d);
+          // her guided first run is the same job, made gentler (guide.js)
+          start(GAME.guide ? GAME.guide.jobFor(d) : d);
           hk = 0;
           break;
         }

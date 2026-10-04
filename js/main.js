@@ -524,6 +524,7 @@
     GAME.combat.updatePickups(dt);
     GAME.police.update(dt);
     GAME.missions.update(dt);
+    GAME.guide.update(dt);
     GAME.tapes.update(dt);
     if (GAME.isla) GAME.isla.tick(dt);
     GAME.shops.update(dt);
