@@ -50,6 +50,7 @@ Want the details? **[Read the full tour →](docs/FEATURES.md)**
 - 🚓 **A city that answers** — drivers who flee or fire back, manhunts you can escape, rain and a live clock.
 - 📟 **Lola on call** and 📷 **a 1986 film camera**.
 - 🛗 **More to find** — a glass lift up the helipad tower, takedowns, ten Isla Verde jumps and thirty lost tapes.
+- 🔉 **A city you can hear** — traffic going by, people about, your own footsteps, the surf and the gulls, kept quiet.
 
 ## Controls
 

@@ -100,10 +100,17 @@
 //       the horn sounds for as long as it is held, over a dipped engine;
 //       all 25 jumps give the arsenal, kept and refilled free (unlimited
 //       ammo is for finishing everything), and older saves keep theirs.
+//   5p. THE CITY YOU HEAR — on foot the speakers are not silent, and not
+//       loud; your steps sound by what is underfoot; a swim strokes and
+//       laps; the surf is there by the sea and gone downtown; a car going by
+//       is a voice on its own side; people murmur only when they are about;
+//       a car's cabin and a room muffle it all; the island has crickets at
+//       night and the sea has gulls by day; an overlay silences it.
 //   4y. AROUND THE GAME — messages stack; the district name keeps out of a
 //       mission's title; every overlay uses the game's face; the title says
-//       LOADING until it can answer; pause takes keys and ignores a missed
-//       click; the map zooms, names missions and marks beaten ones in
+//       LOADING until it can answer; pause takes keys, ignores a click that
+//       just missed a button and resumes on its empty screen; the map zooms,
+//       names missions and marks beaten ones in
 //       colours no two families share; a car keeps its radio dial, which has
 //       an OFF; a bed means a home start; shake and graphics have switches;
 //       a slow machine still thins; hits show their direction, low health
@@ -329,7 +336,9 @@ function withTimeout(p, ms) {
     var a = GAME.audio;
     var engine0 = a.engineState, skid0 = a.skid, siren0 = a.siren, vol0 = a.radio.setVolume;
     window.__spy = null;
-    window.__record = function () { window.__spy = { engine: [], skid: [], siren: [], radio: [] }; };
+    window.__record = function () { window.__spy = { engine: [], skid: [], siren: [], radio: [], amb: [] }; };
+    var amb0 = GAME.ambience.silence;
+    GAME.ambience.silence = function () { if (window.__spy) window.__spy.amb.push(true); return amb0.apply(GAME.ambience, arguments); };
     a.engineState = function (on) { if (window.__spy) window.__spy.engine.push(!!on); return engine0.apply(a, arguments); };
     a.skid = function (v) { if (window.__spy) window.__spy.skid.push(v); return skid0.apply(a, arguments); };
     a.siren = function (v) { if (window.__spy) window.__spy.siren.push(v); return siren0.apply(a, arguments); };
@@ -370,6 +379,7 @@ function withTimeout(p, ms) {
     check(ov.name + ': skid silenced', r.opened.skid.indexOf(0) >= 0, JSON.stringify(r.opened.skid));
     check(ov.name + ': siren silenced', r.opened.siren.indexOf(0) >= 0, JSON.stringify(r.opened.siren));
     check(ov.name + ': radio silenced', r.opened.radio.indexOf(0) >= 0, JSON.stringify(r.opened.radio));
+    check(ov.name + ': ambience silenced', r.opened.amb.length > 0, JSON.stringify(r.opened.amb));
     check(ov.name + ': radio restored on close',
       r.closed.radio.some(function (v) { return v > 0; }), JSON.stringify(r.closed.radio));
   }
@@ -7817,6 +7827,181 @@ function withTimeout(p, ms) {
   check('jumps: now they give the full arsenal, with ammo that runs out', ja.arsenal && ja.spends, JSON.stringify(ja));
   check('jumps: any hardware counter refills it for nothing', ja.refill, JSON.stringify(ja));
   check('jumps: and it comes back with you from the hospital', ja.alive && ja.keptThroughHospital, JSON.stringify(ja));
+
+  // ---------- 5p: the city you hear ----------
+  var amb = await page.evaluate(async function () {
+    var r = {}, P = GAME.player, C = GAME.city, I = C.isla, A = GAME.audio, AM = GAME.ambience;
+    var ff = function (s) { GAME.test.fastForward(s); };
+    var wait = function (ms) { return new Promise(function (res) { setTimeout(res, ms); }); };
+    if (!A.ctx) A.init();
+    if (A.ctx.state !== 'running') { try { await A.ctx.resume(); } catch (e) { } }
+    // the loudness is only measurable with sound actually running (as the
+    // horn's check); everything else here reads the levels it sets
+    r.noAudio = A.ctx.state !== 'running';
+    var W = GAME.weather, mode0 = W.mode, time0 = GAME.timeMode, muted0 = A.muted, sfx0 = A.sfxOn;
+    if (A.muted) A.toggleMute();
+    A.setSfxOn(true);
+    W.setMode('clear', true);
+    GAME.setTimeMode('day');
+    // count the ambience's one-shots by their shape
+    var calls = [], n0 = A.amb.noise;
+    A.amb.noise = function (dur, freq, g, type) { calls.push({ dur: dur, freq: freq, type: type }); return n0.apply(A.amb, arguments); };
+    function count(fn) { return calls.filter(fn).length; }
+    function clearAround(x, z, rad) {
+      GAME.world.peds.slice().forEach(function (p) { if (Math.hypot(p.pos.x - x, p.pos.z - z) < rad) GAME.peds.removePed(p); });
+      GAME.world.cars.slice().forEach(function (c) { if (c !== P.car && Math.hypot(c.pos.x - x, c.pos.z - z) < rad) GAME.vehicles.removeCar(c); });
+    }
+    var spawned = [];
+    try {
+      // --- out on a street: something to hear, nothing loud ---
+      var rp = C.nearestRoadPoint(300, -40);
+      GAME.test.teleport(rp.x, rp.z); ff(1);
+      var an = A.meter(), buf = new Float32Array(an.fftSize);
+      await wait(900);
+      var sum = 0, peak = 0;
+      for (var k = 0; k < 6; k++) {
+        an.getFloatTimeDomainData(buf);
+        for (var i = 0; i < buf.length; i++) { sum += buf[i] * buf[i]; peak = Math.max(peak, Math.abs(buf[i])); }
+        await wait(60);
+      }
+      r.rms = +Math.sqrt(sum / (6 * buf.length)).toFixed(4); r.peak = +peak.toFixed(3);
+      r.streetCity = AM.levels.city;
+
+      // --- steps: none standing, a run of them walking, by surface ---
+      // down the road, not into a wall
+      clearAround(rp.x, rp.z, 40);
+      GAME.cam.yaw = P.heading = rp.axis === 'z' ? 0 : Math.PI / 2;
+      calls.length = 0; ff(1);
+      r.standSteps = count(function (c) { return c.dur <= 0.11; });
+      GAME.test.pressKey('KeyW', true); ff(2); GAME.test.pressKey('KeyW', false); ff(0.3);
+      r.walkSteps = count(function (c) { return c.dur <= 0.11; });
+      // on the sand, a little way up from the water's edge
+      var sand = C.shoreline(60) - 14;
+      var grass = null, iroad = C.nearestRoadPoint(I.bounds.cx, I.bounds.cz);
+      for (var gx = -150; gx <= 150 && !grass; gx += 10) {
+        for (var gz = -150; gz <= 150 && !grass; gz += 10) {
+          var x = I.bounds.cx + gx, z = I.bounds.cz + gz;
+          if (I.contains(x, z) && I.inland(x, z) > 0.3 && !I.onRoad(x, z, 4)) grass = { x: x, z: z };
+        }
+      }
+      r.surfaces = {
+        road: AM.surfaceAt(rp.x, rp.z),
+        sand: sand ? AM.surfaceAt(sand, 60) : 'none',
+        pier: AM.surfaceAt(450, 250),
+        islaGrass: grass ? AM.surfaceAt(grass.x, grass.z) : 'none',
+        islaRoad: AM.surfaceAt(iroad.x, iroad.z)
+      };
+
+      // --- the surf: by the sea, and not downtown ---
+      GAME.test.teleport(sand, 60); ff(1.2);
+      r.beach = { surf: AM.levels.surf, water: AM.levels.water };
+      GAME.test.teleport(0, -150); ff(1.2);
+      r.downtown = { surf: AM.levels.surf, water: AM.levels.water };
+
+      // --- a gull, some time in a day by the sea ---
+      GAME.test.teleport(sand, 60); ff(0.5);
+      var g0 = AM.levels.gull;
+      for (var t = 0; t < 45 && AM.levels.gull === g0; t += 1) ff(1);
+      r.gull = AM.levels.gull !== g0 && AM.levels.gull !== undefined;
+
+      // --- a car going by on your right is heard on your right ---
+      var rp2 = C.nearestRoadPoint(-150, 60);
+      GAME.test.teleport(rp2.x, rp2.z); ff(0.5);
+      clearAround(rp2.x, rp2.z, 70); ff(0.3);
+      r.noCars = AM.levels.cars.length;
+      var yaw = GAME.cam.yaw, rx = -Math.cos(yaw), rz = Math.sin(yaw);
+      var car = GAME.vehicles.spawnCar('sedan', P.pos.x + rx * 8, P.pos.z + rz * 8, yaw, {});
+      spawned.push(car);
+      car.speed = 16; ff(0.15); car.speed = 16; ff(0.15);
+      // ours is the loudest: eight metres off, at sixteen metres a second
+      r.carVoice = AM.levels.cars.slice().sort(function (a, b) { return b.g - a.g; })[0] || null;
+      car.speed = 0; ff(0.1);
+
+      // --- people: a murmur only with somebody about ---
+      clearAround(P.pos.x, P.pos.z, 40); ff(0.3);
+      r.crowdNone = AM.levels.crowd;
+      for (var q = 0; q < 6; q++) spawned.push(GAME.test.spawnPed(3 + q, (q % 2 ? 2 : -2)));
+      ff(0.3);
+      r.crowdSome = AM.levels.crowd;
+
+      // --- a cabin muffles the street ---
+      GAME.vehicles.removeCar(car); spawned = spawned.filter(function (x) { return x !== car; });
+      var rp3 = C.nearestRoadPoint(300, -40);
+      GAME.test.teleport(rp3.x, rp3.z); ff(1);
+      var footCity = AM.levels.city;
+      var ride = GAME.test.spawnCar('sedan', 3, 0); spawned.push(ride);
+      ff(0.2); GAME.test.enterNearestCar(ride); ff(1.5);
+      r.cabin = { foot: footCity, car: AM.levels.city, inCar: P.inCar };
+      GAME.test.exitCar(); ff(0.6);
+
+      // --- a room: the street is through a wall ---
+      var hw = GAME.shops.locations().filter(function (l) { return l.kind === 'hardware'; })[0];
+      GAME.test.teleport(hw.at.x + 6, hw.at.z); ff(0.4);
+      GAME.interiors.enter(hw); ff(1.2);
+      r.room = { inside: !!P.interior, city: AM.levels.city, surf: AM.levels.surf, cars: AM.levels.cars.length };
+      GAME.interiors.reset(); ff(0.3);
+
+      // --- a swim: strokes going, lapping treading water ---
+      GAME.test.teleport(560, 20); ff(1);
+      r.swimming = P.swimming;
+      calls.length = 0;
+      GAME.test.pressKey('KeyW', true); ff(3); GAME.test.pressKey('KeyW', false);
+      r.strokes = count(function (c) { return c.dur === 0.3; });
+      ff(1.5); calls.length = 0; ff(4);
+      r.laps = count(function (c) { return c.dur === 0.6; });
+      r.swimStrokesWhileTreading = count(function (c) { return c.dur === 0.3; });
+      GAME.test.teleport(rp.x, rp.z); ff(0.8);
+
+      // --- crickets: the island at night, off the road; none by day ---
+      var wasOpen = GAME.isla.isOpen(); GAME.isla.setOpen(true);
+      GAME.test.teleport(grass.x, grass.z); ff(0.5);
+      clearAround(grass.x, grass.z, 160);
+      GAME.setTimeMode('day'); ff(0.4);
+      var dayCrick = AM.levels.crickets;
+      GAME.setTimeMode('night'); ff(0.4);
+      r.crickets = { day: dayCrick, night: AM.levels.crickets };
+      GAME.isla.setOpen(wasOpen);
+      GAME.setTimeMode('day');
+      GAME.test.teleport(rp.x, rp.z); ff(0.8);
+
+      // --- an overlay silences it, and play brings it back ---
+      GAME.togglePause();
+      r.pausedSilent = AM.levels.silent === true;
+      GAME.togglePause(); ff(0.3);
+      r.back = AM.levels.city > 0;
+    } finally {
+      A.amb.noise = n0;
+      spawned.forEach(function (x) { try { if (x.spec) GAME.vehicles.removeCar(x); else GAME.peds.removePed(x); } catch (e) { } });
+      if (P.inCar) GAME.test.exitCar();
+      GAME.setTimeMode(time0);
+      W.setMode(mode0, true);
+      A.setSfxOn(sfx0);
+      if (A.muted !== muted0) A.toggleMute();
+    }
+    return r;
+  });
+  check('sound: on foot in the street the speakers are not silent, and not loud',
+    amb.noAudio ? amb.streetCity > 0.01 : amb.rms > 0.002 && amb.rms < 0.05 && amb.peak < 0.5,
+    JSON.stringify({ rms: amb.rms, peak: amb.peak, city: amb.streetCity, noAudio: amb.noAudio }));
+  check('sound: standing still makes no steps, walking makes a run of them',
+    amb.standSteps === 0 && amb.walkSteps >= 4, 'stand=' + amb.standSteps + ' walk=' + amb.walkSteps);
+  check('sound: a step sounds of what is underfoot', JSON.stringify(amb.surfaces) ===
+    JSON.stringify({ road: 'hard', sand: 'sand', pier: 'wood', islaGrass: 'grass', islaRoad: 'hard' }), JSON.stringify(amb.surfaces));
+  check('sound: the surf is there on the beach, and gone downtown',
+    amb.beach.surf > 0.05 && amb.downtown.surf === 0, JSON.stringify({ beach: amb.beach, downtown: amb.downtown }));
+  check('sound: a day by the sea has a gull in it', amb.gull);
+  check('sound: a car going by on your right is a voice on your right',
+    amb.carVoice && amb.carVoice.g > 0.02 && amb.carVoice.pan > 0.2, JSON.stringify({ before: amb.noCars, car: amb.carVoice }));
+  check('sound: people murmur only when there are people about',
+    amb.crowdNone === 0 && amb.crowdSome > 0.015, 'nobody=' + amb.crowdNone + ' six close=' + amb.crowdSome);
+  check('sound: a car\'s cabin muffles the street', amb.cabin.inCar && amb.cabin.car < amb.cabin.foot * 0.7, JSON.stringify(amb.cabin));
+  check('sound: a room keeps the street out, and the sea and the traffic',
+    amb.room.inside && amb.room.city < amb.cabin.foot * 0.3 && amb.room.surf === 0 && amb.room.cars === 0, JSON.stringify(amb.room));
+  check('sound: a swim strokes, and treading water laps',
+    amb.swimming && amb.strokes >= 3 && amb.laps >= 2 && amb.swimStrokesWhileTreading === 0,
+    JSON.stringify({ swimming: amb.swimming, strokes: amb.strokes, laps: amb.laps, treadingStrokes: amb.swimStrokesWhileTreading }));
+  check('sound: crickets on the island at night, none by day', amb.crickets.day === 0 && amb.crickets.night > 0.001, JSON.stringify(amb.crickets));
+  check('sound: pause silences the city, and play brings it back', amb.pausedSilent && amb.back);
 
   // ---------- 6: a rider follows the deck when it tilts ----------
   // vehicles.js pitches a chassis over a ramp (negative rotation.x lifts the

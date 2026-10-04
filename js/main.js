@@ -437,6 +437,7 @@
       GAME.audio.engineState(false, 0);
       GAME.audio.skid(0);
       GAME.audio.siren(0);
+      GAME.ambience.silence();
       GAME.audio.radio.setVolume(0);
     } else if (P && P.inCar && P.car && P.state === 'alive') {
       GAME.audio.radio.setVolume(GAME.audio.muted ? 0 : 0.7);
@@ -535,6 +536,8 @@
     // the endgame watch: notices the last mission or jump landing
     if (GAME.frame % 300 === 150) GAME.missions.checkCompletion();
     GAME.fx.update(dt);
+    // last of the sound: everything has moved, so it hears where things are
+    GAME.ambience.tick(dt);
     updateHeadlight();
     GAME.touch.update();
     GAME.hud.update(dt);
