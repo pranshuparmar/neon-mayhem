@@ -2018,7 +2018,11 @@ GAME.vehicles = (function () {
     var tx = ai.node.x + ai.laneX, tz = ai.node.z + ai.laneZ;
     var dx = tx - car.pos.x, dz = tz - car.pos.z;
     var distN = Math.sqrt(dx * dx + dz * dz);
-    if (distN < 6) {
+    // (or gone by it: flat out — a man on the run swinging round a van at the
+    // junction — a car went wide of the six metres, and its turning circle
+    // was bigger than that, so it circled the node and never reached it)
+    var overshot = car.speed > 6 && distN < 18 && dx * Math.sin(car.heading) + dz * Math.cos(car.heading) < 0;
+    if (distN < 6 || overshot) {
       // a closed bridge is closed to traffic too: while the channel gates are
       // down, span nodes don't exist as far as a wandering car cares — else
       // it turned onto the approach and nosed into the police line forever
