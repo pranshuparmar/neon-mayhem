@@ -2967,7 +2967,10 @@ GAME.city = (function () {
     // and a jet ski at the northern pier's other side — on your left, walking
     // out along it — for anybody who wants the bay at a gallop
     city.moorings.push({ x: 445, z: -191.5, vtype: 'jetski' });
+    // (these three only: Isla Verde lays out its own moorings first, with
+    // their own spots — a second spot each here put two boats on every one)
     city.moorings.forEach(function (mo) {
+      if (mo.isla) return;
       city.parkedSpots.push({ x: mo.x, z: mo.z, y: -0.35, heading: Math.PI / 2, vtype: mo.vtype || 'boat' });
     });
 

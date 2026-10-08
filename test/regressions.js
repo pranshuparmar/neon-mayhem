@@ -8293,7 +8293,7 @@ function withTimeout(p, ms) {
     try {
       // --- a Wave Rider moored off the northern pier's north side, on your
       // left walking out, as the Squalo is on its right ---
-      var mo = C.moorings.filter(function (m) { return m.vtype === 'jetski'; })[0];
+      var mo = C.moorings.filter(function (m) { return m.vtype === 'jetski' && !m.isla; })[0];
       r.moored = mo ? { x: mo.x, z: mo.z, left: mo.z < -188 && mo.z > -196 && mo.x > 370 && mo.x < 470 } : null;
       GAME.test.teleport(mo.x, -186.5); ff(1.5);
       var ski = GAME.world.cars.filter(function (c) { return c.spec.jetski && Math.hypot(c.pos.x - mo.x, c.pos.z - mo.z) < 3; })[0];
@@ -9379,8 +9379,9 @@ function withTimeout(p, ms) {
       GAME.isla.setOpen(true);
       var mo = C.moorings.filter(function (m) { return m.isla; });
       r.moorings = mo.map(function (m) {
+        var spots = C.parkedSpots.filter(function (s) { return s.x === m.x && s.z === m.z; });
         return { x: Math.round(m.x), z: Math.round(m.z), type: m.vtype || 'boat', wet: C.isBoatWater(m.x, m.z),
-          spot: C.parkedSpots.some(function (s) { return s.isla && s.x === m.x && s.z === m.z; }) };
+          spot: spots.length === 1 && !!spots[0].isla };
       });
       r.jetty = !!C.islaPois.coveJetty;
       // the cove's speedboat: walk out along the jetty, board it, take it out
@@ -9432,7 +9433,7 @@ function withTimeout(p, ms) {
     }
     return r;
   });
-  check('isla boats: the island has four moorings — two at the marina, two at the cove jetty — each on open water with a boat',
+  check('isla boats: the island has four moorings — two at the marina, two at the cove jetty — each on open water with one boat',
     iv.moorings.length === 4 && iv.jetty && iv.moorings.every(function (m) { return m.wet && m.spot; }) &&
     iv.moorings.filter(function (m) { return m.type === 'jetski'; }).length === 2, JSON.stringify(iv.moorings));
   check('isla boats: the cove jetty holds you up beside its speedboat',
