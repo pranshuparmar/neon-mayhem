@@ -276,7 +276,7 @@ GAME.combat = (function () {
           GAME.vehicles.shotAt(res.hit.obj);   // and whoever is driving it reacts (vehicles.js)
           GAME.fx.spawn(hx, 0.8, hz, { count: 3, color: 0xffe0a0, spread: 2, life: 0.3 });
           if (res.hit.obj.isPolice && !res.hit.obj.mission) GAME.police.reportCrime('hit_cop_car', P.pos);
-          else if (res.hit.obj.ai && (res.hit.obj.ai.mode === 'traffic' || res.hit.obj.ai.mode === 'cruise')) GAME.police.reportCrime('shoot_car', P.pos);
+          else if (res.hit.obj.ai && (res.hit.obj.ai.mode === 'traffic' || res.hit.obj.ai.mode === 'cruise') && !res.hit.obj.outlaw) GAME.police.reportCrime('shoot_car', P.pos);
         } else {
           GAME.fx.spawn(hx, m.y, hz, { count: 3, color: 0xccccdd, spread: 1.5, life: 0.25 });
           if (Math.random() < 0.4) GAME.audio.ricochet();
@@ -321,7 +321,8 @@ GAME.combat = (function () {
       if (p.dead) continue;
       if (U.dist2(p.pos.x, p.pos.z, px, pz) < 1.7) {
         GAME.peds.damage(p, WEAPONS.fist.damage, true);
-        GAME.police.reportCrime('hit_ped', P.pos);
+        // (an outlaw — a thief on the run — is fair game: streetlife.js)
+        if (!p.outlaw) GAME.police.reportCrime('hit_ped', P.pos);
         GAME.missions.notifyChaos(20);
         return;
       }
@@ -331,7 +332,7 @@ GAME.combat = (function () {
     var rider = car && GAME.vehicles.throwRider(car);
     if (rider) {
       GAME.peds.damage(rider, WEAPONS.fist.damage, true);
-      GAME.police.reportCrime('hit_ped', P.pos);
+      if (!rider.outlaw) GAME.police.reportCrime('hit_ped', P.pos);
       GAME.missions.notifyChaos(20);
       return;
     }
@@ -620,9 +621,13 @@ GAME.combat = (function () {
     GAME.world.pickups.push(p);
     return p;
   }
-  function dropPickup(x, z, type) {
-    if (GAME.world.pickups.length > 60) return;
-    addPickup(x + (Math.random() - 0.5), z + (Math.random() - 0.5), type, false);
+  // (`amount`: a cash bag with a sum in it — a thief's takings, a van's
+  // load — rather than a dead man's loose change, and it lasts longer)
+  function dropPickup(x, z, type, amount) {
+    if (GAME.world.pickups.length > 60) return null;
+    var p = addPickup(x + (Math.random() - 0.5), z + (Math.random() - 0.5), type, false);
+    if (amount) { p.amount = amount; p.ttl = 90; }
+    return p;
   }
 
   function updatePickups(dt) {
@@ -658,7 +663,7 @@ GAME.combat = (function () {
       var label = PICKUP_DEFS[p.type].label;
       if (p.type === 'health') { if (P.health >= 100) continue; P.health = Math.min(100, P.health + 50); }
       else if (p.type === 'armor') { if (P.armor >= 100) continue; P.armor = Math.min(100, P.armor + 50); }
-      else if (p.type === 'cash') { var amt = 10 + Math.floor(Math.random() * 30); GAME.addCash(amt); label = '$' + amt; }
+      else if (p.type === 'cash') { var amt = p.amount || 10 + Math.floor(Math.random() * 30); GAME.addCash(amt); label = '$' + amt; }
       else giveWeapon(p.type, p.type === 'pistol' ? 24 : p.type === 'smg' ? 50 : p.type === 'rifle' ? 20 : 10);
       GAME.audio.pickup();
       GAME.haptics.pickup();

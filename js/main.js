@@ -51,6 +51,7 @@
     GAME.hud.init();
     GAME.controls.init();
     GAME.photo.init();
+    GAME.herald.init();
     GAME.share.init();
     GAME.shops.init(scene);
     GAME.interiors.build();
@@ -524,6 +525,8 @@
     GAME.combat.updatePickups(dt);
     GAME.police.update(dt);
     GAME.sealife.update(dt);
+    GAME.streetlife.update(dt);
+    GAME.strangers.update(dt);
     GAME.missions.update(dt);
     GAME.guide.update(dt);
     GAME.tapes.update(dt);
@@ -540,6 +543,7 @@
     GAME.fx.update(dt);
     // last of the sound: everything has moved, so it hears where things are
     GAME.ambience.tick(dt);
+    GAME.herald.update(dt);
     updateHeadlight();
     GAME.touch.update();
     GAME.hud.update(dt);

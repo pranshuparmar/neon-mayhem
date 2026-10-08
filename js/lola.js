@@ -197,6 +197,7 @@ GAME.lola = (function () {
       Math.max(1, (M ? M.DEFS.length : 0) + (ST ? ST.total + (ST.islaTotal || 0) : 0) + (T ? T.total : 0)));
     return { say: 'Jobs on my list: ' + done + ' of ' + (M ? M.DEFS.length : 0) + '. Stunt jumps: ' + (ST ? ST.found + ' of ' + ST.total : '—') +
       (ST && ST.islaTotal && islaOpen() ? ', and ' + ST.islaFound + ' of ' + ST.islaTotal + ' on the island' : '') + '. Lost tapes: ' + (T ? T.found + ' of ' + T.total : '—') +
+      (GAME.strangers ? '. Strangers helped: ' + GAME.strangers.done + ' of ' + GAME.strangers.total : '') +
       '. You\'re holding $' + P.cash.toLocaleString() + ', you own ' + homes + ' of 3 places' + (g ? ' and ' + g + ' in the garage' : '') +
       '. Call it ' + pct + '% of Costa Rosa. ' + (pct < 25 ? 'Plenty left.' : pct < 75 ? 'Getting somewhere.' : 'Nearly there, kid.') };
   }
@@ -235,6 +236,8 @@ GAME.lola = (function () {
   // -- the screen --
   function render() {
     var v = view;
+    // (somebody else asking — a stranger on the pavement: strangers.js)
+    $('lola-from').textContent = v.from || '📟 LOLA';
     $('lola-say').textContent = v.say;
     opts = (v.list || []).slice();
     (v.acts || []).forEach(function (a) { opts.push(a); });

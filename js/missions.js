@@ -1569,6 +1569,8 @@ GAME.missions = (function () {
       var prev = bests[bestKey(d)];
       var isBest = d.type === 'rampage' ? (!prev || value > prev) : (!prev || value < prev);
       if (isBest) bests[bestKey(d)] = value;
+      // Rico's last ride makes the papers (herald.js — the once-only story)
+      if (d.id === 'hit2' && prev === undefined && GAME.herald) GAME.herald.front('rico');
       GAME.addCash(reward);
       // finishing enough work is what opens the channel
       var opened = GAME.isla && GAME.isla.checkUnlock();
@@ -1746,7 +1748,7 @@ GAME.missions = (function () {
   var ABANDON_CONFIRM = 3, ABANDONED = 'abandoned', abandonAsk = 0;
   function abandon() {
     abandonAsk = 0;
-    if (!active) return false;
+    if (!active) return GAME.strangers ? GAME.strangers.abandon() : false;
     GAME.track('mission-abandoned');
     if (active.def.job) endJob('clocked off');
     else finish(false, ABANDONED);
@@ -1915,6 +1917,9 @@ GAME.missions = (function () {
 
     if (!active) {
       if (P.state !== 'alive') return;
+      // a stranger's favour under way is finished (or walked away from)
+      // before anything else starts (strangers.js)
+      if (GAME.strangers && GAME.strangers.busy) { GAME.jobAvailable = null; GAME.retryAvailable = false; GAME.hud.setPoiHint(''); return; }
       // taxi / ambulance jobs start from within the vehicle
       var jobKind = null;
       if (P.inCar && P.car) {
@@ -2347,14 +2352,17 @@ GAME.missions = (function () {
     chimed: chimed,
     objectiveText: objectiveText,
     getRoutePoints: function () {
-      if (!active || active.state === 'fade' || active.state === 'countdown') return null;
+      // (a stranger's favour has its own way there: strangers.js)
+      if (!active) return GAME.strangers ? GAME.strangers.route() : null;
+      if (active.state === 'fade' || active.state === 'countdown') return null;
       if (active.def.type === 'race') return active.raceRoute || active.def.cps.slice(active.cpIndex);
       if (active.courierRoute) return active.courierRoute; // courier / taxi / ambulance
       return null;
     },
     // the immediate target marker (checkpoint / stop / pickup / drop-off)
     getObjectivePoint: function () {
-      if (!active || active.state === 'fade' || active.state === 'countdown') return null;
+      if (!active) return GAME.strangers ? GAME.strangers.target() : null;
+      if (active.state === 'fade' || active.state === 'countdown') return null;
       return currentCp();
     },
     getBlips: function () {

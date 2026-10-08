@@ -253,6 +253,7 @@ GAME.peds = (function () {
 
   function kill(ped, cause, byPlayer, attacker) {
     if (ped.dead) return;
+    if (byPlayer) ped.byPlayer = true;   // (who gets the credit: streetlife.js)
     ped.killedBy = attacker || null;
     ped.deathCause = cause || null;
     ped.dead = true;
@@ -267,7 +268,7 @@ GAME.peds = (function () {
     ped.mesh.position.y = GAME.city.groundY(ped.pos.x, ped.pos.z) + 0.35;
     if (byPlayer) {
       if (ped.isCop) GAME.police.reportCrime('kill_cop', ped.pos);
-      else GAME.police.reportCrime('kill_ped', ped.pos);
+      else if (!ped.outlaw) GAME.police.reportCrime('kill_ped', ped.pos);
       GAME.missions.notifyChaos(ped.isCop ? 400 : 150);
     }
     // drops
@@ -877,7 +878,8 @@ GAME.peds = (function () {
               ped.diveZ = fz2 * (sp2 * 1.2 + 1) - fx2 * lat3 * 3;
               ped.foe = null; ped.aimPose = false;
             }
-            if (byPlayer) GAME.police.reportCrime('hit_ped', ped.pos);
+            if (byPlayer) ped.byPlayer = true;
+            if (byPlayer && !ped.outlaw) GAME.police.reportCrime('hit_ped', ped.pos);
             GAME.audio.crash(0.2, ped.pos.x, ped.pos.z);
             GAME.audio.yelp(ped.pos.x, ped.pos.z);
             break;
@@ -890,7 +892,7 @@ GAME.peds = (function () {
           ped.knockZ = Math.cos(car2.heading) * (4 + sp2 * 0.35);
           ped.knockY = 2.2 + kf * 3.2;
           ped.knockSpin = (Math.random() < 0.5 ? -1 : 1) * (4 + kf * 7);
-          if (byPlayer) GAME.police.reportCrime('hit_ped', ped.pos);
+          if (byPlayer && !ped.outlaw) GAME.police.reportCrime('hit_ped', ped.pos);
           GAME.audio.crash(0.4, ped.pos.x, ped.pos.z);
           break;
         }
@@ -1050,6 +1052,7 @@ GAME.peds = (function () {
   // and, if not, which way they run.
   function damage(ped, amt, byPlayer, attacker) {
     if (ped.dead) return;
+    if (byPlayer) ped.byPlayer = true;
     ped.hp -= amt;
     GAME.fx.spawn(ped.pos.x, 1.2, ped.pos.z, { count: 3, color: 0xc42848, spread: 1, vy: 1, life: 0.3, grav: -3 });
     if (ped.hp <= 0) { kill(ped, 'shot', byPlayer, attacker); return; }

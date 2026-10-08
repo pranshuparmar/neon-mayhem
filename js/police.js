@@ -1,6 +1,7 @@
 GAME.police = (function () {
   var pushOut = { x: 0, z: 0 };   // resolveCircle's answer for walking officers, reused
   var heat = 0, lastSeen = 0, pinTimer = 0, grabTimer = 0, haulTimer = 0, lastCrime = -99;
+  var peak = 0;   // the most stars this run of heat has reached (the papers notice a big one slipped)
   var crimeCooldown = {};
   var roadblockT = 0, spikes = [];
   // What each star COSTS, in offences. The gaps used to be 50/70/90/110/120
@@ -122,6 +123,8 @@ GAME.police = (function () {
 
   function setWanted(n) {
     n = U.clamp(Math.floor(n), 0, 5);
+    // (cleared by hand — busted, dead, bribed, slept off — is not an escape)
+    if (n === 0) peak = 0;
     heat = n === 0 ? 0 : THRESH[n] + 25;
     // treat it like a fresh offence so the level doesn't bleed away instantly
     if (n > 0) { lastCrime = GAME.time; sighted(); lastSeen = 0; }
@@ -1006,6 +1009,7 @@ GAME.police = (function () {
     // the player's own pursuit outranks anything on the beat: an officer
     // already dealing with a scuffle drops it and comes for you
     releasePatrolToPursuit();
+    if (s > peak) peak = s;
 
     // high in an aircraft you're out of reach: ground units stop being sent and
     // stop counting as eyes on you, so the heat can cool
@@ -1144,7 +1148,12 @@ GAME.police = (function () {
       var after2 = stars();
       if (after2 < before2) {
         GAME.hud.wantedChanged(after2);
-        if (after2 === 0) clearCops();
+        if (after2 === 0) {
+          clearCops();
+          // lost them for good from four stars or more: that is news
+          if (peak >= 4 && GAME.herald) GAME.herald.front('manhunt', { stars: peak });
+          peak = 0;
+        }
       }
     }
 
@@ -1190,13 +1199,19 @@ GAME.police = (function () {
   // voice, and it was being set back to silence every tick nobody chased you
   function mySirenOr0() {
     var mine = GAME.playerSiren();
-    if (mine) GAME.audio.siren(0.55, 1, mine.pos.x, mine.pos.z);
-    else GAME.audio.siren(0);
+    if (mine) { GAME.audio.siren(0.55, 1, mine.pos.x, mine.pos.z); return; }
+    // or a cruiser on somebody else's tail going by (streetlife.js)
+    var by = GAME.streetlife && GAME.streetlife.siren();
+    if (by) {
+      var f = GAME.focus(), d = Math.sqrt(U.dist2(by.pos.x, by.pos.z, f.x, f.z));
+      GAME.audio.siren(U.clamp(1 - d / 140, 0, 1) * 0.8, 1, by.pos.x, by.pos.z);
+    } else GAME.audio.siren(0);
   }
 
   return {
     get wanted() { return stars(); },
     get heat() { return heat; },
+    get peak() { return peak; },
     reportCrime: reportCrime,
     reportIncident: reportIncident,
     get incidentCount() { return incidents.length; },

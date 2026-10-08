@@ -1115,6 +1115,8 @@ GAME.vehicles = (function () {
       else car.lastDriver = { shirt: d.look.shirt, pants: d.look.pants, skin: d.look.skin,
         hair: d.look.hair, hairCol: d.look.hairCol, temper: d.temper };
     }
+    // (whoever drove an outlaw's car is one: streetlife.js)
+    if (car.outlaw) d.outlaw = true;
     car.occupied = null;
     car.ai = null;
     if (car.riderMesh) { car.mesh.remove(car.riderMesh); disposeTree(car.riderMesh); car.riderMesh = null; }
@@ -1160,7 +1162,7 @@ GAME.vehicles = (function () {
     var kx = bike.pos.x - other.pos.x, kz = bike.pos.z - other.pos.z;
     var kl = Math.sqrt(kx * kx + kz * kz) || 1;
     kx /= kl; kz /= kl;
-    if (byPlayer) GAME.police.reportCrime('hit_ped', d.pos);
+    if (byPlayer && !d.outlaw) GAME.police.reportCrime('hit_ped', d.pos);
     if (rel >= RIDER_KILL) {
       GAME.peds.kill(d, 'car', byPlayer);
       var kf = Math.min(1, rel / 26);
@@ -1348,7 +1350,7 @@ GAME.vehicles = (function () {
             var other = a === pc ? b : a;
             // a mission rival in a cruiser is a racer, not the law
             if (other.isPolice && !other.mission) GAME.police.reportCrime('hit_cop_car', pc.pos);
-            else if (other.ai && (other.ai.mode === 'traffic' || other.ai.mode === 'cruise') && !other.perp) GAME.police.reportCrime('hit_car', pc.pos);
+            else if (other.ai && (other.ai.mode === 'traffic' || other.ai.mode === 'cruise') && !other.perp && !other.outlaw) GAME.police.reportCrime('hit_car', pc.pos);
           }
           // Rammed by YOU. Traffic used to take it like weather and drive on.
           // Now the horn goes, and then either the foot goes down and they
@@ -1803,7 +1805,18 @@ GAME.vehicles = (function () {
       // a near-U-turn is only for the cornered (dead ends)
       var options = scored.filter(function (s) { return s.turn < 2.4; });
       var next;
-      if (!options.length) next = scored[0].n;
+      // Somewhere to be: a car with a place to make for, or a car to keep
+      // after (streetlife.js — a getaway heading your way, a cruiser on its
+      // tail) takes whichever way brings it nearest, not the road's choice.
+      var fol = ai.follow && !ai.follow.gone && !ai.follow.dead ? ai.follow : null;
+      var aim = fol ? (fol.ai && fol.ai.node) || fol.pos : ai.toward;
+      if (aim && options.length) {
+        var bestD = 1e18;
+        for (var oi = 0; oi < options.length; oi++) {
+          var od = U.dist2(options[oi].n.x, options[oi].n.z, aim.x, aim.z);
+          if (od < bestD) { bestD = od; next = options[oi].n; }
+        }
+      } else if (!options.length) next = scored[0].n;
       else if (options.length > 1 && Math.random() < 0.25) {
         next = options[1 + Math.floor(Math.random() * (options.length - 1))].n;
       } else next = options[0].n;
@@ -1847,7 +1860,8 @@ GAME.vehicles = (function () {
     // shooting back out of the window: slow enough to keep you in range
     if (ai.fireBackT > 0) { stepFireBack(car, dt); desired = Math.min(desired, 9); }
     // a cruiser coming up behind with its siren going: pull over and let it by
-    var sc = GAME.playerSiren();
+    // (yours, or one on somebody else's tail — streetlife.js)
+    var sc = GAME.playerSiren() || (GAME.streetlife && GAME.streetlife.siren());
     if (sc && sc !== car) {
       var srx = sc.pos.x - car.pos.x, srz = sc.pos.z - car.pos.z;
       var sfd = srx * Math.sin(car.heading) + srz * Math.cos(car.heading);
@@ -1918,10 +1932,13 @@ GAME.vehicles = (function () {
       var pc = ai.passCar;
       var behind = !pc || pc.gone || ((pc.pos.x - car.pos.x) * fx + (pc.pos.z - car.pos.z) * fz) < -(car.spec.l + 3);
       if (behind || ai.passT <= 0) { ai.passT = 0; ai.passCar = null; }
-    } else if (blocked && (byPlayer || (blockCar && Math.abs(blockCar.speed) < 1.5))) {
+    } else if (blocked && (byPlayer || (blockCar && (Math.abs(blockCar.speed) < 1.5 ||
+        // (somebody in a hurry — a getaway — goes round anything slow, not
+        // only what has stopped, and does not wait long about it)
+        (ai.reckless && blockCar.speed < desired * 0.7))))) {
       ai.blockT = (ai.blockT || 0) + dt;
-      if (byPlayer && ai.blockT > 1.2) honk(car);
-      if (blockCar && ai.blockT > 1.4 && otherLaneClear(car, fx, fz)) {
+      if ((byPlayer || ai.reckless) && ai.blockT > (ai.reckless ? 0.3 : 1.2)) honk(car);
+      if (blockCar && ai.blockT > (ai.reckless ? 0.4 : 1.4) && otherLaneClear(car, fx, fz)) {
         ai.passT = 7; ai.passCar = blockCar; ai.blockT = 0;
       }
     } else ai.blockT = 0;
@@ -2078,7 +2095,9 @@ GAME.vehicles = (function () {
     for (var i = cars.length - 1; i >= 0; i--) {
       var car = cars[i];
       // despawn far traffic
-      if (car.ai && car.ai.mode === 'traffic' && !car.mission) {
+      // (`keep`: something going on in the street, held till it is over —
+      // streetlife.js lets go of it after)
+      if (car.ai && car.ai.mode === 'traffic' && !car.mission && !car.keep) {
         if (U.dist2(car.pos.x, car.pos.z, fc.x, fc.z) > TRAFFIC_DESPAWN * TRAFFIC_DESPAWN) { removeCar(car); continue; }
       }
       // abandoned rides don't pile up forever: anything ownerless, off-duty
@@ -2267,6 +2286,7 @@ GAME.vehicles = (function () {
     sinkCar: sinkCar,
     trafficControls: trafficControls,
     findNearestCar: findNearestCar,
+    honk: honk,
     // a display copy of a vehicle's mesh, for the showroom's turntable
     buildMesh: function (type) {
       var s = VEHICLES[type];

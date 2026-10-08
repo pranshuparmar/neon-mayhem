@@ -212,7 +212,7 @@ GAME.aircraft = (function () {
         // and the same two crimes the ground guns report on these hits
         if (byPlayer) {
           if (c.isPolice && !c.mission) GAME.police.reportCrime('hit_cop_car', P.pos);
-          else if (c.ai && (c.ai.mode === 'traffic' || c.ai.mode === 'cruise')) GAME.police.reportCrime('shoot_car', P.pos);
+          else if (c.ai && (c.ai.mode === 'traffic' || c.ai.mode === 'cruise') && !c.outlaw) GAME.police.reportCrime('shoot_car', P.pos);
         }
       }
     }

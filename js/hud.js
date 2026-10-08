@@ -127,7 +127,8 @@ GAME.hud = (function () {
     // anybody (X on a keyboard): shown only with one going, and asks once
     var abandonSure = false;
     function paintAbandon() {
-      var b = $('pause-abandon'), a = GAME.missions && GAME.missions.active;
+      // (a stranger's favour walks away the same way: strangers.js)
+      var b = $('pause-abandon'), a = GAME.missions && (GAME.missions.active || (GAME.strangers && GAME.strangers.activeJob));
       b.style.display = a ? '' : 'none';
       if (!a) return;
       var what = a.def.job ? 'CLOCK OFF' : 'ABANDON MISSION';
@@ -140,7 +141,7 @@ GAME.hud = (function () {
     pauseBtn('pause-tips', function () { if (GAME.lola) GAME.lola.setTips(!GAME.lola.tips); paintTips(); });
     paintTips();
     pauseBtn('pause-abandon', function () {
-      if (!GAME.missions || !GAME.missions.active) return;
+      if (!GAME.missions || !(GAME.missions.active || (GAME.strangers && GAME.strangers.busy))) return;
       if (!abandonSure) { abandonSure = true; paintAbandon(); return; }
       abandonSure = false;
       if (GAME.paused) GAME.togglePause();
@@ -1115,6 +1116,12 @@ GAME.hud = (function () {
       if (mb[i].kind && !catVis(mb[i].kind)) continue;
       blip(mb[i].x, mb[i].z, mb[i].color, mb[i].size);
     }
+    // whatever is going on in the street near you (streetlife.js)
+    var sb = GAME.streetlife ? GAME.streetlife.blips() : [];
+    for (var si = 0; si < sb.length; si++) blip(sb[si].x, sb[si].z, sb[si].color, sb[si].size);
+    // and the strangers with a favour to ask (strangers.js)
+    var kb = GAME.strangers ? GAME.strangers.blips() : [];
+    for (var ki = 0; ki < kb.length; ki++) blip(kb[ki].x, kb[ki].z, kb[ki].color, kb[ki].size);
     // POI dots, live and legend-aware (they used to be baked into the base
     // image, where the legend couldn't touch them)
     var pois = GAME.city.pois, pi;
