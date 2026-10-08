@@ -1129,6 +1129,9 @@ GAME.hud = (function () {
     // and the strangers with a favour to ask (strangers.js)
     var kb = GAME.strangers ? GAME.strangers.blips() : [];
     for (var ki = 0; ki < kb.length; ki++) blip(kb[ki].x, kb[ki].z, kb[ki].color, kb[ki].size);
+    // and both sides' people on the corners near you (gangs.js)
+    var gb = GAME.gangs ? GAME.gangs.blips() : [];
+    for (var gi = 0; gi < gb.length; gi++) blip(gb[gi].x, gb[gi].z, gb[gi].color, gb[gi].size / zoom);
     // and where Lola's big score goes next (heist.js)
     var hb = GAME.heist ? GAME.heist.blips() : [];
     for (var hi = 0; hi < hb.length; hi++) blip(hb[hi].x, hb[hi].z, hb[hi].color, hb[hi].size);

@@ -287,6 +287,9 @@
 //  16. STORY ACTS     — a story job's own part won goes on: Rico's men, a
 //      crew down the street, a bag to the lock-up, Rico's stand on the
 //      marina; a failure in a later act retries from the top.
+//  17. GANGS          — Lola's people and Rico's crew on their own turf, in
+//      their colours; his men draw on sight after the warehouses, the two
+//      sides fight each other and not their own, and turf follows the story.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -416,6 +419,11 @@ function withTimeout(p, ms) {
     // and every group below measures the job ending where its part does.
     // The acts group switches them on for itself.
     GAME.missions.acts = false;
+    // And the two sides' people off the corners (gangs.js): Lola's people
+    // stand about the strip, where most groups below measure the street, and
+    // a crowd of armed men changes every count of peds and fights. The gangs
+    // group puts them back for itself.
+    if (GAME.gangs) GAME.gangs.enabled = false;
     GAME.test.fastForward(1);
     var a = GAME.audio;
     var engine0 = a.engineState, skid0 = a.skid, siren0 = a.siren, vol0 = a.radio.setVolume;
@@ -1495,6 +1503,7 @@ function withTimeout(p, ms) {
     if (GAME.heist) GAME.heist.enabled = false;
     if (GAME.scenes) GAME.scenes.enabled = false;   // and the scenes off
     GAME.missions.acts = false;   // and the jobs one part each
+    if (GAME.gangs) GAME.gangs.enabled = false;   // and the gangs off the corners
     GAME.test.start();
     GAME.test.fastForward(0.5);
     var layer = document.getElementById('touch-layer');
@@ -11273,6 +11282,7 @@ function withTimeout(p, ms) {
     if (GAME.heist) GAME.heist.enabled = false;
     if (GAME.scenes) GAME.scenes.enabled = false;   // and the scenes off
     GAME.missions.acts = false;   // and the jobs one part each
+    if (GAME.gangs) GAME.gangs.enabled = false;   // and the gangs off the corners
     GAME.test.start();
     GAME.test.fastForward(1);
     var zone = document.getElementById('tstick-zone');
@@ -12334,6 +12344,70 @@ function withTimeout(p, ms) {
     acts.h2 && acts.h2act === 'crew' && acts.h2streetFree, JSON.stringify(acts));
   check('acts: and makes his stand on the marina, with Manny and his men', acts.h2marina >= 0 && acts.h2marina < 60 && acts.h2men >= 5 && acts.h2rico, JSON.stringify(acts));
   check('acts: and with them down, HIGH TIDE is passed', acts.h2done, JSON.stringify(acts));
+
+  // ---------- 17: gangs and turf ----------
+  // Lola's people stand about the strip in pink; Rico's crew holds the
+  // harbour in plum and black until LOOSE ENDS, and Puerto Dorado until HIGH
+  // TIDE. After the warehouses his men draw on sight; before, they are only a
+  // colour on the corner. The two sides go at each other, and never at their
+  // own.
+  var gang = await page.evaluate(function () {
+    var G = GAME.gangs, P = GAME.player, r = {};
+    var bests = GAME.bests || (GAME.bests = {});
+    var keep = { rampage1: bests.rampage1, hit1: bests.hit1, hit2: bests.hit2 };
+    delete bests.rampage1; delete bests.hit1; delete bests.hit2;
+    var lvl0 = GAME.chaos.level, open0 = GAME.isla.isOpen();
+    if (P.inCar) GAME.exitCar();
+    G.enabled = true;
+    try {
+      r.strip = G.turfAt(360, 40); r.harbor = G.turfAt(-250, 250); r.downtown = G.turfAt(-100, -100);
+      GAME.isla.setOpen(true);
+      var Dor = GAME.isla.pois().container;
+      r.dorado = G.turfAt(Dor.x, Dor.z);
+      GAME.test.teleport(360, 40); GAME.test.fastForward(6);
+      r.lolaMen = G.count('lola');
+      GAME.test.teleport(-250, 250); GAME.test.fastForward(6);
+      r.salMen = G.count('salazar');
+      r.colours = GAME.world.peds.filter(function (p) { return p.gang === 'salazar'; }).every(function (p) { return p.look.shirt === G.GANGS.salazar.shirt; });
+      var f = GAME.focus();
+      var men = G.testSpawn('salazar', f.x + 10, f.z, 2);
+      GAME.test.fastForward(1);
+      r.calmBefore = !G.hostile() && men.every(function (p) { return p.state !== 'attack'; });
+      bests.rampage1 = 30;
+      GAME.test.fastForward(1);
+      r.onSight = men.filter(function (p) { return p.state === 'attack' && p.foe && p.foe.kind === 'player'; }).length;
+      men.forEach(function (p) { GAME.peds.removePed(p); });
+      delete bests.rampage1;
+      GAME.chaos.set(2);
+      var a = G.testSpawn('lola', f.x + 30, f.z + 30, 1)[0], b = G.testSpawn('salazar', f.x + 36, f.z + 30, 1)[0];
+      var c = G.testSpawn('salazar', f.x + 37, f.z + 31, 1)[0];
+      GAME.test.fastForward(1);
+      r.clash = (a.state === 'attack' && a.foe && a.foe.ped === b) || (b.state === 'attack' && b.foe && b.foe.ped === a);
+      r.notOwn = !(b.foe && b.foe.ped === c) && !(c.foe && c.foe.ped === b);
+      [a, b, c].forEach(function (p) { GAME.peds.removePed(p); });
+      bests.hit1 = 50; bests.hit2 = 80;
+      r.harborAfter = G.turfAt(-250, 250); r.doradoAfter = G.turfAt(Dor.x, Dor.z);
+      r.peaceAfter = !G.hostile();
+      r.blips = G.blips().length > 0;
+    } finally {
+      G.enabled = false;
+      GAME.chaos.set(lvl0);
+      ['rampage1', 'hit1', 'hit2'].forEach(function (id) { if (keep[id] === undefined) delete bests[id]; else bests[id] = keep[id]; });
+      GAME.world.peds.slice().forEach(function (p) { if (p.gang) GAME.peds.removePed(p); });
+      if (GAME.isla.isOpen() !== open0) GAME.isla.setOpen(open0);
+      P.health = 100;
+      GAME.test.teleport(-60, 40); GAME.test.fastForward(0.5);
+    }
+    return r;
+  });
+  check('gangs: the strip is Lola\'s, the harbour and Puerto Dorado Rico\'s, downtown nobody\'s',
+    gang.strip === 'lola' && gang.harbor === 'salazar' && gang.dorado === 'salazar' && gang.downtown === null, JSON.stringify(gang));
+  check('gangs: each side stands about its own streets, in its colours', gang.lolaMen >= 2 && gang.salMen >= 2 && gang.colours, JSON.stringify(gang));
+  check('gangs: before the warehouses Rico\'s men leave you be', gang.calmBefore, JSON.stringify(gang));
+  check('gangs: after them they draw on sight', gang.onSight >= 1, JSON.stringify(gang));
+  check('gangs: the two sides go at each other, never at their own', gang.clash && gang.notOwn, JSON.stringify(gang));
+  check('gangs: what Rico loses Lola\'s people move into, and the price on you ends with him',
+    gang.harborAfter === 'lola' && gang.doradoAfter === 'lola' && gang.peaceAfter, JSON.stringify(gang));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the

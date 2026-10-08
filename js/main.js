@@ -539,6 +539,7 @@
     GAME.sealife.update(dt);
     GAME.streetlife.update(dt);
     GAME.strangers.update(dt);
+    GAME.gangs.update(dt);
     GAME.heist.update(dt);
     GAME.business.update(dt);
     GAME.missions.update(dt);

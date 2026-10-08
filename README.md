@@ -45,6 +45,7 @@ Want the details? **[Read the full tour →](docs/FEATURES.md)**
 
 ## What's new
 
+- 🟣 **Gangs and turf** — Rico's crew in plum and black against Lola's people in pink, each on their own streets, drawing on sight once Rico has a price on you, and turf that changes hands as the story goes.
 - 🎭 **Story jobs in acts** — a won race brings sore losers or the law, a rampage the crew behind it, the collector's bag goes back to the lock-up, and HIGH TIDE ends with Rico's stand on the marina.
 - 🎬 **Talking heads** — Lola's jobs open on a cut to her lock-up, Vice City style: letterbox, the two of you face to face, subtitles with a face drawn in code and a babble voice for everyone. Rico gets his own cut to the marina before the end.
 - 🏪 **Businesses that pay** — buy the barber, THREADS, a hardware store, the bar in the Lucky Gull, or VERDE CABS on Isla Verde (an open garage with a Zebra Cab for its owner, earning more with every fare you drive); the till fills every day for you to come and empty — and a hold-up there runs with it.

@@ -1011,6 +1011,9 @@ GAME.peds = (function () {
     // not stop them to have it out (streetlife.js, strangers.js)
     if (ped.outlaw && ped.state === 'flee') return false;
     if (foe && foe.kind === 'ped' && (!foe.ped || foe.ped.dead || foe.ped.gone || foe.ped === ped)) return false;
+    // a crew does not fight its own (gangs.js): stood about shoulder to
+    // shoulder, a jostle is just a jostle
+    if (foe && foe.kind === 'ped' && ped.gang && foe.ped.gang === ped.gang) return false;
     // An existing brawler is already counted; a fresh one has to fit. But
     // SWINGING BACK is not a new fight, it is the other half of one that is
     // already running — and counting it as new was most of the reason fights
