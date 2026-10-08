@@ -4287,9 +4287,12 @@ function withTimeout(p, ms) {
     var heat = { inside: !!I.current };
     GAME.test.fastForward(45);
     heat.stars = GAME.police.wanted;
+    // (stood down before the door: out of it at two stars, with the
+    // cruisers that waited for you at the kerb, you could be busted on the
+    // step, and the groups after this started on the floor of a cell)
+    GAME.police.clearWanted();
     if (S.isOpen) S.close();
     I.leave(); GAME.test.fastForward(1.2);
-    GAME.police.clearWanted();
     return { rooms: out, heat: heat };
   });
   biz.rooms.forEach(function (r) {
@@ -4312,6 +4315,11 @@ function withTimeout(p, ms) {
       GAME.test.pressKey('KeyW', false);
       GAME.test.fastForward(0.7);
     }
+    // (on your feet and in the street, whatever the last group left)
+    for (var up = 0; up < 20 && P.state !== 'alive'; up++) GAME.test.fastForward(0.5);
+    if (P.inCar) GAME.exitCar();
+    if (I.current) { I.leave(); GAME.test.fastForward(1.2); }
+    GAME.police.clearWanted();
     try {
       // a fresh save owns two outfits before it has bought a thing
       delete GAME.prefs.closet;
@@ -4327,6 +4335,7 @@ function withTimeout(p, ms) {
       walkTo(condo.x, condo.z);
       var room = I.current;
       r.home = !!room && room.kind === 'home';
+      if (!r.home) r.why = { st: P.state, inCar: P.inCar, busy: I.busy, shop: GAME.shopOpen, d: Math.round(Math.hypot(P.pos.x - condo.x, P.pos.z - condo.z)) };
       var ring = room && room.rings.filter(function (x) { return /WARDROBE/.test(x.label); })[0];
       r.ring = !!ring;
       // not on the way in from the door
@@ -4396,6 +4405,9 @@ function withTimeout(p, ms) {
       GAME.test.pressKey('KeyW', false);
       GAME.test.fastForward(0.3);
     }
+    for (var up = 0; up < 20 && P.state !== 'alive'; up++) GAME.test.fastForward(0.5);
+    if (P.inCar) GAME.exitCar();
+    if (I.current) { I.leave(); GAME.test.fastForward(1.2); }
     GAME.police.clearWanted();
     var cas = S.locations().filter(function (l) { return l.kind === 'casino'; })[0];
     GAME.test.teleport(cas.at.x + 8, cas.at.z);
@@ -4403,7 +4415,7 @@ function withTimeout(p, ms) {
     walkTo(cas.at.x, cas.at.z); GAME.test.fastForward(0.5);
     var room = I.current;
     r.inside = !!room && room.kind === 'casino';
-    if (!room) return r;
+    if (!room) { r.why = { st: P.state, inCar: P.inCar, busy: I.busy, shop: GAME.shopOpen, d: Math.round(Math.hypot(P.pos.x - cas.at.x, P.pos.z - cas.at.z)) }; return r; }
     // the screens show the races: one big one and one in every terminal
     var tex = D.texture(), screens = 0;
     GAME.scene.traverse(function (o) { if (o.material && o.material.map === tex) screens++; });
@@ -7665,6 +7677,9 @@ function withTimeout(p, ms) {
     }
     if (P.inCar) GAME.exitCar();
     if (S.isOpen) S.close();
+    for (var up = 0; up < 20 && P.state !== 'alive'; up++) GAME.test.fastForward(0.5);
+    if (P.inCar) GAME.exitCar();
+    if (I.current) { I.leave(); GAME.test.fastForward(1.2); }
     GAME.police.clearWanted();
     var cas = S.locations().filter(function (l) { return l.kind === 'casino'; })[0];
     GAME.test.teleport(cas.at.x + 8, cas.at.z); ff(0.4);
