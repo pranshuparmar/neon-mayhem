@@ -1,4 +1,7 @@
 GAME.hud = (function () {
+  // the line a route is drawn in, on the big map and on the radar: a fifth
+  // heavier than it was, so it can be followed at a glance rather than found
+  var ROUTE_W = 3.0, RADAR_ROUTE_W = 2.9;
   var el = {};
   var lastClock = -1;
   // what the per-tick readouts last wrote, so a tick that changes nothing
@@ -124,7 +127,8 @@ GAME.hud = (function () {
     // anybody (X on a keyboard): shown only with one going, and asks once
     var abandonSure = false;
     function paintAbandon() {
-      var b = $('pause-abandon'), a = GAME.missions && GAME.missions.active;
+      // (a stranger's favour walks away the same way: strangers.js)
+      var b = $('pause-abandon'), a = GAME.missions && (GAME.missions.active || (GAME.strangers && GAME.strangers.activeJob) || (GAME.heist && GAME.heist.activeJob));
       b.style.display = a ? '' : 'none';
       if (!a) return;
       var what = a.def.job ? 'CLOCK OFF' : 'ABANDON MISSION';
@@ -137,7 +141,7 @@ GAME.hud = (function () {
     pauseBtn('pause-tips', function () { if (GAME.lola) GAME.lola.setTips(!GAME.lola.tips); paintTips(); });
     paintTips();
     pauseBtn('pause-abandon', function () {
-      if (!GAME.missions || !GAME.missions.active) return;
+      if (!GAME.missions || !(GAME.missions.active || (GAME.strangers && GAME.strangers.busy) || (GAME.heist && GAME.heist.busy))) return;
       if (!abandonSure) { abandonSure = true; paintAbandon(); return; }
       abandonSure = false;
       if (GAME.paused) GAME.togglePause();
@@ -414,6 +418,7 @@ GAME.hud = (function () {
     // legend entries behave like a mixer's solo buttons: tap one to show ONLY
     // that marker family, tap again to show all. The choice persists.
     mapSolo = (GAME.prefs && GAME.prefs.mapSolo) || null;
+    if (mapSolo === 'icecream') mapSolo = 'shops';   // (a save from when the depot had its own row)
     refreshLegend();
   }
 
@@ -426,8 +431,10 @@ GAME.hud = (function () {
     // the rampage's
     ['#c86bff', 'S — Respray', 'respray'], [HOSPITAL_HEX, 'H — Hospital', 'hospital'], ['#5aa0ff', 'P — Police', 'police'],
     ['#eef0ff', 'Weapon', 'weapon'], ['#ff4d6a', 'Health', 'health'], ['#4a6cff', 'Armor', 'armor'],
-    ['#8de0ff', '✈ Airport · Ⓗ Helipad · ⚓ Boats', 'airport'], [DEPOT_HEX, '☀ Ice cream depot', 'icecream'],
-    ['#8de8b0', '$ Shops & property', 'shops'], ['#5dff9e', '⌂ Your safehouse', 'home'],
+    ['#8de0ff', '✈ Airport · Ⓗ Helipad · ⚓ Boats', 'airport'],
+    // (the ice cream depot is a place of business like the rest: one family,
+    // and one less row in the legend)
+    ['#8de8b0', '$ Shops & property · ☀ Depot', 'shops'], ['#5dff9e', '⌂ Your safehouse', 'home'],
     [DEST_HEX, 'Destination', 'dest'], ['#ffe14f', 'Objective', 'objective']
   ];
   // Tap-to-SOLO, like muting a mixing desk: tap a legend and everything ELSE
@@ -606,7 +613,7 @@ GAME.hud = (function () {
       // drew one confident straight line across the water. Marker only.
       if (GAME.nav.path.length) {
         g.strokeStyle = 'rgba(141,255,216,.95)';
-        g.lineWidth = 2.5;
+        g.lineWidth = ROUTE_W;
         g.beginPath();
         g.moveTo(w2mx(px), w2my(pz));
         GAME.nav.path.forEach(function (n) { g.lineTo(w2mx(n.x), w2my(n.z)); });
@@ -623,7 +630,7 @@ GAME.hud = (function () {
     var mroute = catVis('objective') ? GAME.missions.getRoutePoints() : null;
     if (mroute && mroute.length) {
       g.strokeStyle = 'rgba(255,138,61,.95)';
-      g.lineWidth = 2.5;
+      g.lineWidth = ROUTE_W;
       g.beginPath();
       g.moveTo(w2mx(px), w2my(pz));
       for (var mr = 0; mr < mroute.length; mr++) g.lineTo(w2mx(mroute[mr][0]), w2my(mroute[mr][1]));
@@ -699,7 +706,7 @@ GAME.hud = (function () {
       g.fillRect(hx - 1.2, hy + 1.4, 2.4, 3.6); // door
     });
     if (catVis('airport')) badge(GAME.city.airport.apron.x, GAME.city.airport.apron.z, '#8de0ff', '✈');
-    if (catVis('icecream') && GAME.city.islaPois) badge(GAME.city.islaPois.factory.x, GAME.city.islaPois.factory.z, DEPOT_HEX, '☀');
+    if (catVis('shops') && GAME.city.islaPois) badge(GAME.city.islaPois.factory.x, GAME.city.islaPois.factory.z, DEPOT_HEX, '☀');
     // helipads: a ringed cyan disc with an H, one per pad. Both of them —
     // the Alta Verde summit across the channel, and the one on the downtown
     // tower here, which is where the mainland's only helicopter stands.
@@ -719,7 +726,10 @@ GAME.hud = (function () {
     // cannot be counted on in a canvas) — shown with the airfield and pads,
     // the other places to find something that is not a car
     if (catVis('airport')) (GAME.city.moorings || []).forEach(function (mo) {
-      if (mo.isla && GAME.isla && !GAME.isla.isOpen()) return;
+      // (the island's are drawn while its bridges are shut too, dimmed: they
+      // are there, just not yet to be had)
+      var shut = mo.isla && GAME.isla && !GAME.isla.isOpen();
+      g.globalAlpha = shut ? 0.4 : 1;
       var ax = w2mx(mo.x), ay = w2my(mo.z);
       g.fillStyle = '#8de0ff';
       g.beginPath(); g.arc(ax, ay, 8, 0, Math.PI * 2); g.fill();
@@ -731,6 +741,7 @@ GAME.hud = (function () {
       g.moveTo(ax - 4, ay + 1); g.quadraticCurveTo(ax - 3.5, ay + 4.5, ax, ay + 4.5);
       g.quadraticCurveTo(ax + 3.5, ay + 4.5, ax + 4, ay + 1);
       g.stroke();
+      g.globalAlpha = 1;
     });
     // player arrow
     var h = P.inCar && P.car ? P.car.heading : P.heading;
@@ -1084,7 +1095,7 @@ GAME.hud = (function () {
     var mroute = catVis('objective') ? GAME.missions.getRoutePoints() : null;
     if (mroute && mroute.length) {
       g.strokeStyle = 'rgba(255,138,61,.95)';
-      g.lineWidth = 2.4 / zoom;
+      g.lineWidth = RADAR_ROUTE_W / zoom;
       g.beginPath();
       g.moveTo(0, 0);
       for (var mr = 0; mr < mroute.length; mr++) g.lineTo((mroute[mr][0] - px) * MAP_S, (mroute[mr][1] - pz) * MAP_S);
@@ -1097,7 +1108,7 @@ GAME.hud = (function () {
     if (GAME.nav.dest && catVis('dest')) {
       if (GAME.nav.path.length) {
         g.strokeStyle = 'rgba(141,255,216,.95)';
-        g.lineWidth = 2.4 / zoom;
+        g.lineWidth = RADAR_ROUTE_W / zoom;
         g.beginPath();
         g.moveTo(0, 0);
         var path = GAME.nav.path;
@@ -1112,6 +1123,15 @@ GAME.hud = (function () {
       if (mb[i].kind && !catVis(mb[i].kind)) continue;
       blip(mb[i].x, mb[i].z, mb[i].color, mb[i].size);
     }
+    // whatever is going on in the street near you (streetlife.js)
+    var sb = GAME.streetlife ? GAME.streetlife.blips() : [];
+    for (var si = 0; si < sb.length; si++) blip(sb[si].x, sb[si].z, sb[si].color, sb[si].size);
+    // and the strangers with a favour to ask (strangers.js)
+    var kb = GAME.strangers ? GAME.strangers.blips() : [];
+    for (var ki = 0; ki < kb.length; ki++) blip(kb[ki].x, kb[ki].z, kb[ki].color, kb[ki].size);
+    // and where Lola's big score goes next (heist.js)
+    var hb = GAME.heist ? GAME.heist.blips() : [];
+    for (var hi = 0; hi < hb.length; hi++) blip(hb[hi].x, hb[hi].z, hb[hi].color, hb[hi].size);
     // POI dots, live and legend-aware (they used to be baked into the base
     // image, where the legend couldn't touch them)
     var pois = GAME.city.pois, pi;
@@ -1121,16 +1141,19 @@ GAME.hud = (function () {
     if (catVis('airport')) landmark(GAME.city.airport.apron.x, GAME.city.airport.apron.z);
     var pads = shownHelipads();
     for (pi = 0; pi < pads.length; pi++) landmark(pads[pi].x, pads[pi].z);
-    if (catVis('icecream') && GAME.city.islaPois) landmark(GAME.city.islaPois.factory.x, GAME.city.islaPois.factory.z);
+    if (catVis('shops') && GAME.city.islaPois) landmark(GAME.city.islaPois.factory.x, GAME.city.islaPois.factory.z);
     var cars = GAME.world.cars;
     for (var c = 0; c < cars.length; c++) {
       var pc = cars[c];
       // only actively-pursuing cruisers show as blips (not idle/parked ones)
       if (pc.isPolice && !pc.dead && pc.ai && (pc.ai.mode === 'chase' || pc.ai.mode === 'roadblock')) blip(pc.pos.x, pc.pos.z, '#5aa0ff', 3);
+      // the car a job has sent after you (missions.js: Rico's men)
+      else if (pc.heavy && !pc.dead) blip(pc.pos.x, pc.pos.z, '#ff3b3b', 3);
     }
     var peds = GAME.world.peds;
     for (var pd = 0; pd < peds.length; pd++) {
       if (peds[pd].isCop && !peds[pd].dead) blip(peds[pd].pos.x, peds[pd].pos.z, '#5aa0ff', 2);
+      else if (peds[pd].missionFoe && !peds[pd].dead) blip(peds[pd].pos.x, peds[pd].pos.z, '#ff3b3b', 2);
     }
     g.restore();
     // player arrow: fixed, always pointing up (the radar rotates beneath it)
@@ -1560,6 +1583,8 @@ GAME.hud = (function () {
     },
     missionObjective: function (obj) { el['mission-obj'].textContent = obj; },
     missionTimer: function (t, countdown) {
+      // (null: no clock on this one any more)
+      if (t === null) { el['mission-timer'].textContent = ''; return; }
       var s = Math.max(0, t);
       var mm = Math.floor(s / 60), ss = Math.floor(s % 60);
       el['mission-timer'].textContent = mm + ':' + (ss < 10 ? '0' : '') + ss;

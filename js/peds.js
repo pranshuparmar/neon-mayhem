@@ -203,6 +203,7 @@ GAME.peds = (function () {
       prevX2: NaN, prevZ2: NaN, stuckT: 0,
       stolenCar: null, hadDriver: undefined, yankT: 0, yankWarned: false, leftCar: 0,
       jobPed: false, iceServed: false, carrying: undefined,
+      missionArmed: false, missionFoe: false,   // a job's armed man (missions.js), and one to mark
       patrol: false, onCase: null, beatX: 0, beatZ: 0, beatT: 0, grabbing: false,
       aimSkill: NaN, lastShotT: 0,
       enterX: NaN, enterZ: NaN, enterT: 0   // a door they are making for (walkInto)
@@ -253,6 +254,7 @@ GAME.peds = (function () {
 
   function kill(ped, cause, byPlayer, attacker) {
     if (ped.dead) return;
+    if (byPlayer) ped.byPlayer = true;   // (who gets the credit: streetlife.js)
     ped.killedBy = attacker || null;
     ped.deathCause = cause || null;
     ped.dead = true;
@@ -267,7 +269,7 @@ GAME.peds = (function () {
     ped.mesh.position.y = GAME.city.groundY(ped.pos.x, ped.pos.z) + 0.35;
     if (byPlayer) {
       if (ped.isCop) GAME.police.reportCrime('kill_cop', ped.pos);
-      else GAME.police.reportCrime('kill_ped', ped.pos);
+      else if (!ped.outlaw) GAME.police.reportCrime('kill_ped', ped.pos);
       GAME.missions.notifyChaos(ped.isCop ? 400 : 150);
     }
     // drops
@@ -563,7 +565,8 @@ GAME.peds = (function () {
           // point of him being armed; he just cannot start one from across the
           // street, because he only ever draws on someone he is already in the
           // attack state against, which for the player means they provoked it.
-          var canShoot = ped.carrying && GAME.chaos.armedChance > 0 &&
+          // (a job's armed man — missions.js — carries whatever the city is set to)
+          var canShoot = ped.carrying && (GAME.chaos.armedChance > 0 || ped.missionArmed) &&
             (F.kind === 'ped' ? !!F.ped : F.kind === 'player') &&
             ad2 > 36 && ad2 < 30 * 30 &&
             Math.abs(ty - ped.pos.y) < 3 &&
@@ -877,7 +880,8 @@ GAME.peds = (function () {
               ped.diveZ = fz2 * (sp2 * 1.2 + 1) - fx2 * lat3 * 3;
               ped.foe = null; ped.aimPose = false;
             }
-            if (byPlayer) GAME.police.reportCrime('hit_ped', ped.pos);
+            if (byPlayer) ped.byPlayer = true;
+            if (byPlayer && !ped.outlaw) GAME.police.reportCrime('hit_ped', ped.pos);
             GAME.audio.crash(0.2, ped.pos.x, ped.pos.z);
             GAME.audio.yelp(ped.pos.x, ped.pos.z);
             break;
@@ -890,7 +894,7 @@ GAME.peds = (function () {
           ped.knockZ = Math.cos(car2.heading) * (4 + sp2 * 0.35);
           ped.knockY = 2.2 + kf * 3.2;
           ped.knockSpin = (Math.random() < 0.5 ? -1 : 1) * (4 + kf * 7);
-          if (byPlayer) GAME.police.reportCrime('hit_ped', ped.pos);
+          if (byPlayer && !ped.outlaw) GAME.police.reportCrime('hit_ped', ped.pos);
           GAME.audio.crash(0.4, ped.pos.x, ped.pos.z);
           break;
         }
@@ -1002,6 +1006,10 @@ GAME.peds = (function () {
   // ceiling is full, or the target is not something to fight.
   function startFight(ped, foe, secs) {
     if (ped.dead || ped.gone || ped.isCop || ped.jobPed || ped.state === 'inside') return false;
+    // Somebody running from the law — a thief with the takings, a man who
+    // owes — keeps running: a car's nudge or a hothead on the pavement does
+    // not stop them to have it out (streetlife.js, strangers.js)
+    if (ped.outlaw && ped.state === 'flee') return false;
     if (foe && foe.kind === 'ped' && (!foe.ped || foe.ped.dead || foe.ped.gone || foe.ped === ped)) return false;
     // An existing brawler is already counted; a fresh one has to fit. But
     // SWINGING BACK is not a new fight, it is the other half of one that is
@@ -1050,6 +1058,7 @@ GAME.peds = (function () {
   // and, if not, which way they run.
   function damage(ped, amt, byPlayer, attacker) {
     if (ped.dead) return;
+    if (byPlayer) ped.byPlayer = true;
     ped.hp -= amt;
     GAME.fx.spawn(ped.pos.x, 1.2, ped.pos.z, { count: 3, color: 0xc42848, spread: 1, vy: 1, life: 0.3, grav: -3 });
     if (ped.hp <= 0) { kill(ped, 'shot', byPlayer, attacker); return; }

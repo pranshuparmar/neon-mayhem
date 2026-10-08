@@ -17,7 +17,8 @@ GAME.shops = (function () {
   // which appends these nine in this exact order after 'ISLA ROSA' (slot 33)
   var SIGN_SLOT = {
     hardware0: 34, hardware1: 35, dress0: 36, barber0: 37,
-    showroom0: 38, casino0: 39, home_dock: 40, home_condo: 41, home_villa: 42
+    showroom0: 38, casino0: 39, home_dock: 40, home_condo: 41, home_villa: 42,
+    bank0: 45, cabs0: 46
   };
 
   // ---------- wardrobe ----------
@@ -623,12 +624,16 @@ GAME.shops = (function () {
   function buildLocations() {
     var stations = GAME.city.pois.stations || [];
     locations = [
-      // the strip shops live IN the western building row, facing the strip —
-      // reserved slots in city.js keep those footprints clear, so the shops
-      // replace nameless blocks instead of squatting on the beach footpath
-      { id: 'hardware0', kind: 'hardware', name: 'ROSA HARDWARE', tag: 'Tools for loud problems', at: clearSpot(337, -64), color: 0xffd24a },
-      { id: 'dress0', kind: 'dress', name: 'THREADS', tag: 'The changing room is that way', at: clearSpot(337, 92), color: 0xff8fd0 },
-      { id: 'barber0', kind: 'barber', name: 'CORTES CUTS', tag: 'Walk-ins welcome', at: clearSpot(337, -120), color: 0x8fd0ff },
+      // One to a district, each on a lot city.js keeps for it: the strip had
+      // all of them and the bank and a condo besides, five storefronts down
+      // one block of beach and nothing to go anywhere else for. Tools on the
+      // harbour road, clothes downtown, a neighbourhood barber up the hill.
+      { id: 'hardware0', kind: 'hardware', name: 'ROSA HARDWARE', tag: 'Tools for loud problems', at: clearSpot(-263, 220), color: 0xffd24a },
+      { id: 'dress0', kind: 'dress', name: 'THREADS', tag: 'The changing room is that way', at: clearSpot(-80, 37), color: 0xff8fd0 },
+      { id: 'barber0', kind: 'barber', name: 'CORTES CUTS', tag: 'Walk-ins welcome', at: clearSpot(80, 163), color: 0x8fd0ff },
+      // the bank, between the hardware store and the tailor: where the strip
+      // keeps its money (and where Lola would like to: heist.js)
+      { id: 'bank0', kind: 'bank', name: 'SAVINGS & LOAN', tag: 'Costa Rosa\'s money, safe since 1952', at: clearSpot(337, 4), color: 0xe8c86a },
       // the dealership sits on the southern arterial with room for a glass
       // hall and a forecourt — it used to squat at the airport's entry gate
       { id: 'showroom0', kind: 'showroom', name: 'GRAN ROSA MOTORS', tag: 'Special orders, delivered outside', at: clearSpot(90, 378), forecourt: { x: 64, z: 384 }, heading: Math.PI / 2, color: 0x8dffd8 },
@@ -665,6 +670,10 @@ GAME.shops = (function () {
     // gates, hard against the storefront on the same forecourt.
     if (GAME.isla) {
       locations.push({ id: 'hardware1', kind: 'hardware', name: 'VERDE HARDWARE', tag: 'Tools for loud problems', at: clearSpot(935, 100), isla: true, color: 0xffd24a });
+      // and the island's cab firm, a block up the Puerto Dorado grid from it,
+      // with its cabs in the yard beside the office: for sale, and the more
+      // fares you drive while it is yours the more it takes (business.js)
+      locations.push({ id: 'cabs0', kind: 'cabs', name: 'VERDE CABS', tag: 'Day or night, either island', at: clearSpot(922, 198), isla: true, color: 0xf0c020 });
     }
   }
 
@@ -687,6 +696,8 @@ GAME.shops = (function () {
       barber: { w: 14, d: 9, h: 7.5, wall: 0xbcd8f0 },
       showroom: { w: 34, d: 18, h: 9, wall: 0x3c4258 },
       casino: { w: 24, d: 16, h: 9, wall: 0xe8c86a },
+      bank: { w: 22, d: 14, h: 11, wall: 0xe6dcc4 },
+      cabs: { w: 26, d: 18, h: 7.5, wall: 0xf0e4c0 },
       safehouse: { w: 11, d: 9, h: 10, wall: 0xc8bca8 }
     };
     // Property is priced $6k / $18k / $45k, and the buildings have to tell
@@ -719,6 +730,87 @@ GAME.shops = (function () {
     // of it is stock, not traffic: nothing here can be driven, and what you
     // buy waits outside on the forecourt.
     // `a` runs along the glass from the door, `b` back from it.
+    // VERDE CABS is a garage, open to the street: no door and no fade into
+    // a room — you walk in (or drive in) under the header, past the cabs in
+    // their bays, to the dispatch desk at the back. Three bays, nose out: a
+    // cab either side for anybody to take, and the middle one kept for the
+    // Zebra Cab, which is there once the firm is yours (zebraBay).
+    function buildGarage(loc, placed, S, gy, fx, fz, px2) {
+      var dir = placed.dir, flip = dir.x !== 0;
+      var HW = S.w / 2, IN = HW - 0.5, BACK = S.d - 0.5;
+      var ROOF = gy + S.h, UNDER = ROOF - 0.6, HEAD = gy + 4.6;
+      var inward = Math.atan2(dir.x, dir.z), CREAM = 0xe8dcb8, YEL = 0xf0c020, INK = 0x14101c;
+      function X(a, b) { return fx + px2.x * a + dir.x * b; }
+      function Z(a, b) { return fz + px2.z * a + dir.z * b; }
+      function lbox(a, b, y0, wa, h, db, color, batch) {
+        (batch || trims).addBox(X(a, b), y0 + h / 2, Z(a, b), flip ? db : wa, h, flip ? wa : db, 0, color, batch ? 28 : 0);
+      }
+      function lquad(a, b, y, wa, db, color) {
+        trims.addGroundQuad(X(a, b), y, Z(a, b), flip ? db : wa, flip ? wa : db, 0, color);
+      }
+      function lsolid(a0, a1, b0, b1, top, tag, minY) {
+        return GAME.city.addSolid(X((a0 + a1) / 2, (b0 + b1) / 2), Z((a0 + a1) / 2, (b0 + b1) / 2),
+          flip ? b1 - b0 : a1 - a0, flip ? a1 - a0 : b1 - b0, top, tag || 'building', false, minY);
+      }
+      // ---- the shell: a back wall, two sides, the roof, and a header over
+      // the open front that a car (or a cab with its sign) passes under
+      lbox(0, S.d - 0.25, gy - 0.5, S.w, S.h + 0.5, 0.5, S.wall, walls);
+      lsolid(-HW, HW, BACK, S.d, ROOF);
+      [-1, 1].forEach(function (ws) {
+        lbox(ws * (HW - 0.25), S.d / 2, gy - 0.5, 0.5, S.h + 0.5, S.d, S.wall, walls);
+        lsolid(ws < 0 ? -HW : IN, ws < 0 ? -IN : HW, 0, S.d, ROOF);
+      });
+      lbox(0, 0.3, HEAD, S.w, ROOF - HEAD, 0.6, S.wall, walls);
+      lsolid(-HW, HW, 0, 0.6, ROOF, 'building', HEAD);
+      lbox(0, S.d / 2, UNDER, S.w, ROOF - UNDER, S.d, 0x3e4352);
+      lsolid(-HW, HW, 0.6, BACK, ROOF, 'building', UNDER);
+      lbox(0, S.d / 2, ROOF, S.w + 0.6, 0.34, S.d + 0.6, 0x241a36);
+      // the firm's checks along the bottom of the header, front and back
+      for (var ck = 0; ck < 26; ck++) {
+        var ca = -HW + 0.5 + ck;
+        [[-0.04, 0], [0.64, 1]].forEach(function (fb) {
+          lbox(ca, fb[0], HEAD + 0.02, 1.0, 0.42, 0.06, (ck + fb[1]) % 2 ? INK : YEL);
+          lbox(ca, fb[0], HEAD + 0.44, 1.0, 0.42, 0.06, (ck + fb[1]) % 2 ? YEL : INK);
+        });
+      }
+      // ---- inside: cream walls, strip lights, an oil-dark floor and the bays
+      lbox(0, BACK - 0.05, gy, IN * 2, UNDER - gy, 0.1, CREAM);
+      [-1, 1].forEach(function (ws) { lbox(ws * (IN - 0.05), BACK / 2 + 0.3, gy, 0.1, UNDER - gy, BACK - 0.6, CREAM); });
+      for (var bnd = 0; bnd < 24; bnd++) lbox(-IN + 0.5 + bnd * (IN * 2 - 1) / 23, BACK - 0.12, gy + 2.3, (IN * 2 - 1) / 23, 0.3, 0.04, bnd % 2 ? INK : YEL);
+      [-6, 0, 6].forEach(function (la) { lbox(la, S.d / 2, UNDER - 0.08, 0.5, 0.06, S.d - 3, 0xfff2dc); });
+      lquad(0, BACK / 2, gy + 0.05, IN * 2, BACK, 0x4a4a52);
+      [-12, -4, 4, 12].forEach(function (la) { lquad(la, 6.5, gy + 0.08, 0.16, 9, YEL); });
+      lquad(0, 1.0, gy + 0.08, IN * 2, 0.16, YEL);
+      // ---- the dispatch desk at the back: the radio, the fare board, the
+      // dispatcher, and the mat in front of it
+      var DESK = BACK - 2.0;
+      lbox(0, DESK, gy, 5, 1.05, 0.9, 0x3a3428);
+      lbox(0, DESK, gy + 1.05, 5.2, 0.06, 1.0, INK);
+      lbox(1.6, DESK, gy + 1.11, 0.7, 0.3, 0.4, 0x24242a);
+      lbox(1.6, DESK - 0.22, gy + 1.2, 0.36, 0.1, 0.02, 0x7dff6a);
+      lsolid(-2.6, 2.6, DESK - 0.5, DESK + 0.5, gy + 1.1, 'prop', gy - 0.5);
+      lbox(0, BACK - 0.13, gy + 1.6, 4.4, 1.4, 0.06, 0x1a2a22);
+      for (var fl = 0; fl < 5; fl++) lbox(-0.3 + (fl % 2) * 0.3, BACK - 0.17, gy + 2.95 - fl * 0.25, 3.0 - (fl % 3) * 0.6, 0.06, 0.02, YEL);
+      var disp = GAME.peds.buildPedMesh({ look: { shirt: YEL, pants: 0x2a2a34, skin: 0xc89070, hair: 'ponytail', hairCol: 0x2a1a10 } });
+      disp.position.set(X(0, DESK + 0.85), gy, Z(0, DESK + 0.85));
+      disp.rotation.y = inward + Math.PI;
+      scene.add(disp);
+      loc.at = { x: X(0, DESK - 1.5), z: Z(0, DESK - 1.5) };
+      // a bench and the coffee machine for the drivers between fares
+      lbox(-IN + 0.5, BACK - 4.5, gy, 0.7, 0.45, 3.0, 0x5a3a28);
+      lsolid(-IN, -IN + 0.9, BACK - 6, BACK - 3, gy + 0.5, 'prop', gy - 0.5);
+      lbox(IN - 0.5, BACK - 1.0, gy, 0.7, 1.8, 0.6, 0x2a2a30);
+      lbox(IN - 0.86, BACK - 1.0, gy + 1.15, 0.02, 0.3, 0.3, 0xff6a3a);
+      lsolid(IN - 0.9, IN, BACK - 1.4, BACK - 0.6, gy + 1.8, 'prop', gy - 0.5);
+      // ---- the bays (parked spots: vehicles.js keeps them stocked)
+      var nose = Math.atan2(-dir.x, -dir.z);
+      loc.bays = [-8, 0, 8].map(function (a) {
+        var sp = { x: X(a, 6.5), z: Z(a, 6.5), heading: nose, vtype: a === 0 ? 'zebra' : 'taxi', isla: !!loc.isla };
+        if (a === 0) sp.need = function () { return !!(GAME.business && GAME.business.owns(loc.id)); };
+        GAME.city.parkedSpots.push(sp);
+        return sp;
+      });
+    }
     function buildHall(loc, placed, S, gy, fx, fz, px2) {
       var dir = placed.dir, flip = dir.x !== 0;
       var IN = S.w / 2 - 1, BACK = S.d - 1;          // the inside faces of the walls
@@ -1087,16 +1179,18 @@ GAME.shops = (function () {
             placed.cz + px2.z * ss * (S.w / 2 - 0.5),
             dir.x !== 0 ? S.d : 1, S.h + 0.5, dir.x !== 0 ? 1 : S.d, 0, S.wall, 28);
         });
+      } else if (loc.kind === 'cabs') {
+        buildGarage(loc, placed, S, gy, fx, fz, px2);
       } else {
         walls.addBox(placed.cx, gy + S.h / 2 - 0.25, placed.cz, placed.sx, S.h + 0.5, placed.sz, 0, S.wall, 28);
         trims.addBox(placed.cx, gy + S.h + 0.22, placed.cz, placed.sx + 0.6, 0.34, placed.sz + 0.6, 0, 0x241a36, 0);
         GAME.city.addSolid(placed.cx, placed.cz, placed.sx, placed.sz, gy + S.h);
       }
-      if (loc.kind !== 'showroom') {
+      if (loc.kind !== 'showroom' && loc.kind !== 'cabs') {
         // door
         onFace(0.09, 0, gy + 1.5, doorW, 3.0, 0.18, 0x120c1e);
-        // awning in the shop's color
-        onFace(0.55, 0, gy + 3.15, S.w - 1.2, 0.16, 1.1, loc.color);
+        // awning in the shop's color (a bank has a cornice instead)
+        if (loc.kind !== 'bank') onFace(0.55, 0, gy + 3.15, S.w - 1.2, 0.16, 1.1, loc.color);
       }
       // ---- per-trade dressing ----
       if (loc.kind === 'dress') {
@@ -1159,6 +1253,45 @@ GAME.shops = (function () {
         scene.add(open);
         GAME.city.kinetics.push({ m: open, blink: 1.15, duty: 0.78 });
         pools.addGroundQuad(fx - dir.x * 2.2, gy + 0.1, fz - dir.z * 2.2, 12, 9, 0, 0x6a4210);
+      } else if (loc.kind === 'bank') {
+        // Money that wants to be trusted: a stone front with four columns
+        // standing proud of it, a cornice and a frieze over them, steps up
+        // to brass doors, a clock, and lamps either side that never go out
+        for (var cl = 0; cl < 4; cl++) {
+          var ca2 = (cl - 1.5) * ((S.w - 4) / 3);
+          if (Math.abs(ca2) < doorW / 2 + 0.6) ca2 += Math.sign(ca2) * 0.9;
+          onFace(0.75, ca2, gy + 4.1, 1.0, 7.4, 1.0, 0xf2ead6);           // the shaft
+          onFace(0.75, ca2, gy + 0.3, 1.4, 0.6, 1.4, 0xd8ccb0);           // its base
+          onFace(0.75, ca2, gy + 7.95, 1.4, 0.4, 1.4, 0xd8ccb0);          // its capital
+        }
+        onFace(0.6, 0, gy + 8.55, S.w - 0.4, 0.8, 1.4, 0xe8dcc0);         // the entablature
+        onFace(0.62, 0, gy + 8.55, S.w - 3, 0.3, 1.42, 0xb89a4a);         // a gilt frieze
+        onFace(0.2, 0, gy + 3.6, doorW + 1.4, 0.4, 0.3, 0xb89a4a);        // the door head
+        onFace(0.14, -doorW / 4, gy + 1.5, doorW / 2 - 0.1, 2.9, 0.16, 0x8a6a2a);   // brass doors
+        onFace(0.14, doorW / 4, gy + 1.5, doorW / 2 - 0.1, 2.9, 0.16, 0x8a6a2a);
+        onFace(0.24, 0, gy + 1.5, 0.08, 2.9, 0.1, 0x2a1e0e);
+        // the clock over the door, and the steps up to it
+        onFace(0.3, 0, gy + 5.4, 1.5, 1.5, 0.2, 0xf6f0e0);
+        onFace(0.36, 0, gy + 5.55, 0.08, 0.6, 0.08, 0x14101c);
+        onFace(0.36, 0.2, gy + 5.4, 0.45, 0.08, 0.08, 0x14101c);
+        for (var st2 = 0; st2 < 3; st2++) {
+          trims.addBox(fx - dir.x * (0.6 + st2 * 0.6), gy + 0.06 + (2 - st2) * 0.08, fz - dir.z * (0.6 + st2 * 0.6),
+            dir.x !== 0 ? 0.6 : S.w - 2, 0.12, dir.x !== 0 ? S.w - 2 : 0.6, 0, 0xd0c6b0, 0);
+        }
+        [-1, 1].forEach(function (ls) {
+          var lx = fx - dir.x * 2.6 + px2.x * ls * (doorW / 2 + 2.0), lz = fz - dir.z * 2.6 + px2.z * ls * (doorW / 2 + 2.0);
+          trims.addBox(lx, gy + 1.4, lz, 0.18, 2.8, 0.18, 0, 0x1e1a14, 0);
+          var lamp = neonBox(0.5, 0.6, 0.5, 0xfff0c0);
+          lamp.position.set(lx, gy + 3.05, lz);
+          scene.add(lamp);
+        });
+        pools.addGroundQuad(fx - dir.x * 2.6, gy + 0.11, fz - dir.z * 2.6, 13, 8, 0, 0x6a5a2a);
+      } else if (loc.kind === 'cabs') {
+        // TAXI lit on the roof, over the garage mouth
+        var taxiSign = neonBox(dir.x !== 0 ? 1.0 : 4.2, 1.1, dir.x !== 0 ? 4.2 : 1.0, 0xffd21a);
+        taxiSign.position.set(fx + dir.x * 1.5, gy + S.h + 1.2, fz + dir.z * 1.5);
+        scene.add(taxiSign);
+        GAME.city.kinetics.push({ m: taxiSign, pulse: 1.4, lo: 0.7, hi: 1.0 });
       } else if (loc.kind === 'casino') {
         // THE LUCKY GULL, palace edition: a second tier and a dark crown over
         // the gold hall, a deco sunburst stacked over the doors, the gull's
@@ -1414,6 +1547,11 @@ GAME.shops = (function () {
   function $(id) { return document.getElementById(id); }
   function note(t) { if (el.note) el.note.textContent = t || ''; }
   function items(loc) {
+    // (and, at a counter that can be bought, the business itself: business.js)
+    var biz = GAME.business ? GAME.business.rows(loc) : [];
+    return tradeItems(loc).concat(biz);
+  }
+  function tradeItems(loc) {
     switch (loc.kind) {
       case 'hardware': return hardwareItems();
       case 'dress': return dressItems();
@@ -1425,6 +1563,10 @@ GAME.shops = (function () {
       case 'bar': return barItems();
       case 'wardrobe': return wardrobeItems();
       case 'derby': return GAME.derby.items();
+      case 'cabs': return [{ id: 'cabs_yard', name: 'THE GARAGE', noPrice: true, off: true, chip: ' ',
+        ds: GAME.business && GAME.business.owns('cabs0')
+          ? 'The cabs in the bays are yours to take — and the Zebra Cab in the middle one. Every fare you drive puts more on the board.'
+          : 'The cabs in the bays are the firm\'s; take one out and start a shift. Own the firm and the Zebra Cab is in the middle bay, and every fare you drive puts more on its board.' }];
     }
     return [];
   }
@@ -1728,6 +1870,18 @@ GAME.shops = (function () {
     var P = GAME.player;
     if (P.cash < it.price) { note('You’re $' + (it.price - P.cash).toLocaleString() + ' short.'); GAME.audio.crash(0.12); GAME.haptics.deny(); return false; }
     GAME.addCash(-it.price);
+    // the place itself, or what is in its till (business.js)
+    if (id.indexOf('biz_') === 0) {
+      GAME.business.act(openShop, id);
+      // the cab firm's: the Zebra Cab is in its bay as you sign
+      if (id === 'biz_buy' && openShop && openShop.kind === 'cabs' && openShop.bays) {
+        GAME.vehicles.fillSpot(openShop.bays[1]);
+        GAME.hud.message('And the Zebra Cab in the middle bay is yours — take it out.', 4);
+      }
+      if (openShop) render();
+      GAME.audio.pickup();
+      return true;
+    }
     switch (openShop.kind) {
       case 'hardware': buyHardware(id); break;
       case 'dress': buyDress(id); break;
@@ -1947,7 +2101,8 @@ GAME.shops = (function () {
       if (!loc.blipColor) loc.blipColor = '#' + loc.color.toString(16).padStart(6, '0');
       var b = blipPool[n] || (blipPool[n] = {});
       b.x = loc.at.x; b.z = loc.at.z;
-      b.color = home ? '#5dff9e' : loc.blipColor;
+      // (a home of yours, or a business: green)
+      b.color = home || (GAME.business && GAME.business.owns(loc.id)) ? '#5dff9e' : loc.blipColor;
       b.label = loc.kind === 'safehouse' ? (home ? '⌂' : '$') : '$';
       b.home = home;
       blipList[n++] = b;
@@ -1985,6 +2140,8 @@ GAME.shops = (function () {
     get isOpen() { return !!openShop; },
     get current() { return openShop; },
     get selected() { return openShop ? items(openShop)[sel] : null; },
+    // headless: what a counter has on it (and, where it can be bought, the business)
+    items: function (loc) { return items(loc || openShop); },
     locations: function () { return locations; },
     // the Gran Rosa Motors hall: its bounds and stairs, what is on display,
     // and how far its doors stand open

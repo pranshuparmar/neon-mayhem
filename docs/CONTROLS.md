@@ -16,7 +16,7 @@ Every action, on all three: keyboard and mouse, a controller (standard layout �
 | Weapon | `1`–`5` | D-pad ↓ (next) | WPN (next, once you own two) |
 | Get in · jack a car · climb into a boat | `F` | Y | ENTER (in reach) |
 
-**Cars, bikes and boats**
+**Cars, bikes and boats** (the jet ski too)
 
 | Action | Keyboard & mouse | Controller | Touch |
 |---|---|---|---|
@@ -56,9 +56,9 @@ A plane rolls down the runway on throttle and climbs once it's fast; airborne, t
 | Map | `P` | BACK | tap the radar |
 | Photo | `C` | L3 | 📷 |
 | See a photo full size | `V` (the last one) · click it in PHOTOS | START → PHOTOS → A | tap the print · tap it in PHOTOS |
-| Call Lola | `L` | START → 📟 ASK LOLA | ❚❚ → 📟 ASK LOLA |
+| Call Lola | `L` | START → 📟 ASK LOLA | 📟 beside the camera (while her tips are on) · ❚❚ → 📟 ASK LOLA |
 | Retry a failed run | `Y` | D-pad ↑ | RETRY |
-| Abandon a mission · clock off | `X` twice · pause → ABANDON | START → ABANDON | ❚❚ → ABANDON (JOB → END for a shift) |
+| Abandon a mission, a favour or a part of the big score · clock off | `X` twice · pause → ABANDON | START → ABANDON | ❚❚ → ABANDON (JOB → END for a shift) |
 | Carry on after WASTED / BUSTED | `R` or `Enter` | A | tap |
 | Skip the glass lift's ride | `Space`, `F` or `Enter` | A or Y | tap |
 | Skip ahead in a race you bet on | `Space` or `Enter` | A | JUMP |

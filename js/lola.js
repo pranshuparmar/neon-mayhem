@@ -20,7 +20,7 @@ GAME.lola = (function () {
     stars3: 'Three stars: they know your face now, so paint won\'t fool them. Break their line of sight and lie low, or go and see the sergeant. A night at home helps too.',
     wasted: 'You\'ll live. The hospital keeps your cash but your guns are gone. Own a place and you wake up there instead, with everything.',
     busted: 'Busted. They take a fine and your hardware. Next time lose the stars before they box you in — a car stopped next to a cruiser is a car they can cuff you out of.',
-    boat: 'A boat! No cruiser can follow you out on the water. The bay has work of its own, too — look for the rings by the piers.',
+    boat: 'A boat! No cruiser can follow you out on the water — but the harbour patrol has launches of its own. The bay has work too: look for the rings by the piers.',
     heli: function () { return touch() ? 'Now you\'re flying. UP and DN take her up and down. The ceiling\'s around two hundred metres — and the law follows up here with a helicopter of its own.'
       : 'Now you\'re flying. ' + K('Space') + ' takes her up, ' + K('ShiftLeft') + ' down. The ceiling\'s around two hundred metres — and the law follows up here with a helicopter of its own.'; },
     plane: function () { return 'Runway\'s that way. Build some speed, pull up, and if it all goes wrong, ' + (touch() ? 'EXIT' : K('KeyF')) + ' gets you out with a parachute.'; },
@@ -32,6 +32,7 @@ GAME.lola = (function () {
     casino: 'The Lucky Gull. The wheel\'s honest, mostly, the horses run on the screens down the right, and the bar patches you up. Spend what you can afford to lose.',
     derby: 'Gull Downs! Pick a horse and a stake. The odds are on the board: a 4/1 shot pays four times your stake plus your money back, and the long shots pay big because they mostly lose. Then watch it run.',
     wardrobe: 'Everything you own hangs in here, and changing is free. Buy something at THREADS and it turns up in every place you own.',
+    business: 'A business of your own. The till fills through the day — three days of it, no more — and sits there till you come and empty it at the counter. Leave it too long and somebody with a mask will empty it for you.',
     photo: function () { return 'Nice shot. Your photos are kept in the album — ' + (touch() ? 'PAUSE' : 'Esc') + ', then PHOTOS — and you can download the ones you like.'; }
   };
 
@@ -153,6 +154,9 @@ GAME.lola = (function () {
     if (left) lines.push(left + ' of my jobs are still waiting for you, and the first win on each pays best.');
     if (ST && ST.found < ST.total) lines.push((ST.total - ST.found) + ' stunt jumps still pay their first-time money.');
     if (T && T.found < T.total) lines.push((T.total - T.found) + ' lost tapes are out there, each worth something.');
+    var B = GAME.business;
+    if (B && B.count < B.total) lines.push('Or let money come to you: buy a business — the barber, THREADS, a hardware store, the bar in the Lucky Gull, VERDE CABS over the channel — and its till fills every day.');
+    else if (B && B.count) lines.push('Your businesses are taking money for you — go and empty the tills.');
     lines.push('And there\'s the Lucky Gull, if you feel lucky.');
     return { say: lines.join(' ') };
   }
@@ -197,8 +201,16 @@ GAME.lola = (function () {
       Math.max(1, (M ? M.DEFS.length : 0) + (ST ? ST.total + (ST.islaTotal || 0) : 0) + (T ? T.total : 0)));
     return { say: 'Jobs on my list: ' + done + ' of ' + (M ? M.DEFS.length : 0) + '. Stunt jumps: ' + (ST ? ST.found + ' of ' + ST.total : '—') +
       (ST && ST.islaTotal && islaOpen() ? ', and ' + ST.islaFound + ' of ' + ST.islaTotal + ' on the island' : '') + '. Lost tapes: ' + (T ? T.found + ' of ' + T.total : '—') +
+      (GAME.strangers ? '. Strangers helped: ' + GAME.strangers.done + ' of ' + GAME.strangers.total : '') +
+      (GAME.heist && (GAME.heist.offered() || GAME.heist.step > 0) ? '. The big score: ' + Math.min(GAME.heist.step, 4) + ' of 4 parts' : '') +
+      (GAME.business && GAME.business.count ? '. Businesses: ' + GAME.business.count + ' of ' + GAME.business.total : '') +
       '. You\'re holding $' + P.cash.toLocaleString() + ', you own ' + homes + ' of 3 places' + (g ? ' and ' + g + ' in the garage' : '') +
       '. Call it ' + pct + '% of Costa Rosa. ' + (pct < 25 ? 'Plenty left.' : pct < 75 ? 'Getting somewhere.' : 'Nearly there, kid.') };
+  }
+  // the Savings & Loan: where it stands, and the next part to go and do
+  function bigScore() {
+    var H = GAME.heist, b = H.board();
+    return { say: b.say, list: b.next ? [{ label: '▶ ' + b.next, fn: function () { close(); H.begin(); } }] : [] };
   }
   function controlsHelp() {
     if (onPad()) return { say: 'Left stick moves, right stick looks. RT fires and LT aims on foot; in anything with an engine they are the throttle and the brake. ' +
@@ -217,6 +229,8 @@ GAME.lola = (function () {
       // her guided first day (guide.js), for anyone who turned it down or
       // walked off part way, until it has been seen through once
       GAME.guide && GAME.guide.canStart() ? { label: '🎓 SHOW ME THE ROPES', fn: function () { close(); GAME.guide.begin(); } } : null,
+      // her big score, once the bridges are open (heist.js)
+      GAME.heist && GAME.heist.offered() && !GAME.heist.busy ? { label: '💰 THE BIG SCORE', fn: function () { answer(bigScore()); } } : null,
       law = { label: w ? '🚨 I\'VE GOT THE LAW ON ME' : '🚨 HOW DO I LOSE THE LAW?', fn: function () { answer(theLaw()); } },
       { label: '💰 WHERE\'S THE MONEY?', fn: function () { answer(money()); } },
       { label: '📍 TAKE ME SOMEWHERE', fn: function () { answer(takeMe()); } },
@@ -235,6 +249,8 @@ GAME.lola = (function () {
   // -- the screen --
   function render() {
     var v = view;
+    // (somebody else asking — a stranger on the pavement: strangers.js)
+    $('lola-from').textContent = v.from || '📟 LOLA';
     $('lola-say').textContent = v.say;
     opts = (v.list || []).slice();
     (v.acts || []).forEach(function (a) { opts.push(a); });

@@ -351,6 +351,13 @@ GAME.enterCar = function (car) {
   // boarding is a same-level act everywhere it can be asked for — a rooftop
   // helicopter is not takeable from the pavement under it
   if (Math.abs(car.pos.y - P.pos.y) > 3) return false;
+  // A takedown's target, or the car that came for you, is locked while there
+  // is somebody in it: F at the window rattled a handle that opened, and the
+  // job was over before it started (missions.js has what happens instead).
+  if (car.locked && car.occupied === 'ai') {
+    if (GAME.missions.rattled) GAME.missions.rattled(car);
+    return false;
+  }
   if (car.occupied === 'ai') {
     // jack: the driver bails — and not all of them run. The short-tempered
     // turn on you and try to take their ride back with their fists.
@@ -467,7 +474,7 @@ function sitIn(car) {
     : 'Plane — W throttle up the runway, Space to climb once fast · A/D turn · F to bail out', 4.5);
   else if (car.spec.heli) GAME.hud.message(pad ? 'Heli — RT up · LT down · stick fly · Y to exit (bail with a chute if high up)'
     : 'Heli — Space up · Shift down · WASD fly · F to exit (bail with a chute if high up)', 4);
-  else if (car.type === 'taxi') GAME.hud.message('Cab — press ' + jobKey() + ' to start a fare', 3);
+  else if (car.spec.cab) GAME.hud.message((car.type === 'zebra' ? 'The Zebra Cab' : 'Cab') + ' — press ' + jobKey() + ' to start a fare', 3);
   else if (car.type === 'ambulance') GAME.hud.message('Ambulance — press ' + jobKey() + ' for a paramedic run', 3);
   else if (car.type === 'icecream') GAME.hud.message('Ice cream truck — press ' + jobKey() + ' to start a round', 3);
   else if (car.type === 'police') GAME.hud.message('Cruiser — G for lights and siren, J (or JOB) for vigilante work', 3.5);
@@ -1292,7 +1299,8 @@ function playerHorn(on, low) {
 function hornAndSiren(car, dt, T) {
   var press = GAME.keyPressed('KeyG') || T.horn;
   T.horn = false;
-  if (car.type === 'police') {
+  // a cruiser, or a harbour launch: the switch is the lights and siren
+  if (car.isPolice) {
     if (press) {
       car.sirenOn = !car.sirenOn;
       GAME.hud.message(car.sirenOn ? 'Lights and siren on — traffic will pull over.' : 'Lights and siren off.', 1.8);
@@ -1325,7 +1333,7 @@ function hornAndSiren(car, dt, T) {
 // the player's own cruiser with its siren going, if they are in one
 GAME.playerSiren = function () {
   var P = GAME.player;
-  return P.inCar && P.car && P.car.type === 'police' && P.car.sirenOn && !P.car.dead ? P.car : null;
+  return P.inCar && P.car && P.car.isPolice && P.car.sirenOn && !P.car.dead ? P.car : null;
 };
 
 function updateDriving(dt) {
@@ -1426,14 +1434,14 @@ var _helm = null;
 function updateHelm(car) {
   var P = GAME.player, m = P.mesh;
   if (!_helm) _helm = new THREE.Vector3();
-  _helm.set(0, 0.55, -0.15).applyEuler(car.mesh.rotation).add(car.pos);
+  // at a boat's console, or astride a jet ski's saddle (vehicles.js poseHelm)
+  var ski = !!car.spec.jetski;
+  var seat = ski ? HELM_SEAT.jetski : HELM_SEAT.boat;
+  _helm.set(0, seat.y, seat.z).applyEuler(car.mesh.rotation).add(car.pos);
   m.visible = true;
   m.position.copy(_helm);
   m.rotation.set(car.mesh.rotation.x, car.heading, car.mesh.rotation.z);
-  var j = m.userData.joints;
-  j.legL.rotation.set(0, 0, 0.08); j.legR.rotation.set(0, 0, -0.08);
-  j.armL.rotation.set(-0.95, 0, 0); j.armR.rotation.set(-0.95, 0, 0);
-  j.torso.rotation.x = 0.06;
+  poseHelm(m.userData.joints, ski);
 }
 
 // what coming down at `impact` m/s does to you
@@ -1468,6 +1476,7 @@ function updateBikeRider(dt) {
 
 var shakePrev = 0;
 var CAM_STANDOFF = 0.35;   // how far the camera keeps off a wall it is pulled in by
+var BRIDGE_GIRDER = 1.6;   // the box girder under a bridge deck (isla.js buildSpans)
 var camBoxes = [];   // the boxes between the camera and the player, refilled each frame
 function updateCamera(dt) {
   var P = GAME.player, inp = GAME.input, cam = GAME.cam;
@@ -1560,6 +1569,21 @@ function updateCamera(dt) {
   cx = fx + dirX * bestT; cz = fz + dirZ * bestT;
   cy = fy + (cy - fy) * (0.4 + 0.6 * bestT) + tight * 1.9;
 
+  // Under a bridge, stay under it. Nothing above kept the camera off a deck
+  // overhead (they are not walls), so a high look from a boat in the channel
+  // went up through the girder and the roadway and looked down at it from
+  // on top — a black screen for the length of the span. Wherever along the
+  // line back to the camera a deck passes over you, the line is lowered to
+  // run under its girder.
+  if (GAME.city.crossings.length) {
+    for (var k = 1; k <= 4; k++) {
+      var tk = k / 4, dk = GAME.city.crossingY(fx + (cx - fx) * tk, fz + (cz - fz) * tk);
+      // (a deck at your own level is the one you are driving on)
+      if (dk === null || dk - BRIDGE_GIRDER <= fy) continue;
+      cy = Math.min(cy, fy + (dk - BRIDGE_GIRDER - 0.4 - fy) / tk);
+    }
+  }
+
   if (GAME.cameraShake > 0.01) {
     // A rise means a fresh knock rather than the tail of the last one. The
     // shake is the game's existing "this happened to YOU" signal — every
@@ -1583,13 +1607,21 @@ function updateCamera(dt) {
   // indoors, under the ceiling rather than up through it
   var ceil = GAME.interiors && GAME.interiors.ceiling(cam.x, cam.z);
   if (ceil !== null && ceil !== undefined && cam.y > ceil) cam.y = ceil;
+  // ...and under a bridge, under its girder however the camera was easing in
+  // (the line above is lowered at once; the camera follows it a beat behind)
+  var deckC = GAME.city.crossings.length ? GAME.city.crossingY(cam.x, cam.z) : null;
+  if (deckC !== null && deckC - BRIDGE_GIRDER > fy) cam.y = Math.min(cam.y, deckC - BRIDGE_GIRDER - 0.4);
   // ...and upstairs, above the floor you are standing on, not under it
   var cfl = GAME.interiors && GAME.interiors.camFloor && GAME.interiors.camFloor(cam.x, cam.z);
   if (cfl !== null && cfl !== undefined && cam.y < cfl) cam.y = cfl;
   // (never below the drawn ground either: the beach slopes down to the
   // waterline underneath, but its sand is drawn level, and a camera held off
-  // the slope sat under it — swimming off the beach you could not see yourself)
-  GAME.cameraObj.position.set(cam.x, Math.max(cam.y, Math.max(0.2, GAME.city.groundY(cam.x, cam.z)) + 0.5), cam.z);
+  // the slope sat under it — swimming off the beach you could not see yourself.
+  // The ground where the camera is: asked with no height, a bridge deck
+  // overhead IS the ground, and the camera was lifted out from under the span
+  // onto the roadway. A deck counts only once the camera is up level with it
+  // — the height lookup's own allowance is a car's, for driving up onto one.)
+  GAME.cameraObj.position.set(cam.x, Math.max(cam.y, Math.max(0.2, GAME.city.groundY(cam.x, cam.z, cam.y - 2.4)) + 0.5), cam.z);
   var lookY = fy + (aiming ? Math.tan(-cam.pitch + 0.2) * 10 * 0 : 0);
   // risen over a wall at your back, look out ahead of you, not down at the crown
   var lookAhead = (aiming ? 4 : 0) + tight * 3;

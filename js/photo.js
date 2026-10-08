@@ -13,7 +13,7 @@
 GAME.photo = (function () {
   var MAX = 36, MAX_W = 1920, MAX_W_TOUCH = 1440;
   var album = [];              // { id, t, name, blob, url, thumb }
-  var pending = false, toastT = 0, albumOpen = false, nextId = 1;
+  var pending = false, toastT = 0, albumOpen = false, nextId = 1, lastSnapT = -1e9;
   var toastShot = null;        // the shot on the print that slid in
   var viewing = null, viewPaused = false;   // the one open at full size
   var el = {};
@@ -24,6 +24,7 @@ GAME.photo = (function () {
   function snap() {
     if (pending || !GAME.started || GAME.paused || GAME.mapOpen || GAME.shopOpen || GAME.shareOpen || GAME.lolaOpen) return false;
     pending = true;
+    lastSnapT = GAME.time;   // (when, for anybody waiting on a picture: strangers.js)
     if (GAME.audio.shutter) GAME.audio.shutter();
     if (GAME.haptics && GAME.haptics.uiTap) GAME.haptics.uiTap();
     // the mirror: a blink of black through the viewfinder
@@ -38,6 +39,7 @@ GAME.photo = (function () {
   // main.js calls this straight after drawing a frame, while the picture is
   // still in the WebGL canvas (it is cleared by the next one)
   function capture(canvas) {
+    if (grabs.length) pressPhoto(canvas);
     if (!pending) return;
     pending = false;
     var cap = GAME.isTouch ? MAX_W_TOUCH : MAX_W;
@@ -60,6 +62,35 @@ GAME.photo = (function () {
       if (GAME.lola) GAME.lola.first('photo');
       if (GAME.track) GAME.track('photo-taken');
     }, 'image/jpeg', 0.9);
+  }
+
+  // The papers' photographer (herald.js): the next frame drawn, small, and
+  // printed the way a front page prints a photograph — grey, hard, and
+  // screened into dots of ink on newsprint.
+  var grabs = [];
+  function grab(cb) { grabs.push(cb); }
+  var BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+  function pressPhoto(canvas) {
+    var list = grabs; grabs = [];
+    var w = 320, h = Math.max(2, Math.round(w * canvas.height / canvas.width));
+    var out = document.createElement('canvas');
+    out.width = w; out.height = h;
+    var g = out.getContext('2d');
+    try { g.drawImage(canvas, 0, 0, w, h); } catch (e) { return; }
+    var img = g.getImageData(0, 0, w, h), d = img.data;
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        var i = (y * w + x) * 4;
+        var l = (0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2]) / 255;
+        l = U.clamp((l - 0.5) * 1.35 + 0.56, 0, 1);
+        // four tones of ink, the screen deciding between them
+        var q = Math.floor(l * 3 + BAYER[(y & 3) * 4 + (x & 3)] / 16);
+        var t = U.clamp(q / 3, 0, 1);
+        d[i] = 26 + (233 - 26) * t; d[i + 1] = 24 + (226 - 24) * t; d[i + 2] = 20 + (207 - 20) * t;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    for (var k = 0; k < list.length; k++) { try { list[k](out); } catch (e) { } }
   }
 
   // A print from 1986: warm and a little faded, grain across it, the corners
@@ -353,13 +384,14 @@ GAME.photo = (function () {
   }
 
   return {
-    init: init, update: update, snap: snap, capture: capture, key: key,
+    init: init, update: update, snap: snap, capture: capture, grab: grab, key: key,
     open: openAlbum, close: closeAlbum, download: download,
     view: openView, closeView: closeView,
     get albumOpen() { return albumOpen; },
     get viewing() { return viewing; },
     get count() { return album.length; },
     get pending() { return pending; },
+    get lastSnap() { return lastSnapT; },
     // headless: the shots themselves; and the album dropped from memory and
     // read back from the browser's store, the way a fresh visit finds it
     album: function () { return album; },

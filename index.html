@@ -94,6 +94,20 @@
     border:1px solid rgba(255,79,163,.85); border-radius:6px; box-shadow:0 0 16px rgba(255,79,163,.4);
     opacity:0; transform:translateY(-8px); transition:opacity .35s, transform .35s; pointer-events:none; }
   #pager.on { opacity:1; transform:none; }
+  /* the morning paper's front page (herald.js): newsprint, a little askew */
+  #herald { position:fixed; left:50%; top:62px; z-index:8; width:min(460px,74vw); padding:10px 14px 12px;
+    background:#ece5d3; color:#1a1814; font-family:Georgia,"Times New Roman",serif; border:1px solid #b8ae98;
+    box-shadow:0 10px 30px rgba(0,0,0,.55); opacity:0; transform:translate(-50%,-30px) rotate(-1.2deg);
+    transition:opacity .45s, transform .45s; pointer-events:none; cursor:pointer; }
+  #herald.on { opacity:1; transform:translate(-50%,0) rotate(-1.2deg); pointer-events:auto; }
+  #herald .hd-mast { font-size:26px; font-weight:900; text-align:center; letter-spacing:1px; border-bottom:3px double #1a1814; padding-bottom:3px; font-family:"Old English Text MT",Georgia,serif; }
+  #herald .hd-date { font-size:10px; letter-spacing:1px; text-align:center; text-transform:uppercase; border-bottom:1px solid #1a1814; padding:3px 0; }
+  #herald .hd-head { font-size:24px; font-weight:900; line-height:1.05; text-align:center; margin:8px 0 7px; text-transform:uppercase; }
+  #herald .hd-body { display:flex; gap:10px; align-items:flex-start; }
+  #herald .hd-photo { flex:0 0 46%; border:1px solid #1a1814; line-height:0; }
+  #herald .hd-photo canvas { width:100%; height:auto; display:block; }
+  #herald .hd-sub { font-size:13px; line-height:1.35; text-align:justify; }
+  @media (max-height: 520px) { #herald { top:40px; width:min(420px,62vw); } #herald .hd-head { font-size:19px; } #herald .hd-mast { font-size:20px; } #herald .hd-sub { font-size:12px; } }
   #pager-from { font-size:12px; font-weight:800; letter-spacing:2px; color:#ff8fc8; }
   #pager-text { font-size:15px; color:#f4ecff; line-height:1.38; margin-top:3px; text-shadow:0 1px 2px #000; }
   #mission-title { font-size:18px; font-weight:800; font-style:italic; color:#ffe08a; text-shadow:0 0 10px rgba(255,190,60,.8); }
@@ -279,7 +293,7 @@
   body.cine #cine { pointer-events:auto; }
   body.cine #cine .cine-bar { height:11vh; }
   body.cine #cine-skip { opacity:.8; }
-  body.cine #hud, body.cine #controls-bar, body.cine #touch-layer, body.cine #fs-btn, body.cine #pager, body.cine #derby-tv {
+  body.cine #hud, body.cine #controls-bar, body.cine #touch-layer, body.cine #fs-btn, body.cine #pager, body.cine #herald, body.cine #derby-tv {
     opacity:0 !important; pointer-events:none !important; transition:opacity .4s; }
   /* your race at Gull Downs (derby.js), on a set of your own while it runs */
   #derby-tv { position:fixed; left:50%; top:calc(64px + env(safe-area-inset-top,0px)); transform:translateX(-50%); z-index:16; display:none;
@@ -446,6 +460,7 @@
   <div class="panel" id="msg-line"></div>
   <div class="panel" id="enter-hint"></div>
   <div class="panel" id="pager"><div id="pager-from"></div><div id="pager-text"></div></div>
+  <div id="herald"><div class="hd-mast">The Costa Rosa Herald</div><div class="hd-date"></div><div class="hd-head"></div><div class="hd-body"><div class="hd-photo"></div><div class="hd-sub"></div></div></div>
   <div class="panel" id="count-big"></div>
   <div class="panel" id="mission-hud">
     <div id="mission-title"></div>
@@ -650,6 +665,12 @@ window.addEventListener('load', function () {
 <script src="js/aircraft.js"></script>
 <script src="js/weather.js"></script>
 <script src="js/ambience.js"></script>
+<script src="js/sealife.js"></script>
+<script src="js/streetlife.js"></script>
+<script src="js/herald.js"></script>
+<script src="js/strangers.js"></script>
+<script src="js/heist.js"></script>
+<script src="js/business.js"></script>
 <script src="js/police.js"></script>
 <script src="js/missions.js"></script>
 <script src="js/tapes.js"></script>

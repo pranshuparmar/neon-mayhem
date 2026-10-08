@@ -134,12 +134,18 @@ GAME.ambience = (function () {
     return 'hard';
   }
 
+  // Soft soles, not tap shoes: about a third of the level they first went in
+  // at (-9 dB), and the click taken out of them — the hard-ground step was a
+  // bright band at 1.9 kHz, which is exactly what a heel on a stage sounds
+  // like. Now it is a dull scuff with a little weight under it, and a sprint
+  // only a touch firmer than a walk.
+  var STEP_LEVEL = 0.35;
   function step(kind, hard) {
-    var A = GAME.audio.amb, k = (0.85 + Math.random() * 0.3) * (hard ? 1.35 : 1), f = 0.9 + Math.random() * 0.2;
-    if (kind === 'sand') { A.noise(0.11, 900 * f, 0.13 * k, 'lowpass'); return; }
-    if (kind === 'grass') { A.noise(0.08, 2600 * f, 0.09 * k, 'bandpass'); A.noise(0.05, 500 * f, 0.07 * k, 'lowpass'); return; }
-    if (kind === 'wood') { A.noise(0.06, 650 * f, 0.15 * k, 'bandpass'); A.tone(190 * f, 0.08, 0.11 * k, 'sine', 120); return; }
-    A.noise(0.045, 1900 * f, 0.15 * k, 'bandpass'); A.tone(115 * f, 0.05, 0.09 * k, 'sine', 70);
+    var A = GAME.audio.amb, k = (0.85 + Math.random() * 0.3) * (hard ? 1.15 : 1) * STEP_LEVEL, f = 0.9 + Math.random() * 0.2;
+    if (kind === 'sand') { A.noise(0.1, 700 * f, 0.13 * k, 'lowpass'); return; }
+    if (kind === 'grass') { A.noise(0.07, 2000 * f, 0.08 * k, 'bandpass'); A.noise(0.05, 450 * f, 0.07 * k, 'lowpass'); return; }
+    if (kind === 'wood') { A.noise(0.06, 520 * f, 0.15 * k, 'bandpass'); A.tone(170 * f, 0.07, 0.1 * k, 'sine', 110); return; }
+    A.noise(0.045, 1000 * f, 0.15 * k, 'lowpass'); A.tone(95 * f, 0.045, 0.08 * k, 'sine', 65);
   }
   function stroke(strong) {
     var A = GAME.audio.amb, k = (0.85 + Math.random() * 0.3) * (strong ? 1.25 : 1);

@@ -190,11 +190,17 @@ GAME.missions = (function () {
     // stop being a problem before the clock runs out. They drive about until
     // they see you, then run — and some of them shoot back.
     //   car    what they drive        armor  hit points, as a multiple
-    //   flee   their speed once made  shoots whether they fire back
+    //   flee   their speed once made  shoots whether they fire back ('hurt':
+    //                                        once you have hurt the car)
     //   early  running from the off (they know you are coming)
-    { id: 'hit0', type: 'takedown', name: 'THE COLLECTOR', reward: 1200, time: 150, car: 'limo', armor: 2.15, flee: 19, shoots: true, early: false, start: { x: 250, z: 350 } },
-    { id: 'hit1', type: 'takedown', name: 'LOOSE ENDS', reward: 1000, time: 110, car: 'sports', armor: 1.15, flee: 24, shoots: false, early: true, start: { x: -50, z: -150 } },
-    { id: 'hit2', type: 'takedown', name: 'HIGH TIDE', reward: 2000, time: 160, car: 'pickup', armor: 2.85, flee: 21, shoots: true, early: false, isla: 'marina', start: null }
+    //   foot   how much of him there is once he is out of it
+    //   ledger he has something of Lola's on him, and somebody wants it back
+    // The car is locked while he is in it, and nobody hands it over: wreck it
+    // or knock it about till he bails — and then he comes at you with a gun.
+    // The job is done when HE is.
+    { id: 'hit0', type: 'takedown', name: 'THE COLLECTOR', reward: 1200, time: 150, car: 'limo', armor: 2.15, flee: 19, shoots: true, early: false, foot: 70, start: { x: 250, z: 350 } },
+    { id: 'hit1', type: 'takedown', name: 'LOOSE ENDS', reward: 1000, time: 110, car: 'sports', armor: 1.15, flee: 24, shoots: 'hurt', early: true, foot: 45, ledger: true, start: { x: -50, z: -150 } },
+    { id: 'hit2', type: 'takedown', name: 'HIGH TIDE', reward: 2000, time: 160, car: 'pickup', armor: 2.85, flee: 21, shoots: true, early: false, foot: 100, isla: 'marina', start: null }
   ];
 
   // Lola Reyes runs the strip, and she is who the rings on your map are
@@ -226,7 +232,7 @@ GAME.missions = (function () {
       'Uptown remembers now.'],
     hit0: ['Rico\'s collector drives a black limo round MY strip, picking up MY money. Put him out of business — he shoots back.',
       'No more collections. Rico will be furious, and furious men make mistakes.'],
-    hit1: ['A Salazar bookkeeper is skipping town with my ledger, in something fast. He already knows. Catch him.',
+    hit1: ['A Salazar bookkeeper is skipping town with my ledger, in something fast. He already knows you\'re coming, and he\'s scared enough to shoot. Stop him and bring me that book.',
       'The ledger\'s home. Rico has nothing left on the mainland — he\'s run for Isla Verde.'],
     race3: ['Isla Verde\'s rich kids race the Alta Verde switchbacks. Beat them to the top and the island hears your name.',
       'Top of the hill. Rico heard that one.'],
@@ -627,44 +633,99 @@ GAME.missions = (function () {
   // stole off the police was ever going to be allowed to do this job.
   var PERP_SPOT_R = 45, PERP_GIVE_UP = 0.35, PERP_TIME = 80;
   // ---------- takedown ----------
-  function spawnTarget(def) {
+  // a road spot `rMin`–`rMax` out from you, on the island asked for (or
+  // either), never on a bridge-end lane, in the water or on the airfield
+  function roadSpotOut(rMin, rMax, onIsla) {
     var f = GAME.focus(), C = GAME.city;
-    var onIsla = !!def.isla;
     for (var tries = 0; tries < 40; tries++) {
-      var a = Math.random() * Math.PI * 2, r = U.randRange(Math.random, 140, 230);
+      var a = Math.random() * Math.PI * 2, r = U.randRange(Math.random, rMin, rMax);
       var rp = C.nearestRoadPoint(f.x + Math.cos(a) * r, f.z + Math.sin(a) * r);
       if (C.isInWater(rp.x, rp.z) || C.inAirport(rp.x, rp.z) || rp.kind === 'local') continue;
-      // the target is on the job's own island, never across a bridge
-      if (!!(GAME.isla && GAME.isla.contains(rp.x, rp.z)) !== onIsla) continue;
-      if (U.dist2(rp.x, rp.z, f.x, f.z) < 110 * 110) continue;
-      var heading = rp.axis === 'net' ? rp.heading : rp.axis === 'z' ? 0 : Math.PI / 2;
-      var car = GAME.vehicles.spawnCar(def.car, rp.x, rp.z, heading,
+      // the job's own island, never across a bridge
+      if (onIsla !== undefined && !!(GAME.isla && GAME.isla.contains(rp.x, rp.z)) !== onIsla) continue;
+      if (U.dist2(rp.x, rp.z, f.x, f.z) < rMin * 0.8 * rMin * 0.8) continue;
+      rp.heading = rp.axis === 'net' ? rp.heading : rp.axis === 'z' ? 0 : Math.PI / 2;
+      return rp;
+    }
+    return null;
+  }
+  function spawnTarget(def) {
+    for (var tries = 0; tries < 6; tries++) {
+      var rp = roadSpotOut(140, 230, !!def.isla);
+      if (!rp) return false;
+      var car = GAME.vehicles.spawnCar(def.car, rp.x, rp.z, rp.heading,
         { occupied: 'ai', ai: { mode: 'traffic', desired: 11, laneX: 0, laneZ: 0 }, mission: true, color: 0x14141a });
       if (!car) continue;
       car.hp = car.spec.hp * def.armor;
       car.perp = true;
+      // he sits on his locks (player.js asks rattled() instead of handing it over)
+      car.locked = true;
       active.perp = car; active.fleeing = false; active.shootT = 2;
       active.maxHp = car.hp;
+      active.phase = 'car'; active.foot = null; active.rattles = 0;
       if (def.early) runFor(car, def);
       return true;
     }
     return false;
   }
+  // Made, and running: flat out, round anything in his way and through you
+  // if you stand in the road (vehicles.js reads `bolt`), and he does not
+  // wait about behind it.
   function runFor(car, def) {
     active.fleeing = true;
-    if (car.ai) car.ai.desired = def.flee;
+    if (car.ai) { car.ai.desired = def.flee; car.ai.reckless = true; car.ai.bolt = true; }
+  }
+  // F at his window. The handle does not give, and he does not sit there to
+  // find out what you meant by it: he backs off you and goes.
+  function rattled(car) {
+    if (!active || active.def.type !== 'takedown' || active.perp !== car) { GAME.hud.message('Locked.', 1.5); return; }
+    GAME.audio.horn(car.pos.x, car.pos.z, false);
+    if (!active.fleeing) runFor(car, active.def);
+    if (Math.abs(car.speed) < 3) { car.reverseT = 0.9; car.unstickT = 0; }
+    GAME.hud.message(active.rattles++ ? 'Locked. Wreck it — or hurt it till he gives it up.'
+      : 'Locked — he\'s not opening up for you. He\'s going!', 2.6);
+  }
+  // Out of the car, one way or another: on his feet with a pistol, and he
+  // would rather it was you than him. Whoever he was in the traffic, he is
+  // the job now.
+  function armUp(ped, hp) {
+    ped.temper = 1; ped.carrying = true; ped.missionArmed = true; ped.missionFoe = true;
+    ped.hp = Math.max(ped.hp, hp);
+    GAME.peds.startFight(ped, { kind: 'player' }, 30);
+  }
+  function onFoot(ped) {
+    var d = active.def;
+    active.phase = 'foot'; active.foot = ped;
+    armUp(ped, d.foot || 50);
+    active.timeLeft = Math.max(active.timeLeft, 45);
+    GAME.hud.message('He\'s out of it — and he\'s pulled a gun. Put him down.', 3);
+  }
+  // whoever climbed out of this car (vehicles.js remembers which, by serial)
+  function outOf(car) {
+    var peds = GAME.world.peds;
+    for (var i = 0; i < peds.length; i++) if (!peds[i].dead && !peds[i].gone && peds[i].leftCar === car.serial) return peds[i];
+    return null;
   }
   var TARGET_SPOT_R = 60, TARGET_SHOOT_R = 38, TARGET_GIVE_UP = 0.2, TARGET_LOST_R = 520;
+  var FOOT_LOST_R = 150, HURT_SHOOTS = 0.7;
   function updateTakedown(dt, P) {
     var d = active.def, p = active.perp;
     active.timeLeft -= dt;
+    if (active.phase === 'foot') { updateTargetOnFoot(dt, P); return; }
+    if (active.phase === 'ledger' || active.phase === 'deliver') { updateLedger(dt, P); return; }
     if (!p || p.gone) { finish(false, 'The target got away.'); return; }
-    // wrecked, or the driver out of it one way or another
-    if (p.dead || p.occupied !== 'ai') { finish(true); return; }
+    // wrecked, or the driver out of it one way or another: whoever got out
+    // is the job now, and one who went up with it was the end of it
+    if (p.dead || p.occupied !== 'ai') {
+      var who = outOf(p);
+      if (who) { onFoot(who); return; }
+      targetDown(p.pos.x, p.pos.z);
+      return;
+    }
     if (p.hp < active.maxHp * TARGET_GIVE_UP) {
       var out = GAME.vehicles.ejectDriver(p);
-      if (out) GAME.peds.startFlee(out, P.pos.x, P.pos.z, 10);
-      finish(true);
+      if (out) { onFoot(out); return; }
+      targetDown(p.pos.x, p.pos.z);
       return;
     }
     if (active.timeLeft <= 0) { finish(false, 'Out of time — the target got away.'); return; }
@@ -675,8 +736,14 @@ GAME.missions = (function () {
       runFor(p, d);
       GAME.hud.message('They have made you — they are running!', 2.5);
     }
-    // the ones who shoot back do it once they are running and you are close
-    if (d.shoots && active.fleeing && dist < TARGET_SHOOT_R && !GAME.godMode) {
+    // the ones who shoot back do it once they are running and you are close —
+    // and a frightened man once you have put a few dents in him
+    var shoots = d.shoots === true || (d.shoots === 'hurt' && p.hp < active.maxHp * HURT_SHOOTS);
+    if (shoots && d.shoots === 'hurt' && !active.armed) {
+      active.armed = true;
+      GAME.hud.message('He\'s shooting back out of the window!', 2.5);
+    }
+    if (shoots && active.fleeing && dist < TARGET_SHOOT_R && !GAME.godMode) {
       active.shootT -= dt;
       if (active.shootT <= 0) {
         active.shootT = U.randRange(Math.random, 1.1, 2.0);
@@ -688,6 +755,234 @@ GAME.missions = (function () {
     updateCp();
     GAME.hud.missionTimer(active.timeLeft, true);
     if (GAME.frame % 12 === 0) GAME.hud.missionObjective(objectiveText());
+  }
+  // He is on his feet and armed. Let him run from a car coming at him (he
+  // would), but whenever you are on foot or have slowed up near him he turns
+  // and has it out with you, for as long as it takes.
+  function updateTargetOnFoot(dt, P) {
+    var ped = active.foot, f = GAME.focus();
+    if (!ped || ped.gone) { finish(false, 'He got away on foot.'); return; }
+    if (ped.dead) { targetDown(ped.pos.x, ped.pos.z); return; }
+    if (active.timeLeft <= 0) { finish(false, 'Out of time — he got away.'); return; }
+    var dist = Math.sqrt(U.dist2(f.x, f.z, ped.pos.x, ped.pos.z));
+    if (dist > FOOT_LOST_R) { finish(false, 'You lost him.'); return; }
+    keepFighting(ped, dist, P);
+    active.routeT = (active.routeT || 0) - dt;
+    if (active.routeT <= 0) { active.routeT = 1; active.courierRoute = roadRoute(f.x, f.z, ped.pos.x, ped.pos.z); }
+    updateCp();
+    GAME.hud.missionTimer(active.timeLeft, true);
+    if (GAME.frame % 12 === 0) GAME.hud.missionObjective(objectiveText());
+  }
+  function keepFighting(ped, dist, P) {
+    var slow = !P.inCar || !P.car || Math.abs(P.car.speed) < 6;
+    if (ped.state === 'attack') ped.attackT = Math.max(ped.attackT, 6);
+    else if (slow && dist < 40 && P.state === 'alive') GAME.peds.startFight(ped, { kind: 'player' }, 30);
+  }
+  // The target is down. That is the job — unless he had something on him.
+  function targetDown(x, z) {
+    if (!active.def.ledger) { finish(true); return; }
+    active.phase = 'ledger';
+    active.foot = null;
+    dropLedger(x, z);
+    GAME.hud.message('He\'s down. The ledger\'s on him — take it.', 3);
+    updateCp();
+    GAME.hud.missionObjective(objectiveText());
+  }
+
+  // ---------- the ledger (LOOSE ENDS) ----------
+  // Lola's book, where he went down. Take it and Rico's people know inside a
+  // minute: a car of them comes for it, shooting, and it has to get to her
+  // lock-up on the harbour road whatever they do about it.
+  var LEDGER_REACH = 2.4, LEDGER_REACH_CAR = 4, DROP_R = 7, HEAVY_SHOOT_R = 32;
+  function dropLedger(x, z) {
+    var g = new THREE.Group();
+    var case_ = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.4, 0.14), new THREE.MeshLambertMaterial({ color: 0x5a3a22 }));
+    var handle = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.06, 0.06), new THREE.MeshLambertMaterial({ color: 0x1a1410 }));
+    handle.position.y = 0.24;
+    g.add(case_); g.add(handle);
+    var gy = GAME.city.groundY(x, z);
+    g.position.set(x, gy + 0.45, z);
+    GAME.scene.add(g);
+    active.ledger = { x: x, z: z, mesh: g, held: false };
+  }
+  function lockupDrop() {
+    var H = GAME.heist, sh = H && H.shed && H.shed();
+    var at = sh ? sh.door : H ? H.LOCKUP : { x: -140, z: 206 };
+    // out in the road in front of the door, where a car can pull up on it
+    var rp = GAME.city.nearestRoadPoint(at.x, at.z);
+    return { x: (at.x + rp.x) / 2, z: (at.z + rp.z) / 2 };
+  }
+  function updateLedger(dt, P) {
+    var L = active.ledger, f = GAME.focus();
+    if (active.timeLeft <= 0) { finish(false, L && L.held ? 'Out of time — the ledger never made it.' : 'Out of time — the ledger\'s gone.'); return; }
+    if (!L.held) {
+      L.mesh.rotation.y += dt * 2.2;
+      L.mesh.position.y = GAME.city.groundY(L.x, L.z) + 0.45 + Math.sin(GAME.time * 3) * 0.08;
+      var reach = P.inCar ? LEDGER_REACH_CAR : LEDGER_REACH;
+      if (U.dist2(f.x, f.z, L.x, L.z) < reach * reach && P.state === 'alive') takeLedger();
+    } else {
+      updateHeavies(dt, P);
+      var drop = active.drop;
+      if (U.dist2(f.x, f.z, drop.x, drop.z) < DROP_R * DROP_R && P.state === 'alive') { finish(true); return; }
+    }
+    active.routeT = (active.routeT || 0) - dt;
+    if (active.routeT <= 0) {
+      var cp = currentCp();
+      active.routeT = 1;
+      if (cp) active.courierRoute = roadRoute(f.x, f.z, cp[0], cp[1]);
+    }
+    updateCp();
+    GAME.hud.missionTimer(active.timeLeft, true);
+    if (GAME.frame % 12 === 0) GAME.hud.missionObjective(objectiveText());
+  }
+  function takeLedger() {
+    var L = active.ledger;
+    L.held = true;
+    GAME.scene.remove(L.mesh); disposeTree(L.mesh); L.mesh = null;
+    active.phase = 'deliver';
+    active.drop = lockupDrop();
+    active.timeLeft = Math.max(active.timeLeft, 90);
+    active.heavies = null; active.heavyT = 4;   // they are a few seconds behind the news
+    GAME.audio.pickup();
+    GAME.hud.message('Got the ledger. Get it to Lola\'s lock-up on the harbour road.', 3.5);
+    lola('That\'s my book. Rico\'s boys will know you have it before you\'re round the corner — bring it to the lock-up, and don\'t stop for anybody.', 7);
+    updateCp();
+    GAME.hud.missionObjective(objectiveText());
+  }
+  // Rico's men: two of them in a dark sedan, coming straight for you and
+  // shooting from the windows when they are close. Pull up on foot near them
+  // or smash the car up enough and they get out and do it on foot.
+  function spawnHeavies() {
+    var rp = roadSpotOut(110, 170, GAME.isla ? !!GAME.isla.contains(GAME.focus().x, GAME.focus().z) : undefined);
+    if (!rp) return false;
+    // by the roads while they are coming (bearing on you at every junction,
+    // round anything slow and through you if you are in the road), and
+    // straight at you once they can see you
+    // (pointed your way along it: traffic does not turn round in the road,
+    // and facing off they went a block the wrong way before they came)
+    var f = GAME.focus(), h = rp.heading;
+    if (Math.sin(h) * (f.x - rp.x) + Math.cos(h) * (f.z - rp.z) < 0) h += Math.PI;
+    var car = GAME.vehicles.spawnCar('sedan', rp.x, rp.z, h, { occupied: 'ai',
+      ai: { mode: 'traffic', desired: 22, laneX: 0, laneZ: 0, reckless: true, bolt: true, toward: { x: f.x, z: f.z } }, mission: true, color: 0x0e0e14 });
+    if (!car) return false;
+    car.hp = car.spec.hp * 1.6;
+    car.heavy = true; car.locked = true;
+    active.heavies = { car: car, maxHp: car.hp, shootT: 2, men: [], out: false, bestD: 1e9, stallT: 0 };
+    GAME.hud.message('Rico\'s men are on you — a black sedan. Don\'t let them take it back.', 3.2);
+    GAME.audio.yelp();
+    return true;
+  }
+  function heaviesOut(hv) {
+    hv.out = true;
+    var car = hv.car;
+    var first = car.occupied === 'ai' ? GAME.vehicles.ejectDriver(car) : outOf(car);
+    if (first) hv.men.push(first);
+    var side = car.heading - Math.PI / 2;
+    var second = GAME.peds.spawnPed(car.pos.x + Math.sin(side) * (car.spec.w / 2 + 1), car.pos.z + Math.cos(side) * (car.spec.w / 2 + 1));
+    if (second) hv.men.push(second);
+    hv.men.forEach(function (m) { armUp(m, 50); });
+    car.heavy = false; car.locked = false;
+    GAME.hud.message('They\'re out and coming for you!', 2.2);
+  }
+  function updateHeavies(dt, P) {
+    if (!active.heavies) {
+      if ((active.heavyT -= dt) <= 0 && !spawnHeavies()) active.heavyT = 2;
+      return;
+    }
+    var hv = active.heavies, car = hv.car, f = GAME.focus();
+    if (!hv.out) {
+      if (car.gone) { hv.out = true; return; }
+      var dist = Math.sqrt(U.dist2(f.x, f.z, car.pos.x, car.pos.z));
+      if (car.dead || car.occupied !== 'ai' || car.hp < hv.maxHp * 0.3 ||
+          (!P.inCar && dist < 16 && Math.abs(car.speed) < 4)) {
+        if (!car.dead || outOf(car)) heaviesOut(hv); else hv.out = true;
+        return;
+      }
+      // Getting nowhere — a jam, a wrong turn, a block the long way round —
+      // they find another way: out of your sight, a street or two closer.
+      if (dist < hv.bestD - 10) { hv.bestD = dist; hv.stallT = 0; }
+      else if ((hv.stallT += dt) > 8 && dist > 70) { hv.stallT = 0; if (comeRound(car)) hv.bestD = 1e9; }
+      var seen = dist < HEAVY_SHOOT_R && GAME.city.hash.segmentClear(car.pos.x, car.pos.z, f.x, f.z);
+      var ai = car.ai;
+      ai.toward.x = f.x; ai.toward.z = f.z;
+      if (seen && dist < 38 && ai.mode === 'traffic') ai.mode = 'chase';
+      else if (ai.mode === 'chase' && (dist > 48 || (!seen && dist > 20))) { ai.mode = 'traffic'; ai.node = null; }
+      if (ai.mode === 'chase') heavyDrive(car, dt, P, dist);
+      if (dist < HEAVY_SHOOT_R && !GAME.godMode && P.state === 'alive' &&
+          GAME.city.hash.segmentClear(car.pos.x, car.pos.z, f.x, f.z)) {
+        hv.shootT -= dt;
+        if (hv.shootT <= 0) {
+          hv.shootT = U.randRange(Math.random, 0.7, 1.4);   // two of them at the windows
+          GAME.combat.npcShoot(car.pos.x, car.pos.y + 1.3, car.pos.z, 0.22, 6, car);
+          GAME.fx.spawn(car.pos.x, car.pos.y + 1.3, car.pos.z, { count: 2, color: 0xffe0a0, spread: 0.6, life: 0.12 });
+        }
+      }
+      return;
+    }
+    for (var i = 0; i < hv.men.length; i++) {
+      var m = hv.men[i];
+      if (m.dead || m.gone) continue;
+      keepFighting(m, Math.sqrt(U.dist2(f.x, f.z, m.pos.x, m.pos.z)), P);
+    }
+  }
+  // somewhere you cannot see from where you are: behind the camera, or with
+  // a building in the way
+  var lookDir = new THREE.Vector3();
+  function outOfSight(x, z) {
+    var cam = GAME.cameraObj, f = GAME.focus();
+    cam.getWorldDirection(lookDir);
+    if ((x - cam.position.x) * lookDir.x + (z - cam.position.z) * lookDir.z < 0) return true;
+    return !GAME.city.hash.segmentClear(f.x, f.z, x, z);
+  }
+  function comeRound(car) {
+    var f = GAME.focus(), onIsla = GAME.isla ? !!GAME.isla.contains(f.x, f.z) : undefined;
+    for (var tries = 0; tries < 12; tries++) {
+      var rp = roadSpotOut(60, 100, onIsla);
+      if (!rp || !outOfSight(rp.x, rp.z)) continue;
+      car.pos.set(rp.x, GAME.city.groundY(rp.x, rp.z), rp.z);
+      car.heading = Math.atan2(f.x - rp.x, f.z - rp.z);
+      car.speed = 0; car.lat = 0; car.vx = car.vz = 0;
+      car.mesh.rotation.y = car.heading;
+      car.ai.mode = 'traffic'; car.ai.node = null; car.ai.prev = null; car.ai.passT = 0;
+      return true;
+    }
+    return false;
+  }
+  // Straight at you, the way a cruiser comes (police.js) but with no gap kept:
+  // they would like to be in your door.
+  function heavyDrive(car, dt, P, dist) {
+    var f = GAME.focus();
+    var lead = P.inCar && P.car ? 0.35 : 0;
+    var tx = f.x + (lead ? (P.car.vx || 0) * lead : 0), tz = f.z + (lead ? (P.car.vz || 0) * lead : 0);
+    var dh = U.wrapPI(Math.atan2(tx - car.pos.x, tz - car.pos.z) - car.heading);
+    var c = car.controls;
+    if (Math.abs(car.speed) < 1.2 && dist > 6) car.unstickT += dt; else car.unstickT = 0;
+    if (car.unstickT > 1.0) { car.reverseT = 1.0; car.unstickT = 0; }
+    if (car.reverseT > 0) { car.reverseT -= dt; c.throttle = -1; c.steer = dh > 0 ? -1 : 1; c.handbrake = false; return; }
+    car.aiSteer = U.lerp(car.aiSteer || 0, U.clamp(dh * 1.6, -1, 1), Math.min(1, dt * 6));
+    var th = 1;
+    if (!P.inCar && dist < 16) th = car.speed > 2 ? -0.8 : 0;      // pulling up by you, to get out
+    else if (Math.abs(dh) > 0.8 && car.speed > 14) th = -0.3;       // can't take a corner flat out
+    var probe = 4 + Math.max(0, car.speed) * 0.7;
+    if (GAME.city.isInWater(car.pos.x + Math.sin(car.heading) * probe, car.pos.z + Math.cos(car.heading) * probe)) th = car.speed > 0.5 ? -1 : 0;
+    c.throttle = th; c.steer = car.aiSteer; c.handbrake = false;
+  }
+  // put everything the job had out there back the way the street has it
+  function releaseTakedown() {
+    var p = active.perp;
+    if (p && !p.gone) { p.locked = false; if (p.ai) { p.ai.bolt = false; p.ai.reckless = false; } }
+    var unarm = function (m) { if (m && !m.dead) { m.missionArmed = false; m.missionFoe = false; } };
+    unarm(active.foot);
+    var hv = active.heavies;
+    if (hv) {
+      hv.men.forEach(unarm);
+      var hc = hv.car;
+      if (hc && !hc.gone) {
+        hc.heavy = false; hc.locked = false; hc.mission = false;
+        if (hc.occupied === 'ai' && !hc.dead) hc.ai = { mode: 'traffic', desired: 11, laneX: 0, laneZ: 0 };
+      }
+    }
+    if (active.ledger && active.ledger.mesh) { GAME.scene.remove(active.ledger.mesh); disposeTree(active.ledger.mesh); active.ledger.mesh = null; }
   }
 
   function startVigilante() {
@@ -1224,6 +1519,8 @@ GAME.missions = (function () {
     var per = (kind === 'ambulance' ? 180 : 130) + active.level * 15;
     var fare = per * n;
     GAME.addCash(fare); active.earned += fare;
+    // (a cab firm of yours counts them: business.js)
+    if (kind !== 'ambulance' && GAME.business) GAME.business.fare(n);
     GAME.audio.sting('win');
     GAME.haptics.win();
     // Patients walk in through the hospital doors and are gone; they used to
@@ -1510,6 +1807,14 @@ GAME.missions = (function () {
       return 'Lv ' + active.level + '  ·  ' + (active.fleeing ? 'Stop the suspect' : 'Find the suspect') +
         '  ·  ' + dm + ' m  ·  ' + active.jobCount + ' down';
     }
+    if (d.type === 'takedown' && active.phase && active.phase !== 'car') {
+      var pt = currentCp(), pf = GAME.focus();
+      var pm = pt ? Math.round(Math.sqrt(U.dist2(pf.x, pf.z, pt[0], pt[1]))) : 0;
+      if (active.phase === 'foot') return 'Put him down  ·  ' + pm + ' m';
+      if (active.phase === 'ledger') return 'Take the ledger off him  ·  ' + pm + ' m';
+      var hv = active.heavies, chased = hv && !hv.out ? !hv.car.dead : hv && hv.men.some(function (m) { return !m.dead && !m.gone; });
+      return 'The ledger to Lola\'s lock-up  ·  ' + pm + ' m' + (chased ? '  ·  Rico\'s men on you' : '');
+    }
     if (d.type === 'takedown') {
       var tg = active.perp, tf = GAME.focus();
       if (!tg) return 'Find the target';
@@ -1538,6 +1843,9 @@ GAME.missions = (function () {
       return t ? [t.x, t.z] : null;
     }
     if (d.type === 'icecream') return null;   // no destination: the chimes ARE the job
+    if (d.type === 'takedown' && active.phase === 'foot') return active.foot && !active.foot.gone ? [active.foot.pos.x, active.foot.pos.z] : null;
+    if (d.type === 'takedown' && active.phase === 'ledger') return [active.ledger.x, active.ledger.z];
+    if (d.type === 'takedown' && active.phase === 'deliver') return [active.drop.x, active.drop.z];
     if (d.type === 'vigilante' || d.type === 'takedown') return active.perp && !active.perp.gone ? [active.perp.pos.x, active.perp.pos.z] : null;
     return null;
   }
@@ -1569,6 +1877,8 @@ GAME.missions = (function () {
       var prev = bests[bestKey(d)];
       var isBest = d.type === 'rampage' ? (!prev || value > prev) : (!prev || value < prev);
       if (isBest) bests[bestKey(d)] = value;
+      // Rico's last ride makes the papers (herald.js — the once-only story)
+      if (d.id === 'hit2' && prev === undefined && GAME.herald) GAME.herald.front('rico');
       GAME.addCash(reward);
       // finishing enough work is what opens the channel
       var opened = GAME.isla && GAME.isla.checkUnlock();
@@ -1704,6 +2014,7 @@ GAME.missions = (function () {
       // a vigilante suspect still out there goes back to being ordinary
       // traffic, however the shift ended
       if (active.perp && !active.perp.gone) { active.perp.perp = false; active.perp.mission = false; }
+      if (active.def.type === 'takedown') releaseTakedown();
       if (active.targets) {
         for (var ti = 0; ti < active.targets.length; ti++) {
           var tp = active.targets[ti].ped;
@@ -1746,7 +2057,7 @@ GAME.missions = (function () {
   var ABANDON_CONFIRM = 3, ABANDONED = 'abandoned', abandonAsk = 0;
   function abandon() {
     abandonAsk = 0;
-    if (!active) return false;
+    if (!active) return (GAME.strangers && GAME.strangers.abandon()) || (GAME.heist ? GAME.heist.abandon() : false);
     GAME.track('mission-abandoned');
     if (active.def.job) endJob('clocked off');
     else finish(false, ABANDONED);
@@ -1772,7 +2083,8 @@ GAME.missions = (function () {
     var best = playerType, bestSp = mine.maxSpeed;
     for (var k in T) {
       var s = T[k];
-      if (s.heli || s.plane || k === 'police') continue;
+      // (nor the law's own launch, nor a jet ski: a regatta is raced in boats)
+      if (s.heli || s.plane || k === 'police' || s.police || s.jetski) continue;
       if (!!s.bike !== !!mine.bike || !!s.boat !== !!mine.boat) continue;
       if (s.maxSpeed > bestSp && s.maxSpeed <= mine.maxSpeed * RIVAL_CAP) { best = k; bestSp = s.maxSpeed; }
     }
@@ -1914,10 +2226,14 @@ GAME.missions = (function () {
 
     if (!active) {
       if (P.state !== 'alive') return;
+      // a stranger's favour under way is finished (or walked away from)
+      // before anything else starts (strangers.js)
+      // (and so is a part of Lola's big score: heist.js)
+      if ((GAME.strangers && GAME.strangers.busy) || (GAME.heist && GAME.heist.busy)) { GAME.jobAvailable = null; GAME.retryAvailable = false; GAME.hud.setPoiHint(''); return; }
       // taxi / ambulance jobs start from within the vehicle
       var jobKind = null;
       if (P.inCar && P.car) {
-        if (P.car.type === 'taxi') jobKind = 'taxifare';
+        if (P.car.spec.cab) jobKind = 'taxifare';     // a fleet cab or the Zebra Cab
         else if (P.car.type === 'ambulance') jobKind = 'ambulance';
         else if (P.car.type === 'icecream') jobKind = 'icecream';
         else if (P.car.type === 'police') jobKind = 'vigilante';
@@ -2278,6 +2594,8 @@ GAME.missions = (function () {
     return true;
   }
 
+  // what the paint shop has in: loud enough to read as a different car
+  var RESPRAY_COATS = [0xd83040, 0x2a6ad8, 0xf0f0f4, 0x1c1c26, 0xe8c040, 0x3aa860, 0xff7a2a, 0x8a4ad8, 0x38e8ff, 0xff4fa3];
   function checkRespray() {
     var P = GAME.player;
     if (!P.inCar || !P.car || resprayCooldown > 0 || P.state !== 'alive') return;
@@ -2317,6 +2635,12 @@ GAME.missions = (function () {
       car.mesh.userData.bodyMesh.material = sharedVertexLambert();
       if (oldPaint && oldPaint.dispose && !(oldPaint.userData && oldPaint.userData.shared)) oldPaint.dispose();
     }
+    // and it is a respray: it comes out another colour. (It used to come out
+    // the colour it went in — the paint was baked in at the factory.)
+    var coats = RESPRAY_COATS.filter(function (c) { return c !== car.color; });
+    GAME.vehicles.repaint(car, coats[Math.floor(Math.random() * coats.length)]);
+    car.resprayT = GAME.time;
+    if (GAME.heist && GAME.heist.resprayed) GAME.heist.resprayed(car);
     GAME.fx.flash(car.pos.x, 1.5, car.pos.z, 4);
     GAME.audio.pickup();
     GAME.hud.message(w >= 3
@@ -2344,16 +2668,20 @@ GAME.missions = (function () {
     abandon: abandon,
     notifyChaos: notifyChaos,
     chimed: chimed,
+    rattled: rattled,
     objectiveText: objectiveText,
     getRoutePoints: function () {
-      if (!active || active.state === 'fade' || active.state === 'countdown') return null;
+      // (a stranger's favour has its own way there: strangers.js)
+      if (!active) return (GAME.strangers && GAME.strangers.route()) || (GAME.heist ? GAME.heist.route() : null);
+      if (active.state === 'fade' || active.state === 'countdown') return null;
       if (active.def.type === 'race') return active.raceRoute || active.def.cps.slice(active.cpIndex);
       if (active.courierRoute) return active.courierRoute; // courier / taxi / ambulance
       return null;
     },
     // the immediate target marker (checkpoint / stop / pickup / drop-off)
     getObjectivePoint: function () {
-      if (!active || active.state === 'fade' || active.state === 'countdown') return null;
+      if (!active) return (GAME.strangers && GAME.strangers.target()) || (GAME.heist ? GAME.heist.target() : null);
+      if (active.state === 'fade' || active.state === 'countdown') return null;
       return currentCp();
     },
     getBlips: function () {

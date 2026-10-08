@@ -394,12 +394,25 @@ GAME.city = (function () {
     { minX: -195, maxX: -105, minZ: -138, maxZ: -85 }, // police station
     { minX: 155, maxX: 215, minZ: -110, maxZ: -50 },   // respray garages
     { minX: -26, maxX: 26, minZ: -226, maxZ: -174 },   // the helipad tower
-    // shop slots in the strip's western building row: the storefronts build
-    // into these gaps and read as part of the street, not beach clutter
-    { minX: 318, maxX: 346, minZ: -78, maxZ: -50 },    // hardware
-    { minX: 318, maxX: 346, minZ: 78, maxZ: 106 },     // tailor
-    { minX: 318, maxX: 346, minZ: -134, maxZ: -106 },  // barber
+    // Three plots in the strip's western row once held the hardware store,
+    // the tailor and the barber, and with the bank and the condo that was
+    // five storefronts down one block of beach. They have moved out into
+    // the city (below). The plots stay reserved, with ordinary strip
+    // buildings put up in them on a stream of their own (stripInfill): let
+    // go, the blocks around them would be drawn from a different point in
+    // the city's one random stream, and every building after them — signs,
+    // palms, all the way down the map — would land somewhere else.
+    { minX: 318, maxX: 346, minZ: -78, maxZ: -50, infill: true },
+    { minX: 318, maxX: 346, minZ: 78, maxZ: 106, infill: true },
+    { minX: 318, maxX: 346, minZ: -134, maxZ: -106, infill: true },
     { minX: 318, maxX: 346, minZ: 194, maxZ: 222 },    // strip condo
+    // ...and where they went, one to a district (shops.js). Each is a lot the
+    // blocks had left empty, so reserving it moves nothing else.
+    { minX: -285, maxX: -255, minZ: 204, maxZ: 236 },  // ROSA HARDWARE, Puerto Viejo's harbour road
+    { minX: -96, maxX: -64, minZ: 15, maxZ: 45 },      // THREADS, Centro Alto
+    { minX: 64, maxX: 96, minZ: 155, maxZ: 185 },      // CORTES CUTS, Las Colinas
+    { minX: 316, maxX: 346, minZ: -16, maxZ: 24 },     // the Savings & Loan (shops.js)
+    { minX: -146, maxX: -124, minZ: 194, maxZ: 218 },  // Lola's lock-up by the harbour (heist.js)
     { minX: -448, maxX: -408, minZ: -200, maxZ: -160 },
     { minX: 252, maxX: 292, minZ: -440, maxZ: -400 }
   ];
@@ -650,7 +663,11 @@ GAME.city = (function () {
     'ROSA HARDWARE', 'VERDE HARDWARE', 'THREADS', 'CORTES CUTS',
     'GRAN ROSA MOTORS', 'THE LUCKY GULL', 'DOCKSIDE FLAT', 'STRIP CONDO', 'MARINA VILLA',
     // civic lettering for the landmark dressing (43, 44)
-    'EMERGENCY', 'DEPARTURES'];
+    'EMERGENCY', 'DEPARTURES',
+    // the bank on the strip (45: shops.js SIGN_SLOT)
+    'SAVINGS & LOAN',
+    // the cab firm on Isla Verde (46)
+    'VERDE CABS'];
   var SIGN_COLORS = ['#ff4fa3', '#38e8ff', '#ffe14f', '#7dff6a', '#ff8a3d', '#c86bff', '#ff5d5d', '#59ffc8'];
   function signAtlas() {
     var cv = document.createElement('canvas');
@@ -778,11 +795,18 @@ GAME.city = (function () {
       var zEnd = hitsAirport ? AP.fz0 - 1 : 480;
       asphalt.addGroundQuad(R[i], 0.03, (-480 + zEnd) / 2, ROAD_HALF * 2, zEnd + 480, 0, 0x100e16);
       asphalt.addGroundQuad(-72, 0.03, R[i], 856, ROAD_HALF * 2, 0, 0x100e16);
-      // dashed center lines
+      // Dashed centre lines — stopping short of every crossing, the way the
+      // paint does. They used to run on straight through each junction, and
+      // the two roads' lines crossed in a plus in the middle of every box.
       for (var d = -470; d < 470; d += 12) {
-        if (d + 5 < zEnd) batches.marks.addGroundQuad(R[i], 0.06, d + 3, 0.25, 4, 0, 0xd8c46a);
-        if (d > -500 && d < 350) batches.marks.addGroundQuad(d + 3, 0.06, R[i], 4, 0.25, 0, 0xd8c46a);
+        if (d + 5 < zEnd && !atCrossing(d + 1, d + 5)) { batches.marks.addGroundQuad(R[i], 0.06, d + 3, 0.25, 4, 0, 0xd8c46a); markStats.dashes.push([R[i], d + 1, R[i], d + 5]); }
+        if (d > -500 && d < 350 && !atCrossing(d + 1, d + 5)) { batches.marks.addGroundQuad(d + 3, 0.06, R[i], 4, 0.25, 0, 0xd8c46a); markStats.dashes.push([d + 1, R[i], d + 5, R[i]]); }
       }
+    }
+    // and at every crossing, what the lines stop for
+    for (var ji = 0; ji < R.length; ji++) {
+      var jEnd = R[ji] + ROAD_HALF > AP.fx0 && R[ji] - ROAD_HALF < AP.fx1 ? AP.fz0 - 1 : 480;
+      for (var jj = 0; jj < R.length; jj++) junctionMarks(batches.marks, R[ji], R[jj], jEnd);
     }
     // sidewalks around each block
     for (var bi = 0; bi < R.length - 1; bi++) for (var bj = 0; bj < R.length - 1; bj++) {
@@ -799,6 +823,7 @@ GAME.city = (function () {
     // hundred identical boxes, drawn as copies of one (see BoxSet)
     postSet = new BoxSet();
     buildBlocks(batches, atlas);
+    stripInfill(batches);
     buildPOIs(batches, atlas);
     buildBeach(scene, batches);
     buildSky(scene);
@@ -981,6 +1006,44 @@ GAME.city = (function () {
     batch.addWallQuad(x, y, z, w, h, rotY, tint === undefined ? 0xffffff : tint, s.u0, s.v0, s.u1, s.v1);
   }
 
+  // Crossings of the street grid. The centre dashes stop JUNCTION_CLEAR
+  // short of the crossing road's centre; between there and the box, each arm
+  // of the junction where the road really goes on (not onto the beach past
+  // the boulevard, nor the airfield fence) gets a zebra crossing from kerb
+  // to kerb, in line with the pavements, and a stop line across the lane
+  // that comes in — the lane the traffic actually drives (vehicles.js
+  // setLane: travelling along (mx, mz), it keeps to (mz, -mx) * 3.1).
+  var JUNCTION_CLEAR = 12.5, ZEBRA_IN = 7, ZEBRA_OUT = 10, STOP_AT = 11;
+  var PAINT = 0xbcbcb4;   // a weathered white: the marks draw unlit, and full white glared at night
+  // what was painted, for a test to hold the grid to (each dash end to end,
+  // and each stop line's centre)
+  var markStats = city.roadMarks = { dashes: [], stops: [], zebraArms: 0 };
+  function atCrossing(a, b) {
+    for (var k = 0; k < R.length; k++) if (b > R[k] - JUNCTION_CLEAR && a < R[k] + JUNCTION_CLEAR) return true;
+    return false;
+  }
+  function junctionMarks(b, x, z, zEnd) {
+    var zl = (ZEBRA_IN + ZEBRA_OUT) / 2, zw = ZEBRA_OUT - ZEBRA_IN, k, sg;
+    // the north-south road's two arms
+    for (sg = -1; sg <= 1; sg += 2) {
+      var zArm = z + sg * ZEBRA_OUT;
+      if (zArm < -480 || zArm > zEnd) continue;
+      for (k = -4; k <= 4; k++) b.addGroundQuad(x + k * 1.2, 0.06, z + sg * zl, 0.55, zw, 0, PAINT);
+      // coming in from this side means travelling -sg along z: that lane is x - sg * 3.1
+      b.addGroundQuad(x - sg * 3, 0.06, z + sg * STOP_AT, 5.6, 0.45, 0, PAINT);
+      markStats.stops.push({ x: x - sg * 3, z: z + sg * STOP_AT, dir: [0, -sg] }); markStats.zebraArms++;
+    }
+    // and the east-west road's
+    for (sg = -1; sg <= 1; sg += 2) {
+      var xArm = x + sg * ZEBRA_OUT;
+      if (xArm < -500 || xArm > 356) continue;
+      for (k = -4; k <= 4; k++) b.addGroundQuad(x + sg * zl, 0.06, z + k * 1.2, zw, 0.55, 0, PAINT);
+      // coming in from this side means travelling -sg along x: that lane is z + sg * 3.1
+      b.addGroundQuad(x + sg * STOP_AT, 0.06, z + sg * 3, 0.45, 5.6, 0, PAINT);
+      markStats.stops.push({ x: x + sg * STOP_AT, z: z + sg * 3, dir: [-sg, 0] }); markStats.zebraArms++;
+    }
+  }
+
   function buildBlocks(batches, atlas) {
     for (var bi = 0; bi < R.length - 1; bi++) for (var bj = 0; bj < R.length - 1; bj++) {
       var cx = (R[bi] + R[bi + 1]) / 2, cz = (R[bj] + R[bj + 1]) / 2;
@@ -1140,6 +1203,30 @@ GAME.city = (function () {
         addSign(batches.signs, slot, sx, h * 0.75, z, face > 0 ? Math.PI / 2 : -Math.PI / 2, Math.min(20, dep * 0.9), 4.5);
         city.palmSpots.push({ x: x + U.randRange(rng, -w, w) * 0.7, z: z + dep / 2 + 3, s: U.randRange(rng, 0.8, 1.15) });
       }
+    }
+  }
+
+  // The strip plots the shops left (see `reserved`): a strip building in
+  // each, dressed as its neighbours are, from its own random stream so the
+  // rest of the city is drawn exactly as it was.
+  function stripInfill(batches) {
+    var irng = mulberry32(47011);
+    // (the strip's pastels and four more of the same family, each clear of
+    // every one of the eight by the facade rule's margin: a plot in the
+    // middle of the row has all eight within a street of it)
+    var pastel = [0xe3cbbc, 0xe6d6b8, 0xd9d3c6, 0xe2c6cc, 0xc5d6cd, 0xe0b89c, 0xd6b4ca, 0xb4c8dc,
+                  0xe8d8ec, 0xc4e8f0, 0xe4f8c4, 0xacc8ac];
+    for (var i = 0; i < reserved.length; i++) {
+      var r = reserved[i];
+      if (!r.infill) continue;
+      var w = U.randRange(irng, 20, 25), dep = U.randRange(irng, 20, 25), h = U.randRange(irng, 14, 28);
+      var x = r.minX + 2 + w / 2, z = (r.minZ + r.maxZ) / 2;
+      var col = facadeShade('strip', pastel, x, z, irng);
+      batches.blkStrip.addBox(x, h / 2, z, w, h, dep, 0, col, 24, true);
+      addSolid(x, z, w, dep, h);
+      batches.blkStrip.addBox(x, h + 1.5, z, w * 0.6, 3, dep * 0.6, 0, col, 0);
+      batches.blkStrip.addBox(x, h + 3.7, z, w * 0.3, 1.6, dep * 0.3, 0, 0xfff0f8, 0);
+      addSign(batches.signs, U.randInt(irng, 0, 17), x + w / 2 + 0.3, h * 0.75, z, Math.PI / 2, Math.min(20, dep * 0.9), 4.5);
     }
   }
 
@@ -2024,8 +2111,11 @@ GAME.city = (function () {
       dummy.rotation.set(0, 0, 0); dummy.scale.setScalar(1);
       dummy.updateMatrix();
       hydMesh.setMatrixAt(hh, dummy.matrix);
-      addSolid(hyd[hh].x, hyd[hh].z, 0.6, 0.6, 1, 'prop', true).knock =
-        { kind: 'flat', mesh: hydMesh, extra: null, i: hh, x: 0, z: 0, rot: 0, down: false, t: 0, m0: null };
+      // Bolted to the water main: a car stops on a hydrant the way it does on
+      // a bollard. It used to be knocked down like a lamp post — and with
+      // nothing to lay over, "down" was simply gone: drive at one and it
+      // vanished from under the bonnet.
+      addSolid(hyd[hh].x, hyd[hh].z, 0.6, 0.6, 1, 'prop', true).hydrant = true;
     }
     scene.add(hydMesh);
 
@@ -2912,8 +3002,14 @@ GAME.city = (function () {
     // a speedboat moored off each of the east piers, bow out to sea, close
     // enough alongside to step down into from the planks
     city.moorings.push({ x: 485, z: 238.5 }, { x: 445, z: -168.5 });
+    // and a jet ski at the northern pier's other side — on your left, walking
+    // out along it — for anybody who wants the bay at a gallop
+    city.moorings.push({ x: 445, z: -191.5, vtype: 'jetski' });
+    // (these three only: Isla Verde lays out its own moorings first, with
+    // their own spots — a second spot each here put two boats on every one)
     city.moorings.forEach(function (mo) {
-      city.parkedSpots.push({ x: mo.x, z: mo.z, y: -0.35, heading: Math.PI / 2, vtype: 'boat' });
+      if (mo.isla) return;
+      city.parkedSpots.push({ x: mo.x, z: mo.z, y: -0.35, heading: Math.PI / 2, vtype: mo.vtype || 'boat' });
     });
 
     // starter pickups within sight of the spawn point (356, 40)
@@ -2927,8 +3023,9 @@ GAME.city = (function () {
   }
 
   // ---------- things a car can knock down ----------
-  // Lamp posts, hydrants and boardwalk benches. A half-metre post stopped a
-  // car at 29 m/s as dead as a building would; now something moving takes it
+  // Lamp posts and boardwalk benches (hydrants stand: see above). A
+  // half-metre post stopped a car at 29 m/s as dead as a building would; now
+  // something moving takes it
   // down for a little of its pace and a dent (vehicles.js collideStatic), and
   // it is put back up once nobody has been near it for a while.
   var knocked = [], knockCheckT = 0, KNOCK_BACK_AFTER = 45, KNOCK_BACK_R = 120;

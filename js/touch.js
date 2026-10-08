@@ -9,6 +9,7 @@ GAME.touch = (function () {
   var lastCarRef = null;   // the vehicle (or null) the flags were last cleared for
   var wasPlaying = false;  // were the on-foot/in-car controls applying last frame
   var lefty = false;       // stick under the right thumb, buttons under the left
+  var lolaShown = null;    // whether her button is in the top row right now
 
   // Start on touch only where a finger is the main way in. Being ABLE to
   // take a touch is not that: a touchscreen laptop, a Surface, a Chromebook
@@ -79,7 +80,7 @@ GAME.touch = (function () {
   // What switching to touch changes outside the layer, so switching back can
   // put it back as it was.
   var saved = null;
-  var TOUCH_BUDGET = { pixelRatioCap: 1.4, bubbleRadius: 110, maxTraffic: 8, maxPeds: 12, maxParked: 9 };
+  var TOUCH_BUDGET = { pixelRatioCap: 1.4, bubbleRadius: 110, maxTraffic: 8, maxPeds: 12, maxParked: 9, maxBoats: 3 };
   function applySettings(vals, fogFar) {
     var S = GAME.settings;
     for (var k in vals) S[k] = vals[k];
@@ -119,6 +120,7 @@ GAME.touch = (function () {
     // hud.refreshFsBtn) — last in the row, so hiding it leaves no gap, and
     // never on top of the camera, which it covered when the two shared a slot
     moveCorner(document.getElementById('minimap-wrap'), { bottom: 'auto', left: '10px', top: '10px', width: '132px', height: '132px', pointerEvents: 'auto' });
+    lolaShown = null;   // (and her button decides the fullscreen slot again)
     moveCorner(document.getElementById('fs-btn'), { bottom: 'auto', right: 'auto', left: 'calc(260px + env(safe-area-inset-left, 0px))',
       top: 'calc(12px + env(safe-area-inset-top, 0px))', width: '46px', height: '46px' });
     if (enabled) {
@@ -219,6 +221,12 @@ GAME.touch = (function () {
     photoB.style.right = ''; photoB.style.bottom = '';
     photoB.style.left = '206px'; photoB.style.top = '12px';
     photoB.style.fontSize = '18px';
+    // and Lola beside that, while her tips are on: the pause screen was the
+    // only way a touchscreen could reach her (lola.js)
+    btns.lola = mkBtn('📟', 0, 0, 46, { press: function () { if (GAME.lola) GAME.lola.open(); } });
+    btns.lola.style.right = ''; btns.lola.style.bottom = '';
+    btns.lola.style.left = '260px'; btns.lola.style.top = '12px';
+    btns.lola.style.fontSize = '18px';
 
     // virtual stick
     stickZone.addEventListener('touchstart', function (e) {
@@ -368,10 +376,22 @@ GAME.touch = (function () {
     }
   }
 
+  // Lola's button sits in the top row while her tips are on; fullscreen keeps
+  // the last slot of the row either way, so it steps along when she is there
+  function stepLola() {
+    var on = !!(GAME.lola && GAME.lola.tips);
+    if (on === lolaShown) return;
+    lolaShown = on;
+    show(btns.lola, on);
+    var fsb = document.getElementById('fs-btn');
+    if (fsb) fsb.style.left = 'calc(' + (on ? 314 : 260) + 'px + env(safe-area-inset-left, 0px))';
+  }
+
   function update() {
     if (!enabled || !touchMode || !GAME.started) return;
     var T = GAME.input.touch;
     var P = GAME.player;
+    stepLola();
     // hide all controls behind menus / death screens
     var playing = !GAME.paused && !GAME.mapOpen && P.state === 'alive' && !P.parachuting;
     setDisplay(layer, 'block');
@@ -428,7 +448,9 @@ GAME.touch = (function () {
       setText(btns.gas, heli ? '▲ UP' : plane ? 'THR+' : 'GAS');
       setText(btns.brake, heli ? '▼ DN' : plane ? 'THR−' : 'BRAKE');
       show(btns.handbrake, !air);
-      show(btns.radio, !air);
+      // the radio plays in the air too (, and . work there on a keyboard):
+      // its slot is free in every aircraft, so the button stays
+      show(btns.radio, true);
       show(btns.horn, !air);
       var hasSMG = !air && P.weapons.smg && P.weapons.smg.have && P.weapons.smg.ammo > 0;
       show(btns.driveby, hasSMG);

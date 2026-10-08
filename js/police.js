@@ -1,6 +1,7 @@
 GAME.police = (function () {
   var pushOut = { x: 0, z: 0 };   // resolveCircle's answer for walking officers, reused
-  var heat = 0, lastSeen = 0, pinTimer = 0, grabTimer = 0, lastCrime = -99;
+  var heat = 0, lastSeen = 0, pinTimer = 0, grabTimer = 0, haulTimer = 0, lastCrime = -99;
+  var peak = 0;   // the most stars this run of heat has reached (the papers notice a big one slipped)
   var crimeCooldown = {};
   var roadblockT = 0, spikes = [];
   // What each star COSTS, in offences. The gaps used to be 50/70/90/110/120
@@ -24,6 +25,8 @@ GAME.police = (function () {
   // undoing the ladder faster than the gaps built it.
   var ESCALATION = 0.10;
   var CAR_CAP = [0, 1, 2, 3, 4, 6];
+  // and on the water, the harbour patrol's launches (see spawnLaunch)
+  var BOAT_CAP = [0, 1, 1, 2, 3, 3];
   // how long one star lasts after the offence (see the cooling in update):
   // ONE_STAR_HOLD whatever happens, ONE_STAR_CHASE while a unit has had you
   // in sight in the last ONE_STAR_SEEN seconds
@@ -120,6 +123,8 @@ GAME.police = (function () {
 
   function setWanted(n) {
     n = U.clamp(Math.floor(n), 0, 5);
+    // (cleared by hand — busted, dead, bribed, slept off — is not an escape)
+    if (n === 0) peak = 0;
     heat = n === 0 ? 0 : THRESH[n] + 25;
     // treat it like a fresh offence so the level doesn't bleed away instantly
     if (n > 0) { lastCrime = GAME.time; sighted(); lastSeen = 0; }
@@ -139,7 +144,9 @@ GAME.police = (function () {
       var c = cars[i];
       var pursuing = c.ai && (c.ai.mode === 'chase' || c.ai.mode === 'roadblock');
       if (c.isPolice && !c.dead && pursuing && c !== GAME.player.car) {
-        c.ai = { mode: 'traffic', desired: 11, laneX: 0, laneZ: 0 };
+        // (a launch has no lanes to rejoin: it potters off about the bay)
+        if (c.spec.boat) GAME.sealife.adopt(c);
+        else c.ai = { mode: 'traffic', desired: 11, laneX: 0, laneZ: 0 };
       }
     }
     var peds = GAME.world.peds;
@@ -155,7 +162,7 @@ GAME.police = (function () {
       }
     }
     clearSpikes();
-    pinTimer = 0;
+    pinTimer = 0; haulTimer = 0;
   }
 
   function clearSpikes() {
@@ -306,15 +313,16 @@ GAME.police = (function () {
   // climbs after you, so at two stars and up the helicopter comes early.
   var PERCH_H = 4;
   // out on the water — swimming, or in a boat — where no cruiser or officer
-  // on foot can follow either
+  // on foot can follow (the harbour patrol's launches can: see spawnLaunch)
   function atSea() {
     var P = GAME.player;
     if (P.state !== 'alive') return false;
     return !!(P.swimming || (P.inCar && P.car && P.car.spec.boat));
   }
+  // (out at sea is not perched any more: the launches go out after you, so
+  // the helicopter keeps to its own stars there)
   function perched() {
     var P = GAME.player;
-    if (atSea()) return true;
     if (P.inCar || P.parachuting || P.state !== 'alive') return false;
     return P.pos.y - GAME.city.groundY(P.pos.x, P.pos.z, P.pos.y) > PERCH_H;
   }
@@ -372,8 +380,7 @@ GAME.police = (function () {
     var want = s >= 5 ? 2 : s >= 4 ? 1 : up ? 1 : 0;
     if (up && airUnits.length === 0 && GAME.time - perchToldAt > 60) {
       perchToldAt = GAME.time;
-      GAME.hud.message(atSea() ? 'Nobody can follow you out on the water — air support is on its way.'
-        : 'Nobody can climb up after you — air support is on its way.', 3);
+      GAME.hud.message('Nobody can climb up after you — air support is on its way.', 3);
     }
     // compacted in place: this runs every tick, birds or no birds
     var keep = 0;
@@ -470,6 +477,31 @@ GAME.police = (function () {
       var car = GAME.vehicles.spawnCar('police', rp.x, rp.z, heading, { occupied: 'ai', ai: { mode: 'chase' } });
       car.copsOut = 0;
       car.shootT = U.randRange(Math.random, 0.6, 1.6);
+      return car;
+    }
+    return null;
+  }
+
+  // The harbour patrol. Out on the water no cruiser can follow, so a launch
+  // does: put out on open water a little way off, out of sight, the way a
+  // cruiser turns a corner — and like a cruiser, sent to where they think
+  // you are rather than where you are.
+  function spawnLaunch() {
+    var px = huntX(), pz = huntZ(), C = GAME.city;
+    for (var tries = 0; tries < 8; tries++) {
+      var a = Math.random() * Math.PI * 2, r = U.randRange(Math.random, 110, 170);
+      var x = px + Math.cos(a) * r, z = pz + Math.sin(a) * r;
+      if (!GAME.sealife.roomy(x, z, 6)) continue;
+      if (GAME.inPlainView(x, C.seaY(x, z), z)) continue;
+      var clear = true;
+      for (var c = 0; c < GAME.world.cars.length; c++) {
+        if (U.dist2(GAME.world.cars[c].pos.x, GAME.world.cars[c].pos.z, x, z) < 20 * 20) { clear = false; break; }
+      }
+      if (!clear) continue;
+      var car = GAME.vehicles.spawnCar('policeboat', x, z, Math.atan2(px - x, pz - z), { occupied: 'ai', ai: { mode: 'chase' } });
+      car.pos.y = C.seaY(x, z);
+      car.copsOut = 0;
+      car.shootT = U.randRange(Math.random, 0.8, 1.8);
       return car;
     }
     return null;
@@ -759,6 +791,32 @@ GAME.police = (function () {
     setControls(car.controls, throttle, steer, false);
   }
 
+  // A launch after you: straight for you while somebody has eyes on you, the
+  // search while nobody has, and — once you have gone ashore — the nearest
+  // water to wherever that is, to sit off the beach and wait. It keeps a
+  // gap the way a cruiser does, and closes right in on a boat that has
+  // stopped or a swimmer, to take them.
+  function launchControls(car, dt, s) {
+    var P = GAME.player, SL = GAME.sealife;
+    var tx = huntX(), tz = huntZ(), ashore = !atSea();
+    if (ashore) {
+      car.shoreT = (car.shoreT || 0) - dt;
+      if (car.shoreT <= 0 || !car.shoreAt) { car.shoreT = 1; car.shoreAt = SL.seaward(tx, tz, car.pos.x, car.pos.z); }
+      tx = car.shoreAt.x; tz = car.shoreAt.z;
+    } else if (spotted && P.inCar && P.car) { tx += (P.car.vx || 0) * 0.4; tz += (P.car.vz || 0) * 0.4; }
+    var d = Math.sqrt(U.dist2(car.pos.x, car.pos.z, tx, tz));
+    var still = !ashore && spotted && (P.swimming || (P.inCar && P.car && Math.abs(P.car.speed) < 3));
+    car.helmIgnore = P.inCar ? P.car : null;
+    var gap = ashore ? 6 : still ? (P.swimming ? 3 : 4.5) : s === 1 ? 18 : 7;
+    // Run on speed, not throttle: a hull has no brakes, and any throttle at
+    // all holds it at a fair lick, so a launch told only "ease off" near you
+    // circled at fifteen knots and never came alongside. It wants your
+    // speed, and a little more for every metre still between you.
+    var yours = P.inCar && P.car ? Math.sqrt(P.car.vx * P.car.vx + P.car.vz * P.car.vz) : 0;
+    var vd = ashore ? Math.max(0, d - gap) * 0.5 : yours + U.clamp((d - gap) * 0.6, -6, 40);
+    SL.helm(car, tx, tz, U.clamp((vd - car.speed) * 0.35, -1, 1), dt);
+  }
+
   function updateCopCar(car, dt, s) {
     var P = GAME.player;
     if (car.ai.mode === 'roadblock') {
@@ -770,7 +828,8 @@ GAME.police = (function () {
       }
       return;
     }
-    chaseControls(car, dt, s);
+    if (car.spec.boat) launchControls(car, dt, s);
+    else chaseControls(car, dt, s);
 
     // occupant fires from the car at 2 stars and up
     if (s >= 2 && !GAME.godMode) {
@@ -790,9 +849,10 @@ GAME.police = (function () {
 
     // officers bail out to engage on foot: when the player is out of their
     // car, or when the player's car is cornered (stopped)
+    // (not off a launch: the crew stays aboard and hauls you in — see update)
     var onFoot = !P.inCar;
     var cornered = P.inCar && P.car && Math.abs(P.car.speed) < 3.5;
-    if ((onFoot || cornered) && car.copsOut < 2 && Math.abs(car.speed) < 8) {
+    if (!car.spec.boat && (onFoot || cornered) && car.copsOut < 2 && Math.abs(car.speed) < 8) {
       var f = GAME.focus();
       var d = U.dist(car.pos.x, car.pos.z, f.x, f.z);
       if (d < (onFoot ? 26 : 18)) {
@@ -949,6 +1009,7 @@ GAME.police = (function () {
     // the player's own pursuit outranks anything on the beat: an officer
     // already dealing with a scuffle drops it and comes for you
     releasePatrolToPursuit();
+    if (s > peak) peak = s;
 
     // high in an aircraft you're out of reach: ground units stop being sent and
     // stop counting as eyes on you, so the heat can cool
@@ -962,10 +1023,17 @@ GAME.police = (function () {
 
     // pursuit cars
     var active = copCars();
-    var chasing = chaseBuf, cn = 0;
-    for (var ch = 0; ch < active.length; ch++) if (active[ch].ai.mode === 'chase') chasing[cn++] = active[ch];
+    var chasing = chaseBuf, cn = 0, launches = 0;
+    for (var ch = 0; ch < active.length; ch++) {
+      if (active[ch].ai.mode !== 'chase') continue;
+      chasing[cn++] = active[ch];
+      if (active[ch].spec.boat) launches++;
+    }
     chasing.length = cn;
-    if (!flownOff && chasing.length < CAR_CAP[s] && GAME.frame % 45 === 0) spawnCruiser();
+    // the launches are counted on their own: a cruiser is no use at sea and
+    // a launch none ashore, so neither takes the other's place
+    if (!flownOff && cn - launches < CAR_CAP[s] && GAME.frame % 45 === 0) spawnCruiser();
+    if (!flownOff && atSea() && launches < BOAT_CAP[s] && GAME.frame % 50 === 25) spawnLaunch();
     var pf = GAME.focus();
     for (var a = 0; a < active.length; a++) {
       updateCopCar(active[a], dt, s);
@@ -1080,7 +1148,12 @@ GAME.police = (function () {
       var after2 = stars();
       if (after2 < before2) {
         GAME.hud.wantedChanged(after2);
-        if (after2 === 0) clearCops();
+        if (after2 === 0) {
+          clearCops();
+          // lost them for good from four stars or more: that is news
+          if (peak >= 4 && GAME.herald) GAME.herald.front('manhunt', { stars: peak });
+          peak = 0;
+        }
       }
     }
 
@@ -1095,6 +1168,20 @@ GAME.police = (function () {
         if (pinTimer > 2.6) { pinTimer = 0; GAME.playerBusted(); }
       } else pinTimer = Math.max(0, pinTimer - dt);
     } else pinTimer = 0;
+
+    // In the water with a launch stopped alongside: hauled out over the side
+    // and that is that, at any number of stars — nobody outswims a boat.
+    if (P.swimming) {
+      var hauled = false;
+      for (var hb = 0; hb < chasing.length; hb++) {
+        var lc = chasing[hb];
+        if (lc.spec.boat && Math.abs(lc.speed) < 4 && U.dist2(lc.pos.x, lc.pos.z, P.pos.x, P.pos.z) < 6 * 6) { hauled = true; break; }
+      }
+      if (hauled) {
+        haulTimer += dt;
+        if (haulTimer > 1.2) { haulTimer = 0; GAME.playerBusted(); }
+      } else haulTimer = Math.max(0, haulTimer - dt);
+    } else haulTimer = 0;
 
     // siren from nearest active car
     var nd = 1e9, nx = 0, nz = 0;
@@ -1112,13 +1199,19 @@ GAME.police = (function () {
   // voice, and it was being set back to silence every tick nobody chased you
   function mySirenOr0() {
     var mine = GAME.playerSiren();
-    if (mine) GAME.audio.siren(0.55, 1, mine.pos.x, mine.pos.z);
-    else GAME.audio.siren(0);
+    if (mine) { GAME.audio.siren(0.55, 1, mine.pos.x, mine.pos.z); return; }
+    // or a cruiser on somebody else's tail going by (streetlife.js)
+    var by = GAME.streetlife && GAME.streetlife.siren();
+    if (by) {
+      var f = GAME.focus(), d = Math.sqrt(U.dist2(by.pos.x, by.pos.z, f.x, f.z));
+      GAME.audio.siren(U.clamp(1 - d / 140, 0, 1) * 0.8, 1, by.pos.x, by.pos.z);
+    } else GAME.audio.siren(0);
   }
 
   return {
     get wanted() { return stars(); },
     get heat() { return heat; },
+    get peak() { return peak; },
     reportCrime: reportCrime,
     reportIncident: reportIncident,
     get incidentCount() { return incidents.length; },
