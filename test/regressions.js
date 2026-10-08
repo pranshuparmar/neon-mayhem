@@ -300,6 +300,8 @@
 //      screen; a word that is not one does nothing.
 //  22. LANDMARKS      — a club, a stadium, a film lot and a villa, solid,
 //      signed, open at the gate, with nothing buried in them.
+//  23. WEAR           — bumpers off at the end that took it, a sprung bonnet,
+//      burst tyres that sit the car down; the paint shop mends them.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -439,6 +441,10 @@ function withTimeout(p, ms) {
     // groups below measure pursuits that only ever followed. The tactics
     // group turns them on for itself.
     GAME.police.tactics = false;
+    // And the cars as they were, whole whatever is done to them: a knock now
+    // costs a bumper, a bonnet or a tyre (vehicles.js wear), and the groups
+    // below drive, shoot at and measure cars that never lost anything.
+    GAME.vehicles.wear = false;
     GAME.test.fastForward(1);
     var a = GAME.audio;
     var engine0 = a.engineState, skid0 = a.skid, siren0 = a.siren, vol0 = a.radio.setVolume;
@@ -1520,6 +1526,7 @@ function withTimeout(p, ms) {
     GAME.missions.acts = false;   // and the jobs one part each
     if (GAME.gangs) GAME.gangs.enabled = false;   // and the gangs off the corners
     GAME.police.tactics = false;   // and the chase polite
+    GAME.vehicles.wear = false;   // and the cars whole
     GAME.test.start();
     GAME.test.fastForward(0.5);
     var layer = document.getElementById('touch-layer');
@@ -11300,6 +11307,7 @@ function withTimeout(p, ms) {
     GAME.missions.acts = false;   // and the jobs one part each
     if (GAME.gangs) GAME.gangs.enabled = false;   // and the gangs off the corners
     GAME.police.tactics = false;   // and the chase polite
+    GAME.vehicles.wear = false;   // and the cars whole
     GAME.test.start();
     GAME.test.fastForward(1);
     var zone = document.getElementById('tstick-zone');
@@ -12800,6 +12808,60 @@ function withTimeout(p, ms) {
     lm.sites.map(function (s) { return s.district; }).filter(function (d, i, a) { return a.indexOf(d) === i; }).length >= 3, JSON.stringify(lm));
   check('landmarks: the stadium\'s gate is open from the road to the pitch', lm.gateOpen, JSON.stringify(lm));
   check('landmarks: nothing to find ended up inside one', lm.buried === 0, JSON.stringify(lm));
+
+  // ---------- 23: wear you can see ----------
+  // Knocked about, a car loses the bumper at the end that took it (it lies
+  // in the road), and past half its strength the bonnet springs; a round by
+  // a wheel bursts that tyre and the car sits down on it; a spike strip
+  // takes all four; the paint shop mends the lot.
+  var wr = await page.evaluate(function () {
+    var V = GAME.vehicles, r = {}, spawned = [];
+    V.wear = true;
+    try {
+      GAME.test.teleport(-60, 40); GAME.test.fastForward(0.3);
+      var car = GAME.test.spawnCar('sedan', 6, 0); spawned.push(car);
+      GAME.test.fastForward(0.3);
+      var kids0 = GAME.scene.children.length;
+      var geo0 = car.mesh.userData.bodyMesh.geometry;
+      car.speed = 10; V.damageCar(car, car.spec.hp * 0.32, 'wall'); car.speed = 0;
+      r.front = car.parts === 1 && car.mesh.userData.bodyMesh.geometry !== geo0;
+      r.inRoad = GAME.scene.children.length === kids0 + 1;
+      r.noHoodYet = !car.hood;
+      car.speed = -4; V.damageCar(car, car.spec.hp * 0.32, 'wall'); car.speed = 0;
+      r.rear = car.parts === 3 && !!car.hood;
+      // the same body comes from the cache for every car that has lost the same
+      var car2 = GAME.test.spawnCar('sedan', -6, 0); spawned.push(car2);
+      GAME.test.fastForward(0.2);
+      V.repaint(car2, car.color);
+      car2.speed = 10; V.damageCar(car2, car2.spec.hp * 0.32, 'wall'); car2.speed = -4; V.damageCar(car2, car2.spec.hp * 0.32, 'wall'); car2.speed = 0;
+      r.shared = car2.mesh.userData.bodyMesh.geometry === car.mesh.userData.bodyMesh.geometry;
+      // a tyre
+      var fx = Math.sin(car.heading), fz = Math.cos(car.heading), wz = car.spec.l / 2 * 0.56, wx = car.spec.w / 2;
+      r.missFar = !V.shotTyre(car, car.pos.x, car.pos.z);
+      r.tyre = V.shotTyre(car, car.pos.x + fx * wz + fz * wx, car.pos.z + fz * wz - fx * wx) && car.burst === 1 && car.spiked;
+      GAME.test.fastForward(0.6);
+      r.sits = Math.abs(car.mesh.rotation.z) > 0.02;
+      // the paint shop: as good as new
+      V.mend(car); car.spiked = false;
+      r.mended = car.parts === 0 && !car.hood && car.burst === 0 && car.mesh.userData.bodyMesh.geometry !== car2.mesh.userData.bodyMesh.geometry;
+      // and switched off, a knock is only hp
+      V.wear = false;
+      var car3 = GAME.test.spawnCar('sedan', 0, 8); spawned.push(car3);
+      GAME.test.fastForward(0.2);
+      car3.speed = 10; V.damageCar(car3, car3.spec.hp * 0.6, 'wall'); car3.speed = 0;
+      r.off = car3.parts === 0 && !car3.hood;
+    } finally {
+      V.wear = false;
+      spawned.forEach(function (c) { if (!c.gone) V.removeCar(c); });
+      GAME.test.fastForward(0.3);
+    }
+    return r;
+  });
+  check('wear: the end that took the knock loses its bumper, and it lies in the road', wr.front && wr.inRoad && wr.noHoodYet, JSON.stringify(wr));
+  check('wear: both ends gone and past half its strength, the bonnet springs', wr.rear, JSON.stringify(wr));
+  check('wear: a car short of its bumpers costs no geometry of its own', wr.shared, JSON.stringify(wr));
+  check('wear: a round by a wheel bursts that tyre, and the car sits down on it', wr.missFar && wr.tyre && wr.sits, JSON.stringify(wr));
+  check('wear: the paint shop mends the lot; switched off, a knock is only hp', wr.mended && wr.off, JSON.stringify(wr));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the

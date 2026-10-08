@@ -35,6 +35,7 @@ Everything in the game, in detail. The [README](../README.md) has the short vers
 - **The weapon wheel.** Hold `Z` (D-pad down on a pad, WPN on a touchscreen) and the world slows while the slots open in a ring round you, each with its icon and its ammo; point with the mouse or the right stick (or tap one) and let go. A quick tap still steps to the next weapon, `1`–`9` pick by slot, and the mouse wheel steps through them when you are not aiming. Every icon — on the wheel and beside the HUD's weapon name — is a small SVG drawn in code, and every swing, bounce, smash, crackle, crack and launch is synthesised.
 
 - **Hold up a shop.** In the gun shops, THREADS or the barber's, put a gun on whoever is behind the counter and keep it there: their hands go up and the till comes over the counter twenty dollars at a time for as long as you hold the aim — up to $1,500 at a gun shop. Let it drop, or clean them out, and the alarm has already gone: two stars as you leave, three if you took most of it. A till takes a day to restock, fists frighten nobody, and a shop you own is not one you rob.
+- **Damage you can see.** Knock a car about and the end that took it loses its bumper — it lies in the road behind you; past half its strength the bonnet springs off its catch and flaps as you go. A round that lands by a wheel bursts that tyre, and a spike strip takes all four: the car sits down on the flat corner, sparks off the rim, and pulls toward it. The paint shop mends the lot along with the paint.
 
 ## The law
 

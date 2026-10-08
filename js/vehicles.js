@@ -473,8 +473,12 @@ function buildTankMesh(colorHex) {
   return g;
 }
 
-function buildCarMesh(type, colorHex) {
+// `parts`: what has come off it (see wear below) — bit 1 the front bumper,
+// bit 2 the rear. A car that has lost one wears a body without it, from the
+// same cache, so the dent costs no more draw calls than the car did.
+function buildCarMesh(type, colorHex, parts) {
   var s = VEHICLES[type];
+  parts = parts || 0;
   if (s.jetski) return buildJetskiMesh(colorHex);
   if (s.boat) return buildBoatMesh(colorHex, !!s.police);
   if (s.monster) return buildMonsterMesh(colorHex);
@@ -484,7 +488,7 @@ function buildCarMesh(type, colorHex) {
   if (s.bike) return buildBikeMesh(colorHex, s.trim);
   var g = new THREE.Group();
   var hl = s.l / 2, hw = s.w / 2;
-  var body = new THREE.Mesh(cachedGeo('car|' + type + '|' + colorHex, function (b) {
+  var body = new THREE.Mesh(cachedGeo('car|' + type + '|' + colorHex + (parts ? '|' + parts : ''), function (b) {
     b.addBox(0, 0.42, 0, s.w, s.bodyH, s.l, 0, colorHex, 0);
     if (type === 'ambulance') {
       // tall box body + red cross panels
@@ -574,8 +578,8 @@ function buildCarMesh(type, colorHex) {
     if (s.cabinH > 0) {
       b.addBox(0, 0.42 + s.bodyH / 2 + s.cabinH / 2 - 0.05, cabZ, s.w * 0.82, s.cabinH, cabL, 0, type === 'police' ? 0x20242e : 0x141824, 0);
     }
-    b.addBox(0, 0.28, hl * 0.72, s.w * 0.9, 0.32, 0.55, 0, 0x22262e, 0);
-    b.addBox(0, 0.28, -hl * 0.72, s.w * 0.9, 0.32, 0.55, 0, 0x22262e, 0);
+    if (!(parts & 1)) b.addBox(0, 0.28, hl * 0.72, s.w * 0.9, 0.32, 0.55, 0, 0x22262e, 0);
+    if (!(parts & 2)) b.addBox(0, 0.28, -hl * 0.72, s.w * 0.9, 0.32, 0.55, 0, 0x22262e, 0);
     var wy = 0.32, wx = hw - 0.12, wz = hl * 0.56;
     [[wx, wz], [-wx, wz], [wx, -wz], [-wx, -wz]].forEach(function (w) {
       b.addBox(w[0], wy, w[1], 0.32, 0.64, 0.72, 0, 0x0c0c10, 0);
@@ -675,6 +679,9 @@ GAME.vehicles = (function () {
       // a side's car (gangs.js), and the law's top end (police.js tactics,
       // army.js): declared here so every car keeps the one shape
       gang: null, tactic: null, armyUnit: false, pitT: 0, pitDir: 0, pitCool: 0, gunT: 0,
+      // what the knocks have done to it (wear): damage taken at either end,
+      // the parts gone, the tyres burst, the bonnet sprung
+      dmgFront: 0, dmgRear: 0, parts: 0, burst: 0, hood: null, sparkT: 0,
       aiSteer: 0, aiTX: NaN, aiTZ: NaN, aiAir: false, airLights: null,
       copsOut: NaN, shootT: NaN, aimSkill: NaN, deployT: 0, fireT: 0, bailT: 0,
       heliSpeed: 0, rotorSpin: 0, mgT: 0, rkT: 0, pitch: 0, roll: 0, sinkV: 0,
@@ -692,11 +699,20 @@ GAME.vehicles = (function () {
   function repaint(car, color) {
     var bm = car && car.mesh && car.mesh.userData.bodyMesh;
     if (!bm || car.spec.plane || car.dead) return false;
-    var fresh = buildCarMesh(car.type, color).userData.bodyMesh;
+    var fresh = buildCarMesh(car.type, color, car.parts).userData.bodyMesh;
     if (!fresh) return false;
     bm.geometry = fresh.geometry;
     car.color = color;
+    if (car.hood) car.hood.children[0].material = sharedLambert(color);
     return true;
+  }
+  // Mended, the way the paint shop mends (missions.js): bumpers back on,
+  // the bonnet shut, four good tyres, and the ledger of knocks wiped
+  function mend(car) {
+    if (car.hood) { car.mesh.remove(car.hood); car.hood = null; }
+    car.dmgFront = car.dmgRear = 0;
+    car.burst = 0;
+    if (car.parts) { car.parts = 0; repaint(car, car.color); }
   }
 
   function removeCar(car) {
@@ -926,12 +942,13 @@ GAME.vehicles = (function () {
     susp.v += (-140 * (susp.p - load) - 16 * susp.v) * dt;
     susp.p += susp.v * dt;
 
-    car.mesh.rotation.x = car.bodyPitch + susp.p;
+    var lean = tyreLean(car);
+    car.mesh.rotation.x = car.bodyPitch + susp.p + lean.pitch;
     // Roll is left exactly as it was. Leaning out of a corner already exists
     // here — lateral slip IS the cornering load — and swapping its ease for a
     // spring would change how the car reads in a direction change without
     // adding anything the body was not already doing.
-    car.mesh.rotation.z = U.lerp(car.mesh.rotation.z, -car.lat * 0.02, dt * 6);
+    car.mesh.rotation.z = U.lerp(car.mesh.rotation.z, -car.lat * 0.02 + lean.roll, dt * 6);
     car.lastHeading = car.heading;
 
     collideStatic(car, dt);
@@ -1524,6 +1541,122 @@ GAME.vehicles = (function () {
     return true;
   }
 
+  // ---------- wear: the knocks you can see ----------
+  // Which end took it: a car going forwards hits with its nose, one in
+  // reverse with its tail, and a round or a blast lands anywhere. Past a
+  // third of the car's strength at one end, that bumper is off and lies in
+  // the road; past half its strength overall the bonnet has sprung and
+  // flaps as it goes. Tyres burst to spike strips and to rounds that land
+  // by a wheel (shotTyre): that corner drops, sparks on the tarmac, and the
+  // car pulls toward it.
+  function dents(car) {
+    var s = car.spec;
+    return !(s.bike || s.boat || s.heli || s.plane || s.tank || s.monster);
+  }
+  var BUMPER_AT = 0.3, HOOD_AT = 0.55, MAX_DEBRIS = 10, debris = [];
+  // (the suite measures cars that kept their shape and their tyres; its wear
+  // group switches this back on)
+  var wearOn = true;
+  function knocked(car, amt, source) {
+    var front = source === 'gun' || source === 'shot' || source === 'fist' ? Math.random() < 0.5 : car.speed >= 0;
+    if (front) car.dmgFront += amt; else car.dmgRear += amt;
+    var hp = car.spec.hp;
+    if (car.dmgFront > hp * BUMPER_AT && !(car.parts & 1)) loseBumper(car, 1);
+    if (car.dmgRear > hp * BUMPER_AT && !(car.parts & 2)) loseBumper(car, 2);
+    if (car.hp < hp * HOOD_AT && !car.hood) springHood(car);
+  }
+  function loseBumper(car, bit) {
+    var bm = car.mesh && car.mesh.userData.bodyMesh;
+    if (!bm || car.spec.plane) return;
+    car.parts |= bit;
+    bm.geometry = buildCarMesh(car.type, car.color, car.parts).userData.bodyMesh.geometry;
+    // and there it is, in the road
+    var hl = car.spec.l / 2, dir = bit === 1 ? 1 : -1;
+    var x = car.pos.x + Math.sin(car.heading) * hl * 0.9 * dir, z = car.pos.z + Math.cos(car.heading) * hl * 0.9 * dir;
+    var piece = new THREE.Mesh(sharedBoxGeo(car.spec.w * 0.9, 0.32, 0.55), sharedLambert(0x22262e));
+    piece.position.set(x, GAME.city.groundY(x, z) + 0.16, z);
+    piece.rotation.y = car.heading + (Math.random() - 0.5) * 1.2;
+    GAME.scene.add(piece);
+    debris.push({ mesh: piece, t: 30 });
+    if (debris.length > MAX_DEBRIS) GAME.scene.remove(debris.shift().mesh);
+    GAME.audio.crash(0.4, x, z);
+  }
+  function springHood(car) {
+    var s = car.spec, hl = s.l / 2;
+    if (s.cabinH <= 0 || car.type === 'icecream' || car.type === 'armytruck') return;
+    // a panel on its hinge at the screen, over the bonnet, in the car's paint
+    var len = s.l * 0.26, hinge = new THREE.Group();
+    hinge.position.set(0, 0.42 + s.bodyH / 2 + 0.015, hl * 0.18);
+    var panel = new THREE.Mesh(sharedBoxGeo(s.w * 0.86, 0.04, len), sharedLambert(car.color));
+    panel.position.z = len / 2;
+    hinge.add(panel);
+    car.mesh.add(hinge);
+    car.hood = hinge;
+  }
+  // a round that landed at (hx, hz) on this car: by a wheel, it is that tyre
+  function shotTyre(car, hx, hz) {
+    if (!wearOn || !dents(car)) return false;
+    var fx = Math.sin(car.heading), fz = Math.cos(car.heading);
+    var ox = hx - car.pos.x, oz = hz - car.pos.z;
+    var lz = ox * fx + oz * fz, lx = ox * fz - oz * fx;
+    var wz = car.spec.l / 2 * 0.56, wx = car.spec.w / 2;
+    if (Math.abs(Math.abs(lz) - wz) > 0.85 || Math.abs(lx) < wx * 0.35) return false;
+    burstTyre(car, (lz > 0 ? 0 : 2) + (lx > 0 ? 0 : 1));
+    return true;
+  }
+  // tyres 0 front-left, 1 front-right, 2 rear-left, 3 rear-right (as the
+  // car's own x and z have them)
+  function burstTyre(car, i) {
+    var bit = 1 << i;
+    if (!wearOn) { car.spiked = true; return; }
+    if (car.burst & bit) return;
+    car.burst |= bit;
+    car.spiked = true;
+    GAME.audio.crash(0.35, car.pos.x, car.pos.z);
+    GAME.fx.spawn(car.pos.x, car.pos.y + 0.4, car.pos.z, { count: 5, color: 0x30303a, spread: 1, life: 0.4 });
+  }
+  function count(bits, mask) { var n = 0; for (var i = 0; i < 4; i++) if ((bits & mask) & (1 << i)) n++; return n; }
+  // the lean of a car on its burst tyres: down at that corner
+  function tyreLean(car) {
+    if (!car.burst) return { roll: 0, pitch: 0 };
+    var left = count(car.burst, 5), right = count(car.burst, 10), fr = count(car.burst, 3), rr = count(car.burst, 12);
+    return { roll: (right - left) * 0.045, pitch: (rr - fr) * 0.035 };
+  }
+  function wear(car, dt) {
+    if (car.hood) {
+      // sprung: up off its catch, and flapping at speed
+      var sp = Math.min(1, Math.abs(car.speed) / 22);
+      car.hood.rotation.x = -0.12 - 0.22 * sp - 0.18 * sp * Math.abs(Math.sin(GAME.time * 9 + car.serial));
+    }
+    // (parked, nothing else poses it: settle it onto the flat ones here)
+    if (car.burst && Math.abs(car.speed) < 0.5) {
+      var ln = tyreLean(car);
+      car.mesh.rotation.z = U.lerp(car.mesh.rotation.z, ln.roll, Math.min(1, dt * 6));
+      car.mesh.rotation.x = U.lerp(car.mesh.rotation.x, ln.pitch, Math.min(1, dt * 6));
+    }
+    if (car.burst && Math.abs(car.speed) > 5) {
+      car.sparkT -= dt;
+      if (car.sparkT <= 0) {
+        car.sparkT = 0.07;
+        var fx = Math.sin(car.heading), fz = Math.cos(car.heading), wz = car.spec.l / 2 * 0.56, wx = car.spec.w / 2;
+        for (var i = 0; i < 4; i++) {
+          if (!(car.burst & (1 << i))) continue;
+          var lz = i < 2 ? wz : -wz, lx = i % 2 ? -wx : wx;
+          GAME.fx.spawn(car.pos.x + fx * lz + fz * lx, car.pos.y + 0.1, car.pos.z + fz * lz - fx * lx, FX_RIM);
+        }
+      }
+      // and it pulls toward the side that is down
+      var pull = count(car.burst, 10) - count(car.burst, 5);
+      if (pull) car.heading += pull * 0.05 * dt * Math.min(1, Math.abs(car.speed) / 10) * (car.speed > 0 ? 1 : -1);
+    }
+  }
+  var FX_RIM = { count: 2, color: 0xffd080, spread: 0.4, life: 0.18, vy: 1 };
+  function stepDebris(dt) {
+    for (var i = debris.length - 1; i >= 0; i--) {
+      if ((debris[i].t -= dt) <= 0) { GAME.scene.remove(debris[i].mesh); debris.splice(i, 1); }
+    }
+  }
+
   function damageCar(car, amt, source, byPlayer) {
     if (car.dead) return;
     var pc = GAME.player.car;
@@ -1531,6 +1664,7 @@ GAME.vehicles = (function () {
     if (byPlayer || source === 'gun' || source === 'fist' ||
       (source === pc && pc && Math.abs(pc.speed) > 9)) car.byPlayer = true;
     car.hp -= amt;
+    if (wearOn && dents(car)) knocked(car, amt, source);
     if (car.hp < car.spec.hp * 0.35 && car.stage < 1) car.stage = 1;
     if (car.hp < car.spec.hp * 0.14 && car.stage < 2) { car.stage = 2; car.fireFuse = 5.5; }
     // The hull tells its driver out loud. Scraping uphill through the grass
@@ -2225,6 +2359,7 @@ GAME.vehicles = (function () {
     var P = GAME.player;
     var fc = GAME.focus();
     var cars = world.cars;
+    if (debris.length) stepDebris(dt);
     for (var i = cars.length - 1; i >= 0; i--) {
       var car = cars[i];
       // despawn far traffic
@@ -2257,6 +2392,7 @@ GAME.vehicles = (function () {
         if (car.deadT > 14 && car !== P.car) { removeCar(car); continue; }
         continue;
       }
+      if (car.hood || car.burst) wear(car, dt);
       if (car.stage >= 1) {
         car.smokeT -= dt;
         if (car.smokeT <= 0) {
@@ -2407,6 +2543,11 @@ GAME.vehicles = (function () {
     TYPES: VEHICLES,
     spawnCar: spawnCar, fillSpot: fillSpot,
     repaint: repaint,
+    mend: mend,
+    get wear() { return wearOn; },
+    set wear(v) { wearOn = !!v; },
+    shotTyre: shotTyre,
+    burstTyre: burstTyre,
     removeCar: removeCar,
     ejectDriver: ejectDriver,
     shotAt: shotAt,

@@ -3055,6 +3055,7 @@ GAME.missions = (function () {
     // never the shared one every living car is dressed in.
     var car = P.car;
     car.hp = car.spec.hp; car.stage = 0; car.stageWarn = 0; car.spiked = false; car.fireFuse = 0;
+    if (GAME.vehicles.mend) GAME.vehicles.mend(car);
     if (car.mesh.userData.bodyMesh) {
       var oldPaint = car.mesh.userData.bodyMesh.material;
       car.mesh.userData.bodyMesh.material = sharedVertexLambert();
