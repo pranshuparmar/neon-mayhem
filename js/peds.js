@@ -98,8 +98,9 @@ function buildPedMesh(opts) {
   // opts.look pins the whole appearance — the same person can step out of
   // the same car twice instead of a stranger wearing his job
   var look = opts.look || null;
-  var shirt = opts.cop ? 0x2a4a8a : look ? look.shirt : U.pick(Math.random, PED_SHIRTS);
-  var pants = opts.cop ? 0x1a2a4a : look ? look.pants : U.pick(Math.random, PED_PANTS);
+  // (a soldier is a cop in olive: army.js sends them at six stars)
+  var shirt = opts.cop ? (opts.army ? 0x4a5a36 : 0x2a4a8a) : look ? look.shirt : U.pick(Math.random, PED_SHIRTS);
+  var pants = opts.cop ? (opts.army ? 0x3a4428 : 0x1a2a4a) : look ? look.pants : U.pick(Math.random, PED_PANTS);
   var skin = look ? look.skin : U.pick(Math.random, PED_SKINS);
   g.userData.look = { shirt: shirt, pants: pants, skin: skin };
   // The town shares its wardrobe: constant colors, constant box sizes, one
@@ -173,7 +174,7 @@ GAME.peds = (function () {
       state: 'walk', speed: 0,
       walkPhase: Math.random() * 6,
       hp: opts.cop ? 60 : 30,
-      isCop: !!opts.cop,
+      isCop: !!opts.cop, army: !!opts.army,
       armed: !!opts.cop,
       // how quick this one is to swing back rather than run
       temper: Math.random(),

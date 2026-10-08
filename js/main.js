@@ -537,6 +537,7 @@
     GAME.arsenal.update(dt);
     GAME.combat.updatePickups(dt);
     GAME.police.update(dt);
+    GAME.army.update(dt);
     GAME.sealife.update(dt);
     GAME.streetlife.update(dt);
     GAME.strangers.update(dt);

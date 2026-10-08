@@ -42,24 +42,26 @@ GAME.arsenal = (function () {
   // A grenade, a rocket, anything that goes off: the flash, the sound, the
   // shake, and everything inside `rad` hurt by how close it was — cars, the
   // people in the street, and you, if you threw it too short.
-  function blast(x, y, z, rad, dmg) {
+  function blast(x, y, z, rad, dmg, from) {
     GAME.audio.explosion(x, z);
     GAME.fx.flash(x, y + 1, z, 9);
     GAME.fx.spawn(x, y + 0.8, z, { count: 28, color: 0xff9030, spread: rad * 0.7, vy: 5, life: 0.9, grav: -2 });
     GAME.fx.spawn(x, y + 1.2, z, { count: 14, color: 0x333333, spread: rad * 0.5, vy: 3, life: 1.4, grav: -0.5 });
     var P = GAME.player, f = GAME.focus();
+    // (yours, unless it came out of somebody else's gun: the army's tank)
+    var mine = !from || (P.inCar && from === P.car);
     var pd = Math.sqrt(U.dist2(f.x, f.z, x, z));
     GAME.cameraShake = Math.max(GAME.cameraShake || 0, U.clamp(1 - pd / 40, 0, 0.8));
     if (GAME.haptics && pd < 30) GAME.haptics.blast(1 - pd / 30);
     var cars = GAME.world.cars;
     for (var i = 0; i < cars.length; i++) {
       var c = cars[i];
-      if (c.dead) continue;
+      if (c.dead || c === from) continue;
       var cd = Math.sqrt(U.dist2(c.pos.x, c.pos.z, x, z));
       if (cd > rad || Math.abs(c.pos.y - y) > 6) continue;
       GAME.vehicles.throwRider(c);
-      GAME.vehicles.damageCar(c, dmg * (1.4 - cd / rad), 'shot', true);
-      if (c.isPolice && !c.mission) GAME.police.reportCrime('hit_cop_car', P.pos);
+      GAME.vehicles.damageCar(c, dmg * (1.4 - cd / rad), 'shot', mine);
+      if (mine && c.isPolice && !c.mission) GAME.police.reportCrime('hit_cop_car', P.pos);
     }
     var peds = GAME.world.peds;
     for (var j = 0; j < peds.length; j++) {
@@ -67,8 +69,8 @@ GAME.arsenal = (function () {
       if (q.dead) continue;
       var qd = Math.sqrt(U.dist2(q.pos.x, q.pos.z, x, z));
       if (qd > rad || Math.abs(q.pos.y - y) > 5) continue;
-      if (qd < rad * 0.55) GAME.peds.kill(q, 'explosion', true);
-      else GAME.peds.damage(q, dmg * (1 - qd / rad), true);
+      if (qd < rad * 0.55) GAME.peds.kill(q, 'explosion', mine);
+      else GAME.peds.damage(q, dmg * (1 - qd / rad), mine);
     }
     if (!(P.inCar && P.car && P.car.dead)) {
       var my = P.inCar && P.car ? P.car : null;
@@ -76,8 +78,7 @@ GAME.arsenal = (function () {
       else if (!my && pd < rad && Math.abs(P.pos.y - y) < 5) GAME.playerDamage(Math.round(dmg * 0.6 * (1 - pd / rad)), 'explosion', x, z);
     }
     GAME.peds.panic(x, z, 45);
-    GAME.police.noteGunfire({ x: x, z: z });
-    GAME.missions.notifyChaos(60);
+    if (mine) { GAME.police.noteGunfire({ x: x, z: z }); GAME.missions.notifyChaos(60); }
   }
 
   // ---------- what you throw, and what you fire ----------
@@ -139,6 +140,18 @@ GAME.arsenal = (function () {
     GAME.peds.panic(P.pos.x, P.pos.z, 30);
     return s;
   }
+  // a shell from somewhere else — the tank's gun (army.js): out of the
+  // muzzle along a yaw and a climb, bursting like a rocket, a bigger one
+  function fireShell(x, y, z, yaw, dy, from, big) {
+    var len = Math.sqrt(1 + dy * dy), sp = 60;
+    var s = { kind: 'rocket', x: x, y: y, z: z, vx: Math.sin(yaw) / len * sp, vz: Math.cos(yaw) / len * sp, vy: dy / len * sp,
+      t: 0, mesh: shotMesh('rocket'), from: from || null, r: big ? 9 : ROCKET_R, dmg: big ? 220 : ROCKET_DMG };
+    shots.push(s);
+    GAME.audio.gunshot('rocket', x, z);
+    GAME.fx.flash(x, y, z, 4);
+    GAME.cameraShake = Math.max(GAME.cameraShake || 0, 0.25);
+    return s;
+  }
   var FX_TRAIL = { count: 1, color: 0xffd080, spread: 0.12, life: 0.2 };
   var FX_SMOKE = { count: 1, color: 0x8a8a90, spread: 0.2, life: 0.5, vy: 0.6 };
   function stepShots(dt) {
@@ -152,7 +165,7 @@ GAME.arsenal = (function () {
       var wall = !C.hash.segmentClear(s.x, s.z, nx, nz, s.y);
       var gy = C.surfaceY(nx, nz, s.y + 0.5);
       var down = ny <= gy + 0.1;
-      var hit = s.kind !== 'grenade' && s.t > 0.08 && touching(nx, ny, nz, s.kind === 'rocket' ? 1.8 : 0.9);
+      var hit = s.kind !== 'grenade' && s.t > 0.08 && touching(nx, ny, nz, s.kind === 'rocket' ? 1.8 : 0.9, s.from);
       if (s.kind === 'grenade') {
         // (off a wall, or off the side of a car)
         if (wall || (s.t > 0.1 && touching(nx, ny, nz, 0.6))) { s.vx *= -0.4; s.vz *= -0.4; nx = s.x; nz = s.z; }
@@ -173,7 +186,7 @@ GAME.arsenal = (function () {
       var end = false;
       if (s.kind === 'grenade' && s.t >= GREN_FUSE) { blast(s.x, s.y, s.z, GREN_R, GREN_DMG); end = true; }
       else if (s.kind === 'molotov' && (down || wall || hit || s.t > 3)) { light(s.x, Math.max(gy, s.y - 0.2), s.z); end = true; }
-      else if (s.kind === 'rocket' && (down || wall || hit || s.t > 4)) { blast(s.x, Math.max(gy, s.y), s.z, ROCKET_R, ROCKET_DMG); end = true; }
+      else if (s.kind === 'rocket' && (down || wall || hit || s.t > 4)) { blast(s.x, Math.max(gy, s.y), s.z, s.r || ROCKET_R, s.dmg || ROCKET_DMG, s.from); end = true; }
       if (end) {
         GAME.scene.remove(s.mesh);
         shots.splice(i, 1);
@@ -181,11 +194,11 @@ GAME.arsenal = (function () {
     }
   }
   // anything solid in the air there: a car body or a person
-  function touching(x, y, z, r) {
+  function touching(x, y, z, r, from) {
     var cars = GAME.world.cars, P = GAME.player;
     for (var i = 0; i < cars.length; i++) {
       var c = cars[i];
-      if (c.dead || c === P.car || Math.abs(c.pos.y + 0.8 - y) > 1.6) continue;
+      if (c.dead || c === (from || P.car) || Math.abs(c.pos.y + 0.8 - y) > 1.6) continue;
       if (U.dist2(c.pos.x, c.pos.z, x, z) < (c.radius * 0.8 + r * 0.3) * (c.radius * 0.8 + r * 0.3)) return true;
     }
     var peds = GAME.world.peds;
@@ -395,6 +408,7 @@ GAME.arsenal = (function () {
   return {
     icon: icon,
     blast: blast,
+    fireShell: fireShell,
     throwIt: throwIt,
     fireRocket: fireRocket,
     update: update,

@@ -45,6 +45,7 @@ Want the details? **[Read the full tour →](docs/FEATURES.md)**
 
 ## What's new
 
+- 🪖 **Six stars** — the army, its soldiers and a tank you can take; and cruisers that ram, PIT and box you in.
 - 💵 **Store robberies** — a gun on the clerk empties the till while you keep it there, and the law is waiting outside.
 - 🔪 **The arsenal** — bat, knife, katana, chainsaw, grenades, Molotovs, a scoped sniper rifle and a rocket launcher, and a weapon wheel to pick them from.
 - 🟣 **Gangs and turf** — Rico's crew in plum and black against Lola's people in pink, each on their own streets, drawing on sight once Rico has a price on you, and turf that changes hands as the story goes.

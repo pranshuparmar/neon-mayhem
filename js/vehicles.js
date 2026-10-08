@@ -170,6 +170,12 @@ var VEHICLES = {
   jetski: { label: 'Wave Rider', maxSpeed: 34, accel: 17, grip: 2.0, turn: 2.3, hp: 130, l: 3.1, w: 1.2, cabinH: 0, bodyH: 0.5, colors: [0xffe14f, 0xff2f7a, 0x38e8ff, 0xf0f0f4], boat: true, jetski: true },
   // the harbour patrol: a heavier launch in police white, a light bar on the
   // console, sent after you once you are wanted out on the water
+  // The army, at six stars (army.js), and nowhere else: a canvas-backed
+  // truck that unloads soldiers, and a tank — slow, near enough
+  // indestructible, crushing whatever it drives into, a turret that follows
+  // your aim and a cannon on LMB. Take one off them and it is yours.
+  tank: { label: 'Mastodon', maxSpeed: 17, accel: 7, grip: 7.5, turn: 1.45, hp: 4200, l: 6.6, w: 3.3, cabinH: 0, bodyH: 1.0, colors: [0x4a5a36], tank: true, army: true },
+  armytruck: { label: 'Quartermaster', maxSpeed: 26, accel: 8, grip: 5.8, turn: 1.6, hp: 650, l: 6.4, w: 2.5, cabinH: 0.9, bodyH: 0.9, colors: [0x55603e], army: true },
   policeboat: { label: 'Harbour Patrol', maxSpeed: 32, accel: 12.5, grip: 1.8, turn: 1.6, hp: 340, l: 6.6, w: 2.2, cabinH: 0, bodyH: 0.7, colors: [0xf2f4f8], boat: true, police: true }
 };
 
@@ -435,11 +441,44 @@ function buildJetskiMesh(colorHex) {
   return g;
 }
 
+// A tank: a long low hull on two tracks, and a turret with a long gun that
+// turns on its own (army.js points it). The turret is a group of its own on
+// top, so it can turn without the hull.
+function buildTankMesh(colorHex) {
+  var g = new THREE.Group();
+  var hull = new THREE.Mesh(cachedGeo('tank|' + colorHex, function (b) {
+    b.addBox(0, 0.85, 0, 2.7, 0.8, 6.0, 0, colorHex, 0);            // hull
+    b.addBox(0, 1.3, 0.5, 2.4, 0.18, 4.4, 0, colorHex, 0);          // deck
+    b.addBox(0, 0.9, 3.05, 2.5, 0.5, 0.3, 0.5, colorHex, 0);        // glacis
+    [1.42, -1.42].forEach(function (x) {
+      b.addBox(x, 0.5, 0, 0.62, 0.9, 6.4, 0, 0x22241c, 0);         // tracks
+      for (var w = 0; w < 6; w++) b.addBox(x * 1.02, 0.45, -2.5 + w, 0.6, 0.62, 0.62, 0, 0x3a3c30, 0);
+      b.addBox(x, 1.02, 0, 0.7, 0.08, 6.5, 0, 0x2e3226, 0);         // track guard
+    });
+    b.addBox(0.9, 1.45, -2.4, 0.5, 0.3, 0.9, 0, 0x2a2e22, 0);       // engine deck grilles
+    b.addBox(-0.9, 1.45, -2.4, 0.5, 0.3, 0.9, 0, 0x2a2e22, 0);
+  }), sharedVertexLambert());
+  g.add(hull);
+  var turret = new THREE.Group();
+  turret.position.set(0, 1.45, 0.3);
+  turret.add(new THREE.Mesh(cachedGeo('tankturret|' + colorHex, function (b) {
+    b.addBox(0, 0.42, 0, 2.0, 0.84, 2.4, 0, colorHex, 0);
+    b.addBox(0, 0.9, -0.4, 0.8, 0.2, 0.8, 0, 0x3a4a2e, 0);          // hatch
+    b.addBox(0, 0.48, 2.9, 0.26, 0.26, 3.6, 0, 0x2e3226, 0);        // the gun
+    b.addBox(0, 0.48, 1.4, 0.5, 0.5, 0.6, 0, colorHex, 0);          // mantlet
+  }), sharedVertexLambert()));
+  g.add(turret);
+  g.userData.turret = turret;
+  g.userData.bodyMesh = hull;
+  return g;
+}
+
 function buildCarMesh(type, colorHex) {
   var s = VEHICLES[type];
   if (s.jetski) return buildJetskiMesh(colorHex);
   if (s.boat) return buildBoatMesh(colorHex, !!s.police);
   if (s.monster) return buildMonsterMesh(colorHex);
+  if (s.tank) return buildTankMesh(colorHex);
   if (s.plane) return buildPlaneMesh(s.colors);
   if (s.heli) return buildHeliMesh(colorHex, s.gunship);
   if (s.bike) return buildBikeMesh(colorHex, s.trim);
@@ -494,6 +533,13 @@ function buildCarMesh(type, colorHex) {
     if (type === 'pickup') {
       b.addBox(0, 0.42 + s.bodyH / 2 + 0.22, -1.05, s.w, 0.45, s.l * 0.44, 0, 0x2a2a34, 0);   // bed walls
     }
+    if (type === 'armytruck') {
+      // the canvas back, ribbed, over the bed: a few centimetres wider than
+      // the body so their flanks never share a plane
+      b.addBox(0, 0.42 + s.bodyH / 2 + 0.8, -0.9, s.w + 0.06, 1.6, s.l * 0.6, 0, 0x6a6a48, 0);
+      for (var rb = 0; rb < 4; rb++) b.addBox(0, 0.42 + s.bodyH / 2 + 1.62, -0.9 - s.l * 0.27 + rb * s.l * 0.18, s.w + 0.1, 0.06, 0.08, 0, 0x4a4a32, 0);
+      b.addBox(hw - 0.4, 0.42 + s.bodyH / 2 + 0.05, -0.9, 0.3, 0.1, s.l * 0.5, 0, 0xf0f0e0, 0);   // a white star stencil, near enough
+    }
     if (type === 'zebra') {
       // The stripes, black on the yellow: down both flanks, each one leaning
       // back as it climbs (three short steps of it, which is how a slanted
@@ -515,8 +561,8 @@ function buildCarMesh(type, colorHex) {
         }
       });
     }
-    var cabL = s.l * (type === 'van' ? 0.85 : type === 'icecream' ? 0.34 : type === 'limo' ? 0.72 : 0.5);
-    var cabZ = type === 'sports' ? -0.35 : type === 'van' ? -0.1
+    var cabL = s.l * (type === 'armytruck' ? 0.3 : type === 'van' ? 0.85 : type === 'icecream' ? 0.34 : type === 'limo' ? 0.72 : 0.5);
+    var cabZ = type === 'armytruck' ? s.l * 0.3 : type === 'sports' ? -0.35 : type === 'van' ? -0.1
       : type === 'icecream' ? s.l * 0.28 : type === 'pickup' ? 0.35 : -0.15;
     if (s.buggy) {
       // no cabin at all: a roll hoop over an open tub. The cross bar is wider

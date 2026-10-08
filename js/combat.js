@@ -456,7 +456,8 @@ GAME.combat = (function () {
       // no drive-by from an aircraft: the TALON's own weapons read LMB/FIRE,
       // and the SMG going off alongside the chin gun was a double trigger —
       // every burst of gunship fire also burned drive-by ammo sideways
-      var airCar = P.car && (P.car.spec.heli || P.car.spec.plane);
+      // (nor from a tank, whose LMB is its cannon: army.js)
+      var airCar = P.car && (P.car.spec.heli || P.car.spec.plane || P.car.spec.tank);
       var hasSMG = !airCar && P.weapons.smg && P.weapons.smg.have && P.weapons.smg.ammo > 0;
       var left = GAME.key('KeyQ') || T.driveByL;
       var right = GAME.key('KeyE') || T.driveByR;
@@ -473,7 +474,8 @@ GAME.combat = (function () {
           fireGun('smg', yaw, true);
         }
       }
-      inp.lmbPressed = false;
+      // (a tank's trigger is its cannon's, read after this: army.js)
+      if (!P.car.spec.tank) inp.lmbPressed = false;
       return;
     }
 

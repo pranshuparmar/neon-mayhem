@@ -32,7 +32,7 @@ GAME.hud = (function () {
       'controls-bar', 'map-screen', 'bigmap', 'map-clear', 'map-close', 'pager', 'pager-face', 'pager-from', 'pager-text', 'enter-hint']
       .forEach(function (id) { el[id] = $(id); });
     var stars = '';
-    for (var i = 0; i < 5; i++) stars += '<span>★</span>';
+    for (var i = 0; i < 6; i++) stars += '<span>★</span>';
     el['wanted-stars'].innerHTML = stars;
     paintKeyHelp();
 
@@ -1530,7 +1530,7 @@ GAME.hud = (function () {
     cashChanged: function () { targetCash = GAME.player.cash; },
     wantedChanged: function (n) {
       var spans = el['wanted-stars'].children;
-      for (var i = 0; i < 5; i++) spans[i].className = i < n ? 'lit' : '';
+      for (var i = 0; i < spans.length; i++) spans[i].className = i < n ? 'lit' : '';
       // Both police.js paths already funnel through here, so this is the one
       // place that sees every change — but neither of them passes the level
       // you were ON, and the direction is the whole message. Keep it here.

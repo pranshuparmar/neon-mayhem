@@ -294,6 +294,8 @@
 //      blade and one throwable at a time, SVG icons, and the weapon wheel.
 //  19. ROBBERY        — a gun on the clerk empties the till while held;
 //      dropping it brings the stars; a day to restock; never your own.
+//  20. THE TOP END    — a sixth star and the army; a tank you can take,
+//      whose cannon and tracks work for you; cruisers that ram, PIT, box.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -428,6 +430,11 @@ function withTimeout(p, ms) {
     // a crowd of armed men changes every count of peds and fights. The gangs
     // group puts them back for itself.
     if (GAME.gangs) GAME.gangs.enabled = false;
+    // And the chase at a polite distance, as it always was: from three stars
+    // cruisers now ram, PIT and box you in (police.js tactics), and the
+    // groups below measure pursuits that only ever followed. The tactics
+    // group turns them on for itself.
+    GAME.police.tactics = false;
     GAME.test.fastForward(1);
     var a = GAME.audio;
     var engine0 = a.engineState, skid0 = a.skid, siren0 = a.siren, vol0 = a.radio.setVolume;
@@ -1508,6 +1515,7 @@ function withTimeout(p, ms) {
     if (GAME.scenes) GAME.scenes.enabled = false;   // and the scenes off
     GAME.missions.acts = false;   // and the jobs one part each
     if (GAME.gangs) GAME.gangs.enabled = false;   // and the gangs off the corners
+    GAME.police.tactics = false;   // and the chase polite
     GAME.test.start();
     GAME.test.fastForward(0.5);
     var layer = document.getElementById('touch-layer');
@@ -11287,6 +11295,7 @@ function withTimeout(p, ms) {
     if (GAME.scenes) GAME.scenes.enabled = false;   // and the scenes off
     GAME.missions.acts = false;   // and the jobs one part each
     if (GAME.gangs) GAME.gangs.enabled = false;   // and the gangs off the corners
+    GAME.police.tactics = false;   // and the chase polite
     GAME.test.start();
     GAME.test.fastForward(1);
     var zone = document.getElementById('tstick-zone');
@@ -12606,6 +12615,100 @@ function withTimeout(p, ms) {
   check('robbery: let the aim drop and it is over, with two stars at least', rob.over && rob.stars >= 2, JSON.stringify(rob));
   check('robbery: the same till the same day has nothing in it', rob.restocking, JSON.stringify(rob));
   check('robbery: a shop you own is not one you rob', rob.ownNot, JSON.stringify(rob));
+
+  // ---------- 20: the law's top end ----------
+  // A sixth star, and with it the army: trucks of soldiers in with the
+  // cruisers and a tank that comes for you. Take the tank and its turret
+  // follows your aim and LMB is the cannon; it flattens what it drives into.
+  // And from three stars the cruisers stop being polite: they ram, they PIT,
+  // they box you in.
+  var law = await page.evaluate(function () {
+    var P = GAME.player, r = {}, spawned = [];
+    GAME.godMode = true;
+    GAME.police.tactics = true;
+    try {
+      if (P.inCar) GAME.exitCar();
+      GAME.test.teleport(-60, 40); GAME.test.fastForward(0.5);
+      GAME.police.setWanted(6);
+      r.six = GAME.police.wanted === 6 && document.querySelectorAll('#wanted-stars .lit').length === 6 &&
+        document.querySelectorAll('#wanted-stars span').length === 6;
+      for (var i = 0; i < 20 && !GAME.army.armyTank; i++) GAME.test.fastForward(0.5);
+      var t = GAME.army.armyTank;
+      r.tank = !!t;
+      r.army = GAME.world.cars.some(function (c) { return c.armyUnit && c.type === 'armytruck'; }) ||
+        GAME.world.peds.some(function (q) { return q.army && !q.dead; });
+      // its crew out, and it is yours
+      GAME.police.clearWanted();
+      GAME.test.fastForward(0.2);
+      if (t && !t.gone) {
+        t.speed = 0;
+        GAME.test.teleport(t.pos.x + 3.5, t.pos.z); GAME.test.fastForward(0.3);
+        GAME.enterCar(t); GAME.test.fastForward(3);
+        r.mine = P.inCar && P.car === t;
+        GAME.input.lockGraceT = 0;
+        var car = GAME.test.spawnCar('sedan', 0, 25); spawned.push(car);
+        GAME.test.fastForward(0.3);
+        for (var k = 0; k < 90; k++) { GAME.cam.freeT = 2; GAME.cam.yaw = Math.atan2(car.pos.x - t.pos.x, car.pos.z - t.pos.z); GAME.test.fastForward(1 / 60); }
+        var hp0 = car.hp;
+        GAME.input.lmbPressed = true; GAME.test.fastForward(1.2);
+        r.cannon = car.dead || car.hp < hp0;
+        GAME.police.clearWanted();
+        // and it drives over what is in its way
+        var car2 = GAME.test.spawnCar('sedan', 0, 0); spawned.push(car2);
+        car2.pos.set(t.pos.x + Math.sin(t.heading) * 3.5, car2.pos.y, t.pos.z + Math.cos(t.heading) * 3.5);
+        car2.occupied = null;
+        var hp2 = car2.hp;
+        for (var c2 = 0; c2 < 60; c2++) { t.speed = 6; GAME.test.fastForward(1 / 60); }
+        r.crush = car2.dead || car2.hp < hp2 - 100;
+        GAME.exitCar(); GAME.test.fastForward(1.5);
+      }
+      GAME.police.clearWanted();
+      // the cruisers' tactics, from three stars, in a car
+      var ride = GAME.test.spawnCar('sedan', 4, 0); spawned.push(ride);
+      GAME.test.fastForward(0.2); GAME.test.enterNearestCar(ride); GAME.test.fastForward(1);
+      GAME.police.setWanted(3);
+      var kinds = {}, pit = null;
+      for (var u = 0; u < 4; u++) {
+        var unit = GAME.police.spawnUnit();
+        if (unit) { kinds[unit.tactic] = true; spawned.push(unit); if (unit.tactic === 'pit') pit = unit; }
+      }
+      r.tactics = Object.keys(kinds).sort().join();
+      // the PIT: one at your back wheel, moving with you, turns you round
+      var pc = P.car;
+      if (pit && pc) {
+        var fx = Math.sin(pc.heading), fz = Math.cos(pc.heading);
+        pit.pos.set(pc.pos.x - fx * 2.4 + fz * 1.6, pc.pos.y, pc.pos.z - fz * 2.4 - fx * 1.6);
+        pit.heading = pc.heading; pit.speed = 15; pc.speed = 15;
+        var h0 = pc.heading;
+        GAME.test.fastForward(1 / 60);
+        r.pitT = pc.pitT > 0;
+        GAME.test.fastForward(0.5);
+        r.spun = Math.abs(U.wrapPI(pc.heading - h0)) > 0.5;
+      }
+      // switched off, they only follow
+      GAME.police.tactics = false;
+      var plain = GAME.police.spawnUnit(); if (plain) spawned.push(plain);
+      r.politeOff = !plain || plain.tactic === 'chase';
+    } finally {
+      GAME.police.tactics = false;
+      GAME.police.clearWanted();
+      if (P.inCar) GAME.exitCar();
+      GAME.test.fastForward(1);
+      spawned.forEach(function (c) { if (!c.gone) GAME.vehicles.removeCar(c); });
+      GAME.army.tanks().forEach(function (c) { GAME.vehicles.removeCar(c); });
+      GAME.godMode = false;
+      P.health = 100;
+      GAME.test.teleport(-60, 40); GAME.test.fastForward(0.5);
+    }
+    return r;
+  });
+  check('law: there is a sixth star, and the HUD has room for it', law.six, JSON.stringify(law));
+  check('law: at six the army comes — soldiers, and a tank', law.tank && law.army, JSON.stringify(law));
+  check('law: take the tank and it is yours, cannon and all', law.mine && law.cannon, JSON.stringify(law));
+  check('law: a tank flattens what it drives into', law.crush, JSON.stringify(law));
+  check('law: from three stars the cruisers ram, PIT and box you in', law.tactics === 'box,pit,ram' || law.tactics === 'box,chase,pit,ram', JSON.stringify(law));
+  check('law: a PIT at your back wheel spins you round', law.pitT && law.spun, JSON.stringify(law));
+  check('law: with the tactics off they only follow', law.politeOff, JSON.stringify(law));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the
