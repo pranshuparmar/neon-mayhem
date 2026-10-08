@@ -127,7 +127,8 @@
 //       armoured van does its rounds; a racer pulls up at the lights. An
 //       outlaw is fair game, and stopping one pays (and makes the papers —
 //       a slipped four-star manhunt does too, a bust does not). Six
-//       strangers on the pavement ask a favour each, and Lola counts them.
+//       strangers on the mainland pavements ask a favour each, six more on
+//       Isla Verde once the bridges open, and Lola counts them.
 //   4y. AROUND THE GAME — messages stack; the district name keeps out of a
 //       mission's title; every overlay uses the game's face; the title says
 //       LOADING until it can answer; pause takes keys, ignores a click that
@@ -8682,8 +8683,47 @@ function withTimeout(p, ms) {
     st.page.on && /ARMORED|VAN/.test(st.page.head) && st.page.date && st.page.pausedHides && st.page.gone, JSON.stringify(st.page));
   check('papers: a big story runs once', st.once[0] === true && st.once[1] === false, JSON.stringify(st.once));
 
+  // The road markings. The yellow centre dashes ran straight through every
+  // junction, and the two roads' lines crossed in the middle of the box.
+  // They stop short now, and each arm has a zebra and a stop line across
+  // the lane that comes in — the lane the traffic really drives.
+  var rm = await page.evaluate(function () {
+    var C = GAME.city, M = C.roadMarks, R = C.R, H = C.ROAD_HALF, r = {}, ff = function (s) { GAME.test.fastForward(s); };
+    function inBox(a, b) { for (var k = 0; k < R.length; k++) if (b > R[k] - H && a < R[k] + H) return true; return false; }
+    r.dashes = M.dashes.length;
+    r.inBox = M.dashes.filter(function (d) { return d[0] === d[2] ? inBox(d[1], d[3]) : inBox(d[0], d[2]); }).length;
+    r.arms = M.zebraArms; r.stops = M.stops.length;
+    // a car coming up to a crossing on each axis: is it on the stop line's side?
+    var keep = { t: GAME.settings.maxTraffic, p: GAME.settings.maxParked };
+    GAME.settings.maxTraffic = 0; GAME.settings.maxParked = 0;
+    GAME.world.cars.slice().forEach(function (c) { if (!c.parkedSpot) GAME.vehicles.removeCar(c); });
+    var picks = [M.stops.filter(function (q) { return q.dir[0] === 0 && Math.abs(q.x) < 300 && Math.abs(q.z) < 300; })[0],
+      M.stops.filter(function (q) { return q.dir[1] === 0 && Math.abs(q.x) < 300 && Math.abs(q.z) < 300; })[0]];
+    r.sides = picks.map(function (q) {
+      var road = q.dir[0] === 0 ? 'x' : 'z';
+      // the road's centre line, and where the car starts, 40 m back up it
+      var cx = road === 'x' ? Math.round(q.x / 50) * 50 : null, cz = road === 'z' ? Math.round(q.z / 50) * 50 : null;
+      if (road === 'x') cx = R.reduce(function (a, b) { return Math.abs(b - q.x) < Math.abs(a - q.x) ? b : a; });
+      else cz = R.reduce(function (a, b) { return Math.abs(b - q.z) < Math.abs(a - q.z) ? b : a; });
+      var sx = road === 'x' ? cx : q.x - q.dir[0] * 40, sz = road === 'z' ? cz : q.z - q.dir[1] * 40;
+      GAME.test.teleport(sx + 15, sz + 15); ff(0.2);
+      var car = GAME.vehicles.spawnCar('sedan', sx, sz, Math.atan2(q.dir[0], q.dir[1]), { occupied: 'ai', ai: { mode: 'traffic', desired: 8, laneX: 0, laneZ: 0 } });
+      ff(3);
+      var lat = road === 'x' ? car.pos.x - cx : car.pos.z - cz, line = road === 'x' ? q.x - cx : q.z - cz;
+      GAME.vehicles.removeCar(car);
+      return { road: road, carSide: +lat.toFixed(1), lineSide: +line.toFixed(1), same: lat * line > 0 };
+    });
+    GAME.settings.maxTraffic = keep.t; GAME.settings.maxParked = keep.p;
+    GAME.test.teleport(-60, 40); ff(0.3);
+    return r;
+  });
+  check('roads: the centre lines stop short of every junction — none cross in the box',
+    rm.dashes > 500 && rm.inBox === 0, rm.inBox + ' dashes in a junction box, of ' + rm.dashes);
+  check('roads: every arm that goes on has a zebra and a stop line', rm.arms > 250 && rm.stops === rm.arms, JSON.stringify({ arms: rm.arms, stops: rm.stops }));
+  check('roads: the stop line is across the lane the traffic drives up to it', rm.sides.every(function (q) { return q.same; }), JSON.stringify(rm.sides));
+
   // Six strangers, six favours.
-  var sg = await page.evaluate(function () {
+  var sg = await page.evaluate(async function () {
     var r = {}, P = GAME.player, C = GAME.city, K = GAME.strangers, L = GAME.lola, M = GAME.missions;
     var ff = function (s) { GAME.test.fastForward(s); };
     var keepPrefs = JSON.stringify(GAME.prefs), keepCash = P.cash;
@@ -8820,12 +8860,89 @@ function withTimeout(p, ms) {
       put(mc, 346, 250); ff(0.6);
       r.marco = { busy: K.busy, msg: last(/FAVOUR/), done: K.done };
       off();
-      // --- all six: Lola's tally, and the papers ---
+      // --- all six: Lola's tally — and the papers wait for the island's six ---
+      function tally() { L.open(); L.choose(/HOW AM I/); var t = (L.says.match(/Strangers helped: \d+ of \d+/) || [''])[0]; L.close(); return t; }
+      var keepIsla = GAME.isla.isOpen();
+      GAME.isla.setOpen(false);
+      r.paper6 = GAME.herald.printed.some(function (p) { return p.kind === 'samaritan'; });
+      r.tally = tally();
+      // --- across the bridges, six more ---
+      GAME.isla.setOpen(true);
+      r.tallyOpen = tally();
+      var isle = K.people().filter(function (q) { return q.def.isla; });
+      r.isleThere = isle.length === 6 && isle.every(function (q) { return GAME.isla.contains(q.at.x, q.at.z) && !C.isInWater(q.at.x, q.at.z); });
+      // SAL: up to the observatory against the clock
+      var sal = near('sal'); K.ask('sal'); ff(0.2);
+      var sc = car('sedan', sal.at.x + 4, sal.at.z + 3); ff(0.5);
+      r.salGo = { phase: K.job && K.job.phase, timer: K.job ? Math.round(K.job.timer) : 0 };
+      put(sc, K.job.to.x, K.job.to.z); ff(0.5);
+      r.sal = last(/FAVOUR/);
+      off();
+      // COOKIE: knock the cooler about and it is soup; carry it gently and it is not
+      var ck = near('cookie'); K.ask('cookie'); ff(0.2);
+      var cc = car('van', ck.at.x + 4, ck.at.z + 3); ff(0.5);
+      GAME.vehicles.damageCar(cc, cc.spec.hp * 0.3, 'wall'); ff(0.3);
+      r.cookieSoup = last(/FAVOUR FAILED/);
+      off();
+      near('cookie'); K.ask('cookie'); ff(0.2);
+      cc = car('van', ck.at.x + 4, ck.at.z + 3); ff(0.5);
+      put(cc, K.job.to.x, K.job.to.z); ff(0.5);
+      r.cookie = last(/FAVOUR/);
+      off();
+      // NINA: a picture facing away is no use; one with the tower in it is
+      near('nina'); K.ask('nina'); ff(0.2);
+      var tw = K.job.tower, vp = C.nearestRoadPoint(tw.x - 70, tw.z - 40);
+      GAME.test.teleport(vp.x, vp.z); ff(0.3);
+      P.heading = Math.atan2(tw.x - P.pos.x, tw.z - P.pos.z) + Math.PI; GAME.cam.yaw = P.heading; ff(0.5);
+      GAME.photo.snap(); ff(0.3);
+      r.ninaMiss = { busy: K.busy, msg: last(/lighthouse/) };
+      // (the camera develops a picture on the next frame drawn, and takes no
+      // other till it has: let one be drawn)
+      await new Promise(function (res) { setTimeout(res, 400); });
+      P.heading = Math.atan2(tw.x - P.pos.x, tw.z - P.pos.z); GAME.cam.yaw = P.heading; ff(0.5);
+      GAME.photo.snap(); ff(0.3);
+      r.nina = last(/FAVOUR/);
+      off();
+      // GUS: a boat out to the dinghy, and back to the marina
+      near('gus'); K.ask('gus'); ff(0.2);
+      var dg = K.job.dinghy, bt = GAME.vehicles.spawnCar('boat', dg.pos.x + 20, dg.pos.z, 0);
+      bt.pos.y = C.seaY(bt.pos.x, bt.pos.z);
+      GAME.test.teleport(bt.pos.x + 3, bt.pos.z); ff(0.3); GAME.test.enterNearestCar(bt); ff(1.3);
+      put(bt, dg.pos.x + 8, dg.pos.z); bt.pos.y = C.seaY(bt.pos.x, bt.pos.z); ff(0.5);
+      r.gusAboard = K.job && K.job.phase;
+      var hm = K.job.home, wet = null;
+      for (var rr = 10; rr < 120 && !wet; rr += 5) for (var aa = 0; aa < 6.28 && !wet; aa += 0.2) {
+        var wx = hm.x + Math.cos(aa) * rr, wz = hm.z + Math.sin(aa) * rr;
+        if (C.isBoatWater(wx, wz)) wet = { x: wx, z: wz };
+      }
+      put(bt, wet.x, wet.z); bt.pos.y = C.seaY(wet.x, wet.z); ff(0.5);
+      r.gus = last(/FAVOUR/);
+      off();
+      // LUPE: sit still and he has his picture; get clear and he has nothing
+      var lp = near('lupe'); K.ask('lupe'); ff(0.2);
+      var lc = car('sports', lp.at.x + 4, lp.at.z + 3); ff(0.5);
+      for (var ls = 0; ls < 20 && K.busy; ls++) ff(1);
+      r.lupeSnapped = last(/FAVOUR FAILED/);
+      off();
+      near('lupe'); K.ask('lupe'); ff(0.2);
+      lc = car('sports', lp.at.x + 4, lp.at.z + 3); ff(0.5);
+      var far = C.nearestRoadPoint(lc.pos.x + 260, lc.pos.z);
+      put(lc, far.x, far.z); ff(6);
+      r.lupe = last(/FAVOUR/);
+      off();
+      // WALT: he runs; put him down and the money goes back to Walt
+      var wt = near('walt'); K.ask('walt'); ff(0.2);
+      var man = K.job.man;
+      GAME.test.teleport(man.pos.x + 15, man.pos.z); ff(1);
+      r.waltRan = man.state;
+      GAME.peds.kill(man, 'gun', true); ff(0.3);
+      GAME.test.teleport(wt.at.x + 3, wt.at.z); ff(0.5);
+      r.walt = last(/FAVOUR/);
+      off();
       GAME.herald.resetCooldown();
       r.paper = GAME.herald.printed.some(function (p) { return p.kind === 'samaritan'; });
-      L.open(); L.choose(/HOW AM I/);
-      r.tally = (L.says.match(/Strangers helped: \d+ of \d+/) || [''])[0];
-      L.close();
+      r.tallyAll = tally();
+      GAME.isla.setOpen(keepIsla);
       // --- X twice walks away from one ---
       GAME.prefs.strangers.ray = false;
       near('ray'); K.ask('ray'); ff(0.2);
@@ -8842,8 +8959,8 @@ function withTimeout(p, ms) {
     }
     return r;
   });
-  check('strangers: six of them, on the pavement, off every road and clear of the walls',
-    sg.spots.length === 6 && sg.spots.every(function (s) { return s.road >= 6.6 && s.clear; }), JSON.stringify(sg.spots));
+  check('strangers: twelve of them, both islands, on the pavement, off every road and clear of the walls',
+    sg.spots.length === 12 && sg.spots.every(function (s) { return s.road >= 6.6 && s.clear; }), JSON.stringify(sg.spots));
   check('strangers: come near and one is there, marked, and on the radar', sg.there.ped && sg.there.mark && sg.there.blip, JSON.stringify(sg.there));
   check('strangers: walk up and they ask, in their own name, yes or no',
     sg.asks.open && /RAY/.test(sg.asks.from) && sg.asks.opts.length === 2, JSON.stringify(sg.asks));
@@ -8864,7 +8981,19 @@ function withTimeout(p, ms) {
   check('strangers: MARCO — a sedan will not do, and a scrape ends the date',
     sg.marcoSedan === 'car' && sg.marcoDrive === 'drive' && !sg.marcoScraped.busy && /driving/.test(sg.marcoScraped.msg), JSON.stringify({ sedan: sg.marcoSedan, drive: sg.marcoDrive, scraped: sg.marcoScraped }));
   check('strangers: and done right, she smiles', !sg.marco.busy && /A DATE IN STYLE/.test(sg.marco.msg) && sg.marco.done === 6, JSON.stringify(sg.marco));
-  check('strangers: Lola keeps the tally, and all six make the papers', sg.tally === 'Strangers helped: 6 of 6' && sg.paper, JSON.stringify({ tally: sg.tally, paper: sg.paper }));
+  check('strangers: Lola keeps the tally — six while the bridges are shut, and no papers yet',
+    sg.tally === 'Strangers helped: 6 of 6' && !sg.paper6, JSON.stringify({ tally: sg.tally, paper: sg.paper6 }));
+  check('strangers: the bridges open, and six more wait on Isla Verde', sg.tallyOpen === 'Strangers helped: 6 of 12' && sg.isleThere,
+    JSON.stringify({ tally: sg.tallyOpen, there: sg.isleThere }));
+  check('strangers: SAL — up to the observatory against the clock', sg.salGo.phase === 'drive' && sg.salGo.timer >= 70 && /STARGAZER/.test(sg.sal), JSON.stringify({ go: sg.salGo, msg: sg.sal }));
+  check('strangers: COOKIE — knocked about it is soup; carried gently it is not', /soup/.test(sg.cookieSoup) && /MELTDOWN/.test(sg.cookie), JSON.stringify({ soup: sg.cookieSoup, done: sg.cookie }));
+  check('strangers: NINA — a picture facing away is no use; the lighthouse in frame is the cover',
+    sg.ninaMiss.busy && /No lighthouse/.test(sg.ninaMiss.msg) && /LIGHTHOUSE SHOT/.test(sg.nina), JSON.stringify({ miss: sg.ninaMiss, done: sg.nina }));
+  check('strangers: GUS — out to the dinghy in a boat, and his brother back to the marina', sg.gusAboard === 'back' && /MAN OVERBOARD/.test(sg.gus), JSON.stringify({ aboard: sg.gusAboard, done: sg.gus }));
+  check('strangers: LUPE — sit still and he gets his picture; get clear and he has nothing', /his picture/.test(sg.lupeSnapped) && /NO PICTURES/.test(sg.lupe),
+    JSON.stringify({ snapped: sg.lupeSnapped, done: sg.lupe }));
+  check('strangers: WALT — the man runs; put him down and take the money back', sg.waltRan === 'flee' && /WHAT HE OWES/.test(sg.walt), JSON.stringify({ ran: sg.waltRan, done: sg.walt }));
+  check('strangers: all twelve, both islands, and the papers have heard', sg.tallyAll === 'Strangers helped: 12 of 12' && sg.paper, JSON.stringify({ tally: sg.tallyAll, paper: sg.paper }));
   check('strangers: X twice walks away from a favour, and they are back on the pavement',
     sg.oneX === true && !sg.twoX.busy && /walked away/.test(sg.twoX.msg) && sg.twoX.backOut, JSON.stringify({ one: sg.oneX, two: sg.twoX }));
 

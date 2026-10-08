@@ -13,7 +13,7 @@
 GAME.photo = (function () {
   var MAX = 36, MAX_W = 1920, MAX_W_TOUCH = 1440;
   var album = [];              // { id, t, name, blob, url, thumb }
-  var pending = false, toastT = 0, albumOpen = false, nextId = 1;
+  var pending = false, toastT = 0, albumOpen = false, nextId = 1, lastSnapT = -1e9;
   var toastShot = null;        // the shot on the print that slid in
   var viewing = null, viewPaused = false;   // the one open at full size
   var el = {};
@@ -24,6 +24,7 @@ GAME.photo = (function () {
   function snap() {
     if (pending || !GAME.started || GAME.paused || GAME.mapOpen || GAME.shopOpen || GAME.shareOpen || GAME.lolaOpen) return false;
     pending = true;
+    lastSnapT = GAME.time;   // (when, for anybody waiting on a picture: strangers.js)
     if (GAME.audio.shutter) GAME.audio.shutter();
     if (GAME.haptics && GAME.haptics.uiTap) GAME.haptics.uiTap();
     // the mirror: a blink of black through the viewfinder
@@ -390,6 +391,7 @@ GAME.photo = (function () {
     get viewing() { return viewing; },
     get count() { return album.length; },
     get pending() { return pending; },
+    get lastSnap() { return lastSnapT; },
     // headless: the shots themselves; and the album dropped from memory and
     // read back from the browser's store, the way a fresh visit finds it
     album: function () { return album; },

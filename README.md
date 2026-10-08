@@ -45,7 +45,7 @@ Want the details? **[Read the full tour →](docs/FEATURES.md)**
 
 ## What's new
 
-- 🗞️ **A city with its own business** — getaway chases, hold-ups, an armoured van and racers at the lights; six strangers with a favour each; and the morning paper when you make the news.
+- 🗞️ **A city with its own business** — getaway chases, hold-ups, an armoured van and racers at the lights; a dozen strangers with a favour each, on both islands; and the morning paper when you make the news.
 - 🌊 **Life on the water** — jet skis and boats out in the bay, a jet ski of your own at the northern pier, and the harbour patrol's launches when you're wanted at sea.
 - 🎓 **Lola's first day** — a new game can be shown around: a ride, a first delivery, then a new look at the barber with the pay.
 - 🏠 **Walk-in interiors** — every shop, your homes, the casino's horse races, and a glass showroom with the helicopters on its roof.

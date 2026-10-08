@@ -3,6 +3,9 @@
 // near — with one odd job apiece: a salesman late for a plane, a wife who
 // wants a car followed, a kid whose bike has been taken, an old lady's lost
 // dog, a crew whose driver never showed, and a nervous man with a date.
+// And six more on Isla Verde, once the bridges are open — a photographer, an
+// astronomer, the ice cream factory, a fisherman's lost brother, a film star
+// with a photographer on her tail, and a man owed money down at the port.
 //
 // Walk up (or pull up) and they ask. A favour runs like a job: a title, an
 // objective, a route on the map; X twice walks away from it. Done is done —
@@ -19,6 +22,10 @@ GAME.strangers = (function () {
   function prefs() { GAME.prefs = GAME.prefs || {}; return GAME.prefs; }
   function done(id) { var s = prefs().strangers || {}; return !!s[id]; }
   function doneCount() { var n = 0; for (var i = 0; i < DEFS.length; i++) if (done(DEFS[i].id)) n++; return n; }
+  // the island's six are there once the bridges are
+  function avail(d) { return !d.isla || !!(GAME.isla && GAME.isla.isOpen()); }
+  function reachable() { var n = 0; for (var i = 0; i < DEFS.length; i++) if (avail(DEFS[i])) n++; return n; }
+  function onIsla(x, z) { return !!(GAME.isla && GAME.isla.contains(x, z)); }
   function say(t, s) { GAME.hud.message(t, s || 3.5); }
   function dist(a, x, z) { return Math.sqrt(U.dist2(a.x, a.z, x, z)); }
   function land(car) { return !!car && !car.dead && !car.spec.boat && !car.spec.heli && !car.spec.plane; }
@@ -62,7 +69,8 @@ GAME.strangers = (function () {
       var a = Math.random() * Math.PI * 2, r = U.randRange(Math.random, r0, r1);
       var rp = C.nearestRoadPoint(from.x + Math.cos(a) * r, from.z + Math.sin(a) * r);
       if (!rp || rp.kind === 'local' || C.isInWater(rp.x, rp.z) || C.inAirport(rp.x, rp.z)) continue;
-      if (GAME.isla && GAME.isla.contains(rp.x, rp.z)) continue;
+      // (on the same island as wherever it is from)
+      if (onIsla(rp.x, rp.z) !== onIsla(from.x, from.z)) continue;
       var d = dist(from, rp.x, rp.z);
       if (d < r0 * 0.75 || d > r1 * 1.25) continue;
       return rp;
@@ -78,7 +86,13 @@ GAME.strangers = (function () {
     tito: { shirt: 0x9fe8d8, pants: 0x3a4a68, skin: 0x8a6848, hair: 'afro', hairCol: 0x1c1a18 },
     rosa: { shirt: 0x8a6ae8, pants: 0x684a3a, skin: 0xf0d8c0, hair: 'pompadour', hairCol: 0x8a8a90 },
     vince: { shirt: 0x2a2a34, pants: 0x2a2a34, skin: 0xeac8a8, hair: 'flattop', hairCol: 0x2e2018 },
-    marco: { shirt: 0xf9d99a, pants: 0x3a4a68, skin: 0x6a4c34, hair: 'pompadour', hairCol: 0x1c1a18 }
+    marco: { shirt: 0xf9d99a, pants: 0x3a4a68, skin: 0x6a4c34, hair: 'pompadour', hairCol: 0x1c1a18 },
+    nina: { shirt: 0x60c890, pants: 0xd8d0c0, skin: 0xeac8a8, hair: 'ponytail', hairCol: 0xd8b86a },
+    sal: { shirt: 0xf0f0e8, pants: 0x684a3a, skin: 0xc89878, hair: 'crew', hairCol: 0x8a8a90 },
+    cookie: { shirt: 0xf7a8c4, pants: 0xf0f0e8, skin: 0x8a6848, hair: 'afro', hairCol: 0x2e2018 },
+    gus: { shirt: 0x8fd0f0, pants: 0x3a4a68, skin: 0x6a4c34, hair: 'crew', hairCol: 0x1c1a18 },
+    lupe: { shirt: 0xe86a8a, pants: 0x2a2a34, skin: 0xc89878, hair: 'ponytail', hairCol: 0x1c1a18 },
+    walt: { shirt: 0x9fe8d8, pants: 0x684a3a, skin: 0xf0d8c0, hair: 'flattop', hairCol: 0x8a8a90 }
   };
   var DEFS = [
     { id: 'ray', who: 'RAY', title: 'AIRPORT RUSH', pay: 400, where: [262, -40],
@@ -98,13 +112,36 @@ GAME.strangers = (function () {
       begin: vinceBegin, step: vinceStep },
     { id: 'marco', who: 'MARCO', title: 'A DATE IN STYLE', pay: 500, where: [340, 160],
       ask: 'I\'ve a date with the girl of my dreams and my car\'s in the shop. Pick her up in something classy — a limo, something fast — and get her to the casino. Gently.',
-      begin: marcoBegin, step: marcoStep }
+      begin: marcoBegin, step: marcoStep },
+    // Isla Verde, once the bridges are open: placed off its own landmarks
+    { id: 'nina', who: 'NINA', title: 'THE LIGHTHOUSE SHOT', pay: 450, isla: true, near: function (I) { return [I.lighthouse.x - 70, I.lighthouse.z - 40]; },
+      ask: 'I\'m on assignment for a travel magazine and my camera\'s just died on me. You\'ve got one? Get me the lighthouse — the whole tower, in the frame. I\'ll buy it off you.',
+      begin: ninaBegin, step: ninaStep },
+    { id: 'sal', who: 'SAL', title: 'STARGAZER', pay: 500, isla: true, near: function (I) { return [I.police.x + 30, I.police.z + 40]; },
+      ask: 'Forty years I\'ve waited for this comet and my bus broke down. The observatory, up the hill — it\'s low in the sky and sinking. Please.',
+      begin: salBegin, step: salStep },
+    { id: 'cookie', who: 'COOKIE', title: 'MELTDOWN', pay: 400, isla: true, near: function (I) { return [I.factory.x - 40, I.factory.z - 30]; },
+      ask: 'The freezer van\'s dead and there\'s a beach full of kids at the cove waiting on this cooler. Get it there before it\'s soup — and gently, it\'s packed in ice.',
+      begin: cookieBegin, step: cookieStep },
+    { id: 'gus', who: 'GUS', title: 'MAN OVERBOARD', pay: 550, isla: true, near: function (I) { return [I.marina.x + 10, I.marina.z - 45]; },
+      ask: 'My brother took the dinghy out and the engine\'s quit on him — he\'s drifting out past the point. Take a boat off the jetty and bring him in?',
+      begin: gusBegin, step: gusStep },
+    { id: 'lupe', who: 'LUPE', title: 'NO PICTURES', pay: 600, isla: true, near: function (I) { return [I.hospital.x - 40, I.hospital.z + 30]; },
+      ask: 'Don\'t look — that man with the camera has been on me since the marina. I\'m supposed to be on a set in Hollywood, not here. Drive me somewhere and lose him.',
+      begin: lupeBegin, step: lupeStep },
+    { id: 'walt', who: 'WALT', title: 'WHAT HE OWES', pay: 450, isla: true, near: function (I) { return [I.container.x - 20, I.container.z + 55]; },
+      ask: 'A fella down at the container yard has owed me for a boat engine since spring. He\'ll run when he sees you coming. Bring me back my money.',
+      begin: waltBegin, step: waltStep }
   ];
   function def(id) { for (var i = 0; i < DEFS.length; i++) if (DEFS[i].id === id) return DEFS[i]; return null; }
 
   // ---------- the people on the pavement ----------
   function setup() {
-    people = DEFS.map(function (d) { return { def: d, at: pavement(d.where[0], d.where[1]), ped: null, mark: null, asked: false }; });
+    var I = GAME.city.islaPois;
+    people = DEFS.filter(function (d) { return !d.isla || I; }).map(function (d) {
+      var w = d.isla ? d.near(I) : d.where;
+      return { def: d, at: pavement(w[0], w[1]), ped: null, mark: null, asked: false };
+    });
   }
   var markGeo = null, markMat = null;
   function markMesh() {
@@ -131,7 +168,7 @@ GAME.strangers = (function () {
     var f = GAME.focus();
     for (var i = 0; i < people.length; i++) {
       var p = people[i], d2 = U.dist2(p.at.x, p.at.z, f.x, f.z);
-      var gone = done(p.def.id) || (job && job.def === p.def && job.away);
+      var gone = done(p.def.id) || !avail(p.def) || (job && job.def === p.def && job.away);
       if (p.ped && (p.ped.dead || p.ped.gone)) { if (p.mark) { GAME.scene.remove(p.mark); p.mark = null; } p.ped = null; }
       if (!p.ped && !gone && d2 < NEAR_R * NEAR_R) putOut(p);
       else if (p.ped && (gone || d2 > KEEP_R * KEEP_R)) takeIn(p);
@@ -163,7 +200,7 @@ GAME.strangers = (function () {
     var p = P(), at = p.inCar ? p.car.pos : p.pos, r = p.inCar ? CAR_TALK_R : TALK_R;
     for (var i = 0; i < people.length; i++) {
       var q = people[i];
-      if (!q.ped || q.asked || done(q.def.id)) continue;
+      if (!q.ped || q.asked || done(q.def.id) || !avail(q.def)) continue;
       if (dist(q.ped.pos, at.x, at.z) > r) continue;
       q.asked = true;
       ask(q);
@@ -221,11 +258,11 @@ GAME.strangers = (function () {
     GAME.addCash(d.pay);
     GAME.audio.sting('win');
     if (GAME.haptics && GAME.haptics.win) GAME.haptics.win();
-    say('FAVOUR DONE — ' + d.title + '  +$' + d.pay + (line ? '  ·  ' + line : '') + '  ·  strangers ' + doneCount() + ' of ' + DEFS.length, 5);
+    say('FAVOUR DONE — ' + d.title + '  +$' + d.pay + (line ? '  ·  ' + line : '') + '  ·  strangers ' + doneCount() + ' of ' + reachable(), 5);
     if (GAME.track) GAME.track('stranger-done');
     GAME.save();
     tidy();
-    // all six: the papers have heard about you
+    // every one of them, both islands: the papers have heard about you
     if (doneCount() === DEFS.length && GAME.herald) GAME.herald.front('samaritan');
   }
   function fail(reason) {
@@ -262,38 +299,80 @@ GAME.strangers = (function () {
     ring.position.set(t[0], GAME.city.groundY(t[0], t[1]) + 3, t[1]);
   }
 
-  // ---------- RAY: the airport ----------
-  var GATE = { x: -160, z: 396 };
-  function rayBegin(j) {
+  // ---------- a ride against the clock (RAY, SAL, COOKIE) ----------
+  // Into a car near them; then wherever it is, before time runs out. A clock
+  // fitted to the drive (the route, at a fair lick, and some to spare), and
+  // — for anything fragile — a limit on what the car can take on the way.
+  function ferryBegin(j, o) {
+    j.ferry = o;
     j.phase = 'car';
-    if (inLand()) rayAboard(j);
-    else objective('Get a car — Ray is coming with you.');
+    if (inLand()) ferryAboard(j);
+    else objective(o.needCar);
   }
-  function rayAboard(j) {
+  function ferryAboard(j) {
+    var o = j.ferry, to = o.to();
     takeIn(j.who); j.away = true;
-    say('Ray piles in with his sample case. "The airport — step on it!"', 3);
-    var f = GAME.focus(), nodes = GAME.nav.roadPath(f.x, f.z, GATE.x, GATE.z), len = 0;
+    say(o.aboard, 3);
+    var f = GAME.focus(), nodes = GAME.nav.roadPath(f.x, f.z, to.x, to.z), len = 0;
     for (var i = 1; i < nodes.length; i++) len += Math.sqrt(U.dist2(nodes[i].x, nodes[i].z, nodes[i - 1].x, nodes[i - 1].z));
-    j.timer = Math.max(70, Math.round(len / 13 + 30));
-    j.phase = 'drive';
-    objective('Get Ray to the airport gate before his flight goes.');
-    target(GATE.x, GATE.z);
+    j.timer = Math.max(70, Math.round(len / (o.pace || 13) + 30));
+    j.to = to; j.phase = 'drive'; j.car = inLand(); j.hp0 = j.car.hp;
+    objective(o.go);
+    target(to.x, to.z);
   }
-  function rayStep(j, dt) {
-    var car = inLand();
+  function ferryStep(j, dt) {
+    var car = inLand(), o = j.ferry;
     if (j.phase === 'car') {
-      if (car && dist(car.pos, j.who.at.x, j.who.at.z) < 30) rayAboard(j);
+      if (car && dist(car.pos, j.who.at.x, j.who.at.z) < 30) ferryAboard(j);
       else target(j.who.at.x, j.who.at.z);
       return;
     }
     j.timer -= dt;
     GAME.hud.missionTimer(j.timer, true);
-    if (!car) { j.outT = (j.outT || 0) + dt; if (j.outT > 6) return fail('Ray grabbed a cab.'); }
+    if (!car) { j.outT = (j.outT || 0) + dt; if (j.outT > 6) return fail(o.left); }
     else j.outT = 0;
-    if (P().car && P().car.dead) return fail('Ray is not getting in another wreck with you.');
-    if (j.timer <= 0) return fail('He missed his flight.');
-    if (car && dist(car.pos, GATE.x, GATE.z) < 14) win('Ray runs for the gate, case and all.');
+    if (P().car && P().car.dead) return fail(o.wreck);
+    if (o.fragile && j.car && j.car.hp < j.hp0 - j.car.spec.hp * o.fragile) return fail(o.broke);
+    if (j.timer <= 0) return fail(o.late);
+    if (car && dist(car.pos, j.to.x, j.to.z) < 14) win(o.there);
   }
+
+  // RAY: the airport
+  var GATE = { x: -160, z: 396 };
+  function rayBegin(j) {
+    ferryBegin(j, { to: function () { return GATE; },
+      needCar: 'Get a car — Ray is coming with you.',
+      aboard: 'Ray piles in with his sample case. "The airport — step on it!"',
+      go: 'Get Ray to the airport gate before his flight goes.',
+      left: 'Ray grabbed a cab.', wreck: 'Ray is not getting in another wreck with you.',
+      late: 'He missed his flight.', there: 'Ray runs for the gate, case and all.' });
+  }
+  function rayStep(j, dt) { ferryStep(j, dt); }
+
+  // SAL: the observatory, up the hill, before the comet sets
+  function obsGate() { var O = GAME.city.islaPois.observatory, rp = GAME.city.nearestRoadPoint(O.x, O.z); return { x: rp.x, z: rp.z }; }
+  function salBegin(j) {
+    ferryBegin(j, { to: obsGate, pace: 11,
+      needCar: 'Get a car — Sal is coming up the hill with you.',
+      aboard: 'Sal folds himself in with a telescope case. "Up! Up the hill!"',
+      go: 'Get Sal up to the observatory before the comet sets.',
+      left: 'Sal flags down a farm truck.', wreck: 'Sal walks. "Forty years. I can wait for the next one."',
+      late: 'The comet has set. Sal says it\'s fine. It isn\'t.', there: 'Sal is through the door before you stop. "Thank you, thank you!"' });
+  }
+  function salStep(j, dt) { ferryStep(j, dt); }
+
+  // COOKIE: a cooler of ice cream to the cove, against the melt, and gently
+  function coveKiosk() { var V = GAME.city.islaPois.cove, rp = GAME.city.nearestRoadPoint(V.x, V.z); return { x: rp.x, z: rp.z }; }
+  function cookieBegin(j) {
+    ferryBegin(j, { to: coveKiosk, pace: 12, fragile: 0.2,
+      needCar: 'Get a car — Cookie will load the cooler.',
+      aboard: 'Cookie wedges the cooler in. "Smooth driving. It\'s melting as we speak."',
+      go: 'Get the cooler to the cove before it melts — and don\'t knock it about.',
+      left: 'Cookie hails a fruit lorry.', wreck: 'The cooler is everywhere. So is the ice cream.',
+      broke: 'You knocked it about. It\'s soup.', late: 'Too late. It\'s soup.',
+      there: 'A beach full of kids cheers the cooler in.' });
+  }
+  function cookieStep(j, dt) { ferryStep(j, dt); }
 
   // ---------- DANI: follow that car ----------
   function daniBegin(j) {
@@ -547,6 +626,172 @@ GAME.strangers = (function () {
     if (dist(c.pos, CASINO.x, CASINO.z) < 12 && Math.abs(c.speed) < 3) win('She\'s smiling. Marco owes you.');
   }
 
+  // ---------- NINA: the lighthouse, in the frame ----------
+  // Your camera (photo.js): a picture taken from near enough, with the tower
+  // in the view, is the one she wants.
+  function ninaBegin(j) {
+    var L = GAME.city.islaPois.lighthouse;
+    j.tower = { x: L.x, z: L.z, y: GAME.city.groundY(L.x, L.z) + 8 };
+    j.snap0 = GAME.photo ? GAME.photo.lastSnap : 0;
+    j.phase = 'shoot';
+    objective('Take a photo with the lighthouse in it (' + (GAME.isTouch ? '📷' : GAME.controls ? GAME.controls.label('KeyC') : 'C') + ') — from close enough to count.');
+    target(L.x, L.z);
+  }
+  function ninaStep(j) {
+    var snap = GAME.photo ? GAME.photo.lastSnap : 0;
+    if (snap === j.snap0) return;
+    j.snap0 = snap;
+    var t = j.tower, f = GAME.focus(), d = dist(f, t.x, t.z);
+    if (d > 170) { say('Too far — she wants the tower, not a speck.', 2.5); return; }
+    // (looked at a few metres in front of it: a line to its middle runs
+    // into the tower itself, which hides nothing)
+    var cam = GAME.cameraObj.position, cd = Math.max(1, dist(cam, t.x, t.z));
+    var ax = t.x + (cam.x - t.x) / cd * 7, az = t.z + (cam.z - t.z) / cd * 7;
+    if (!GAME.inPlainView(ax, t.y, az)) { say('No lighthouse in that one. Try again.', 2.5); return; }
+    win('"That\'s the cover," says Nina.');
+  }
+
+  // ---------- GUS: his brother, adrift ----------
+  // A boat off the jetty (the marina keeps one), out to the dinghy, and back.
+  function gusBegin(j) {
+    var M = GAME.city.islaPois.marina, SL = GAME.sealife, spot = null;
+    for (var t = 0; t < 60 && !spot; t++) {
+      var a = Math.random() * Math.PI * 2, r = U.randRange(Math.random, 150, 260);
+      var x = M.x + Math.cos(a) * r, z = M.z + Math.sin(a) * r;
+      if (SL && SL.roomy(x, z, 14)) spot = { x: x, z: z };
+    }
+    if (!spot) return fail('The coastguard got to him first.');
+    var dinghy = GAME.vehicles.spawnCar('boat', spot.x, spot.z, Math.random() * 6.28, { occupied: 'ai', mission: true, color: 0x2a2e3a, ai: { mode: 'parked' } });
+    if (!dinghy) return fail('The coastguard got to him first.');
+    dinghy.pos.y = GAME.city.seaY(spot.x, spot.z);
+    j.dinghy = dinghy; j.bits.push({ kind: 'car', o: dinghy });
+    j.home = { x: M.x, z: M.z };
+    j.phase = 'out';
+    objective('Take a boat and get out to the dinghy.');
+    target(spot.x, spot.z);
+  }
+  function gusStep(j) {
+    var p = P(), boat = p.inCar && p.car && p.car.spec.boat ? p.car : null, dg = j.dinghy;
+    if (!dg || dg.gone) return fail('The dinghy has gone under.');
+    if (j.phase === 'out') {
+      target(dg.pos.x, dg.pos.z);
+      if (boat && dist(boat.pos, dg.pos.x, dg.pos.z) < 12) {
+        // over the side and into yours
+        if (dg.riderMesh) { dg.mesh.remove(dg.riderMesh); disposeTree(dg.riderMesh); dg.riderMesh = null; }
+        dg.occupied = null; dg.ai = null;
+        j.phase = 'back';
+        say('He scrambles across, soaked. "Thought I was a goner."', 3);
+        objective('Bring him back in to the marina.');
+        target(j.home.x, j.home.z);
+      }
+      return;
+    }
+    if (boat && dist(boat.pos, j.home.x, j.home.z) < 45) win('Gus hugs his brother, then cuffs him round the ear.');
+  }
+
+  // ---------- LUPE: no pictures ----------
+  // A photographer on a moped, on your bumper. Get far enough away for long
+  // enough and he has lost you; let him sit beside you and he has his shot.
+  function lupeBegin(j) {
+    j.phase = 'car';
+    if (inLand()) lupeGo(j);
+    else objective('Get a car — Lupe is coming with you.');
+  }
+  function lupeGo(j) {
+    var car = inLand(), C = GAME.city;
+    takeIn(j.who); j.away = true;
+    var fx = Math.sin(car.heading), fz = Math.cos(car.heading);
+    var rp = C.nearestRoadPoint(car.pos.x - fx * 45, car.pos.z - fz * 45);
+    var pap = GAME.vehicles.spawnCar('motorcycle', rp.x, rp.z, car.heading, { occupied: 'ai', mission: true, color: 0xf0f0f4,
+      ai: { mode: 'traffic', desired: 21, laneX: 0, laneZ: 0, reckless: true, follow: car } });
+    if (!pap) return fail('He has gone. Lupe is almost disappointed.');
+    j.pap = pap; j.bits.push({ kind: 'car', o: pap });
+    j.phase = 'lose'; j.timer = 120; j.awayT = 0; j.closeT = 0;
+    say('Lupe ducks in behind her sunglasses. "Him — on the moped. Lose him."', 3);
+    objective('Lose the photographer.');
+    target(null);
+  }
+  function lupeStep(j, dt) {
+    var car = inLand();
+    if (j.phase === 'car') {
+      if (car && dist(car.pos, j.who.at.x, j.who.at.z) < 30) lupeGo(j);
+      else target(j.who.at.x, j.who.at.z);
+      return;
+    }
+    var pap = j.pap;
+    if (!pap || pap.gone || pap.dead || pap.occupied !== 'ai') return win('Not a single picture. Lupe blows you a kiss.');
+    if (!car) { j.outT = (j.outT || 0) + dt; if (j.outT > 5) return fail('You left her in the car — he got his picture.'); }
+    else j.outT = 0;
+    j.timer -= dt;
+    GAME.hud.missionTimer(j.timer, true);
+    var at = car ? car.pos : P().pos, d = dist(at, pap.pos.x, pap.pos.z);
+    // Further back he rides the streets after you; close up he rides at your
+    // shoulder, matching your pace — the streets' own driving would carry
+    // him straight past a car that had stopped, never to come back round.
+    var tgt = car || P();
+    if (d < 30) {
+      if (pap.ai.mode !== 'race') pap.ai = { mode: 'race' };
+      alongside(pap, tgt.pos || tgt.pos, car ? car.heading : P().heading, car ? car.speed : 0);
+    } else if (pap.ai.mode !== 'traffic') {
+      pap.ai = { mode: 'traffic', desired: 21, laneX: 0, laneZ: 0, reckless: true, follow: car };
+    } else if (car) pap.ai.follow = car;
+    if (d < 12 && Math.abs((car ? car.speed : 0)) < 6) { j.closeT += dt; if (j.closeT > 4) return fail('He got his picture.'); }
+    else j.closeT = Math.max(0, j.closeT - dt);
+    if (d > 160) { j.awayT += dt; if (j.awayT > 4 || d > 240) return win('Not a single picture. Lupe blows you a kiss.'); }
+    else j.awayT = 0;
+    if (GAME.frame % 20 === 0) objective(d < 40 ? 'Lose the photographer — he\'s right behind you!' : 'Lose the photographer — keep going…');
+    if (j.timer <= 0) return fail('He hung on long enough. Tomorrow\'s papers, page three.');
+  }
+
+  // ride at somebody's left shoulder: steer for the spot, at their pace
+  function alongside(rider, at, heading, speed) {
+    var c = rider.controls, fx = Math.sin(heading), fz = Math.cos(heading);
+    var tx = at.x + fz * 3 + fx * 0.5, tz = at.z - fx * 3 + fz * 0.5;
+    var dx = tx - rider.pos.x, dz = tz - rider.pos.z, d = Math.sqrt(dx * dx + dz * dz);
+    var dh = U.wrapPI((d > 2 ? Math.atan2(dx, dz) : heading) - rider.heading);
+    var vd = Math.min(24, Math.max(0, speed) + d * 0.8);
+    c.steer = U.clamp(dh * 2.2, -1, 1);
+    c.throttle = U.clamp((vd - rider.speed) * 0.35, -1, 1);
+    c.handbrake = false;
+  }
+
+  // ---------- WALT: what he owes ----------
+  // The man at the container yard runs when you come for him. Put him down —
+  // he is fair game — and the money is yours to take back.
+  function waltBegin(j) {
+    var K = GAME.city.islaPois.container, spot = pavement(K.x + 20, K.z - 20);
+    var man = GAME.peds.spawnPed(spot.x, spot.z, { look: { shirt: 0x684a3a, pants: 0x2a2a34, skin: 0xc89878, hair: 'mullet', hairCol: 0x5a3c22 } });
+    if (!man) return fail('He has skipped the island.');
+    man.jobPed = true; man.state = 'wait'; man.speed = 0; man.outlaw = true; man.hp0 = man.hp;
+    j.man = man; j.bits.push({ kind: 'ped', o: man });
+    j.phase = 'find';
+    objective('Find the man at the container yard. He will run.');
+    target(spot.x, spot.z);
+  }
+  function waltStep(j) {
+    var m = j.man, f = GAME.focus();
+    if (j.phase === 'find') {
+      if (!m || m.gone) return fail('He has skipped the island.');
+      target(m.pos.x, m.pos.z);
+      if (dist(m.pos, f.x, f.z) < 25 && m.state === 'wait') {
+        m.jobPed = false;
+        GAME.peds.startFlee(m, f.x, f.z, 40);
+        say('He sees you coming and bolts!', 2);
+        objective('Catch him.');
+      }
+      if (m.dead || (m.knockT || 0) > 0 || m.hp < (m.hp0 || 30) * 0.6) {
+        j.phase = 'back';
+        say('He coughs up — a roll of notes, damp with sweat.', 3);
+        objective('Take the money back to Walt.');
+        target(j.who.at.x, j.who.at.z);
+        return;
+      }
+      if (m.state !== 'wait' && dist(m.pos, f.x, f.z) > 150) return fail('He got away into the yard.');
+      return;
+    }
+    if (dist(f, j.who.at.x, j.who.at.z) < 8) win('Walt counts it twice. "Every cent."');
+  }
+
   // ---------- each tick ----------
   function update(dt) {
     if (!GAME.started) return;
@@ -580,7 +825,7 @@ GAME.strangers = (function () {
     if (people && !job) {
       for (var i = 0; i < people.length; i++) {
         var q = people[i];
-        if (done(q.def.id)) continue;
+        if (done(q.def.id) || !avail(q.def)) continue;
         if (U.dist2(q.at.x, q.at.z, f.x, f.z) < 220 * 220) put(q.at.x, q.at.z, '#c86bff', 3.5);
       }
     }
@@ -602,7 +847,8 @@ GAME.strangers = (function () {
     route: function () { return job && job.target ? route : null; },
     target: function () { return job ? job.target : null; },
     get done() { return doneCount(); },
-    get total() { return DEFS.length; },
+    // as many as can be reached: the mainland's, and the island's once it is open
+    get total() { return reachable(); },
     // headless: who is where, and asking one of them straight away
     people: function () { if (!people) setup(); return people; },
     ask: function (id) { if (!people) setup(); for (var i = 0; i < people.length; i++) if (people[i].def.id === id) { begin(people[i]); return true; } return false; },

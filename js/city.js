@@ -778,11 +778,18 @@ GAME.city = (function () {
       var zEnd = hitsAirport ? AP.fz0 - 1 : 480;
       asphalt.addGroundQuad(R[i], 0.03, (-480 + zEnd) / 2, ROAD_HALF * 2, zEnd + 480, 0, 0x100e16);
       asphalt.addGroundQuad(-72, 0.03, R[i], 856, ROAD_HALF * 2, 0, 0x100e16);
-      // dashed center lines
+      // Dashed centre lines — stopping short of every crossing, the way the
+      // paint does. They used to run on straight through each junction, and
+      // the two roads' lines crossed in a plus in the middle of every box.
       for (var d = -470; d < 470; d += 12) {
-        if (d + 5 < zEnd) batches.marks.addGroundQuad(R[i], 0.06, d + 3, 0.25, 4, 0, 0xd8c46a);
-        if (d > -500 && d < 350) batches.marks.addGroundQuad(d + 3, 0.06, R[i], 4, 0.25, 0, 0xd8c46a);
+        if (d + 5 < zEnd && !atCrossing(d + 1, d + 5)) { batches.marks.addGroundQuad(R[i], 0.06, d + 3, 0.25, 4, 0, 0xd8c46a); markStats.dashes.push([R[i], d + 1, R[i], d + 5]); }
+        if (d > -500 && d < 350 && !atCrossing(d + 1, d + 5)) { batches.marks.addGroundQuad(d + 3, 0.06, R[i], 4, 0.25, 0, 0xd8c46a); markStats.dashes.push([d + 1, R[i], d + 5, R[i]]); }
       }
+    }
+    // and at every crossing, what the lines stop for
+    for (var ji = 0; ji < R.length; ji++) {
+      var jEnd = R[ji] + ROAD_HALF > AP.fx0 && R[ji] - ROAD_HALF < AP.fx1 ? AP.fz0 - 1 : 480;
+      for (var jj = 0; jj < R.length; jj++) junctionMarks(batches.marks, R[ji], R[jj], jEnd);
     }
     // sidewalks around each block
     for (var bi = 0; bi < R.length - 1; bi++) for (var bj = 0; bj < R.length - 1; bj++) {
@@ -979,6 +986,44 @@ GAME.city = (function () {
   function addSign(batch, slotIdx, x, y, z, rotY, w, h, tint) {
     var s = city.signSlots[slotIdx];
     batch.addWallQuad(x, y, z, w, h, rotY, tint === undefined ? 0xffffff : tint, s.u0, s.v0, s.u1, s.v1);
+  }
+
+  // Crossings of the street grid. The centre dashes stop JUNCTION_CLEAR
+  // short of the crossing road's centre; between there and the box, each arm
+  // of the junction where the road really goes on (not onto the beach past
+  // the boulevard, nor the airfield fence) gets a zebra crossing from kerb
+  // to kerb, in line with the pavements, and a stop line across the lane
+  // that comes in — the lane the traffic actually drives (vehicles.js
+  // setLane: travelling along (mx, mz), it keeps to (mz, -mx) * 3.1).
+  var JUNCTION_CLEAR = 12.5, ZEBRA_IN = 7, ZEBRA_OUT = 10, STOP_AT = 11;
+  var PAINT = 0xbcbcb4;   // a weathered white: the marks draw unlit, and full white glared at night
+  // what was painted, for a test to hold the grid to (each dash end to end,
+  // and each stop line's centre)
+  var markStats = city.roadMarks = { dashes: [], stops: [], zebraArms: 0 };
+  function atCrossing(a, b) {
+    for (var k = 0; k < R.length; k++) if (b > R[k] - JUNCTION_CLEAR && a < R[k] + JUNCTION_CLEAR) return true;
+    return false;
+  }
+  function junctionMarks(b, x, z, zEnd) {
+    var zl = (ZEBRA_IN + ZEBRA_OUT) / 2, zw = ZEBRA_OUT - ZEBRA_IN, k, sg;
+    // the north-south road's two arms
+    for (sg = -1; sg <= 1; sg += 2) {
+      var zArm = z + sg * ZEBRA_OUT;
+      if (zArm < -480 || zArm > zEnd) continue;
+      for (k = -4; k <= 4; k++) b.addGroundQuad(x + k * 1.2, 0.06, z + sg * zl, 0.55, zw, 0, PAINT);
+      // coming in from this side means travelling -sg along z: that lane is x - sg * 3.1
+      b.addGroundQuad(x - sg * 3, 0.06, z + sg * STOP_AT, 5.6, 0.45, 0, PAINT);
+      markStats.stops.push({ x: x - sg * 3, z: z + sg * STOP_AT, dir: [0, -sg] }); markStats.zebraArms++;
+    }
+    // and the east-west road's
+    for (sg = -1; sg <= 1; sg += 2) {
+      var xArm = x + sg * ZEBRA_OUT;
+      if (xArm < -500 || xArm > 356) continue;
+      for (k = -4; k <= 4; k++) b.addGroundQuad(x + sg * zl, 0.06, z + k * 1.2, zw, 0.55, 0, PAINT);
+      // coming in from this side means travelling -sg along x: that lane is z + sg * 3.1
+      b.addGroundQuad(x + sg * STOP_AT, 0.06, z + sg * 3, 0.45, 5.6, 0, PAINT);
+      markStats.stops.push({ x: x + sg * STOP_AT, z: z + sg * 3, dir: [-sg, 0] }); markStats.zebraArms++;
+    }
   }
 
   function buildBlocks(batches, atlas) {
