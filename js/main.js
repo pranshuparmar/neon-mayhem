@@ -528,6 +528,7 @@
     GAME.streetlife.update(dt);
     GAME.strangers.update(dt);
     GAME.heist.update(dt);
+    GAME.business.update(dt);
     GAME.missions.update(dt);
     GAME.guide.update(dt);
     GAME.tapes.update(dt);

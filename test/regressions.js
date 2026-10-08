@@ -134,6 +134,10 @@
 //       from the marina, a Vulture GT through the paint shop (which sends a
 //       car out another colour), and the job — hands up, the floor kept or
 //       the alarm let go, the vault, the bags, the street, the lock-up.
+//   5u. BUSINESSES — the barber bought at its counter; a day fills its till,
+//       which empties into your pocket; left, it stops at three days and
+//       Lola pages once; a hold-up there runs with the till, and stopping
+//       the thief gets it back. The bar is for sale too; Lola counts them.
 //   4y. AROUND THE GAME — messages stack; the district name keeps out of a
 //       mission's title; every overlay uses the game's face; the title says
 //       LOADING until it can answer; pause takes keys, ignores a click that
@@ -8492,6 +8496,11 @@ function withTimeout(p, ms) {
     function lc() { return GAME.world.cars.filter(function (c) { return c.spec.boat && c.isPolice && !c.dead && !c.gone && c.ai && c.ai.mode === 'chase'; }); }
     if (P.inCar) GAME.exitCar();
     GAME.police.clearWanted(); ff(1);
+    // (nobody on foot takes you on the beach while this watches the launch:
+    // a player in the cells stops the police thinking, and the launch sat
+    // frozen wherever it was — 130 m out — and never pottered off)
+    var bust0 = GAME.playerBusted;
+    GAME.playerBusted = function () { };
     // --- gone ashore: the launch sits off the beach, and no more are sent
     // (wanted in the water just off it, so where they last saw you is
     // where you climbed out, as it would be) ---
@@ -8514,6 +8523,7 @@ function withTimeout(p, ms) {
     ff(8);
     r.pottered = l0 && !l0.gone ? Math.round(Math.hypot(l0.pos.x - p0.x, l0.pos.z - p0.z)) : -1;
     GAME.sealife.clear();
+    GAME.playerBusted = bust0;
     GAME.test.teleport(-60, 40); ff(0.5);
     r.after = GAME.player.state;
     return r;
@@ -8532,7 +8542,10 @@ function withTimeout(p, ms) {
     pat2.swimming && pat2.hauled !== null && pat2.hauled < 35 && pat2.cap === 2, JSON.stringify(pat2));
   check('patrol: gone ashore, the launch waits off the beach and no more are sent',
     pat3.ashore.n0 >= 1 && pat3.ashore.more === 0 && !pat3.ashore.swim && pat3.ashore.waits.length >= 1 &&
-    pat3.ashore.waits.every(function (w) { return w.wet && w.d < 70; }), JSON.stringify(pat3.ashore));
+    // (off the stretch of beach they are searching: unseen a while, the
+    // hunt works round where they last saw you, out to ninety metres, and
+    // the launch waits off that — on the water, holding still)
+    pat3.ashore.waits.every(function (w) { return w.wet && w.d < 130 && w.sp < 4; }), JSON.stringify(pat3.ashore));
   check('patrol: heat off, the launch stands down, lights out, and potters off about the bay',
     pat3.stoodDown && pat3.stoodDown.mode === 'cruise' && pat3.stoodDown.fleet && !pat3.stoodDown.lights && pat3.pottered > 20,
     JSON.stringify({ stood: pat3.stoodDown, moved: pat3.pottered }));
@@ -9259,6 +9272,92 @@ function withTimeout(p, ms) {
   check('heist: lose them, back to the lock-up: $25,000, the front page, a card, and it is done',
     hz.payday.paid === 25000 && hz.payday.step === 4 && !hz.payday.busy && hz.payday.paper && hz.payday.card && !hz.payday.offered && hz.payday.bank, JSON.stringify(hz.payday));
   check('heist: X twice walks away from a part, which waits to be done again', !hz.abandoned.busy && hz.abandoned.step === 0 && /walked away/.test(hz.abandoned.msg), JSON.stringify(hz.abandoned));
+
+  // ---------- 5u: businesses that pay ----------
+  // Buy the barber outright at its counter, let a day's trade fill the
+  // till, empty it; leave it and it stops at three days, and Lola says so
+  // once. And a hold-up there takes the till — stop the thief and the bag
+  // is your own takings.
+  var bz = await page.evaluate(function () {
+    var r = {}, P = GAME.player, B = GAME.business, SH = GAME.shops, S = GAME.streetlife, ff = function (s) { GAME.test.fastForward(s); };
+    var keepPrefs = JSON.stringify(GAME.prefs), keepCash = P.cash, lvl0 = GAME.chaos.level;
+    var msgs = [], ms0 = GAME.hud.message, pages = [], pg0 = GAME.hud.pager;
+    GAME.hud.message = function (t) { msgs.push(String(t)); return ms0.apply(GAME.hud, arguments); };
+    GAME.hud.pager = function (f, t) { pages.push(String(t)); return pg0.apply(GAME.hud, arguments); };
+    function last(re) { for (var i = msgs.length - 1; i >= 0; i--) if (re.test(msgs[i])) return msgs[i]; return ''; }
+    function row(id) { return SH.items(SH.current || { id: 'none', kind: 'none' }).filter(function (q) { return q.id === id; })[0] || null; }
+    try {
+      if (P.inCar) GAME.exitCar();
+      GAME.police.clearWanted(); S.reset(); B.reset();
+      P.cash = 100000;
+      // --- for sale at its own counter ---
+      SH.open('barber0');
+      var buyRow = row('biz_buy');
+      r.forSale = buyRow && { price: buyRow.price, ds: buyRow.ds };
+      var c0 = P.cash;
+      SH.buy('biz_buy');
+      r.bought = { owns: B.owns('barber0'), paid: c0 - P.cash, till: row('biz_till') && row('biz_till').off, msg: last(/is yours/) };
+      SH.close();
+      // --- a day's trade, and the till emptied ---
+      B.accrue(GAME.DAY_SECONDS);
+      r.day = B.till('barber0');
+      SH.open('barber0');
+      var c1 = P.cash;
+      r.tillRow = row('biz_till') && row('biz_till').ds;
+      SH.buy('biz_till');
+      r.took = { got: P.cash - c1, till: B.till('barber0') };
+      SH.close();
+      // --- left five days, it stops at three, and Lola pages once ---
+      var p0 = pages.length;
+      B.accrue(GAME.DAY_SECONDS * 5);
+      B.accrue(GAME.DAY_SECONDS);
+      r.full = { till: B.till('barber0'), cap: B.cap('barber0'), pages: pages.slice(p0).filter(function (t) { return /till at/.test(t); }).length };
+      var at = SH.locations().filter(function (l) { return l.id === 'barber0'; })[0].at;
+      r.blip = (SH.blips().filter(function (b) { return Math.abs(b.x - at.x) < 0.1 && Math.abs(b.z - at.z) < 0.1; })[0] || {}).color;
+      // --- a hold-up there: he runs with the till; put him down and it is on the pavement ---
+      GAME.chaos.set(3);
+      GAME.test.teleport(300, -60); ff(0.5);
+      var full = B.till('barber0');
+      r.robOn = S.start('robbery');
+      var ev = S.event;
+      r.rob = ev && { shop: ev.shop.id, stolen: ev.stolen, till: B.till('barber0'), msg: last(/STOP, THIEF/) };
+      if (ev) {
+        ff(2);
+        GAME.peds.kill(ev.thief, 'gun', true); ff(0.3);
+        var bag = GAME.world.pickups.filter(function (q) { return q.amount === full; })[0];
+        r.bag = bag ? bag.amount : 0;
+        if (bag) { var c2 = P.cash; GAME.test.teleport(bag.pos.x, bag.pos.z); ff(0.4); r.backInHand = P.cash - c2; }
+      }
+      S.reset();
+      // --- the bar in the Lucky Gull is for sale too ---
+      SH.open(GAME.interiors.bar);
+      r.bar = (row('biz_buy') || {}).price;
+      SH.close();
+      // --- and Lola knows ---
+      GAME.lola.open(); GAME.lola.choose(/WHERE'S THE MONEY/); r.money = GAME.lola.says;
+      GAME.lola.close(); GAME.lola.open(); GAME.lola.choose(/HOW AM I DOING/); r.how = GAME.lola.says; GAME.lola.close();
+    } finally {
+      GAME.hud.message = ms0; GAME.hud.pager = pg0;
+      if (SH.current) SH.close();
+      if (GAME.lolaOpen) GAME.lola.close();
+      S.reset(); GAME.police.clearWanted();
+      GAME.chaos.set(lvl0);
+      GAME.prefs = JSON.parse(keepPrefs); P.cash = keepCash;
+      GAME.test.teleport(-60, 40); ff(0.5);
+    }
+    return r;
+  });
+  check('business: the barber is for sale at its own counter, and buying it is $12,000',
+    bz.forSale && bz.forSale.price === 12000 && bz.bought.owns && bz.bought.paid === 12000 && bz.bought.till === true && /is yours/.test(bz.bought.msg), JSON.stringify({ sale: bz.forSale, bought: bz.bought }));
+  check('business: a day\'s trade fills the till, and THE TILL empties it into your pocket',
+    bz.day === 600 && /\$600 waiting/.test(bz.tillRow || '') && bz.took.got === 600 && bz.took.till === 0, JSON.stringify({ day: bz.day, row: bz.tillRow, took: bz.took }));
+  check('business: left, it holds three days, and Lola says so once', bz.full.till === bz.full.cap && bz.full.cap === 1800 && bz.full.pages === 1, JSON.stringify(bz.full));
+  check('business: a place of yours is green on the radar', bz.blip === '#5dff9e', String(bz.blip));
+  check('business: a hold-up at yours takes the till; put the thief down and it is all in the bag',
+    bz.robOn && bz.rob.shop === 'barber0' && bz.rob.stolen === 1800 && bz.rob.till === 0 && /your place/.test(bz.rob.msg) && bz.bag === 1800 && bz.backInHand === 1800,
+    JSON.stringify({ rob: bz.rob, bag: bz.bag, back: bz.backInHand }));
+  check('business: the bar in the Lucky Gull is for sale too', bz.bar === 45000, String(bz.bar));
+  check('business: and Lola counts them, and says where the money is', /business/i.test(bz.money || '') && /Businesses: 1 of 5/.test(bz.how || ''), JSON.stringify({ money: bz.money, how: bz.how }));
 
   // ---------- 6: a rider follows the deck when it tilts ----------
   // vehicles.js pitches a chassis over a ramp (negative rotation.x lifts the

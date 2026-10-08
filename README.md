@@ -45,6 +45,7 @@ Want the details? **[Read the full tour →](docs/FEATURES.md)**
 
 ## What's new
 
+- 🏪 **Businesses that pay** — buy the barber, THREADS, a hardware store or the bar in the Lucky Gull; the till fills every day for you to come and empty — and a hold-up there runs with it.
 - 💰 **The big score** — once the bridges open, Lola wants the Savings & Loan: case it with your camera, fetch Benny "the Ear" from the marina, get a getaway car resprayed, then keep the floor while he works the vault.
 - 🗞️ **A city with its own business** — getaway chases, hold-ups, an armoured van and racers at the lights; a dozen strangers with a favour each, on both islands; and the morning paper when you make the news.
 - 🌊 **Life on the water** — jet skis and boats out in the bay, a jet ski of your own at the northern pier, and the harbour patrol's launches when you're wanted at sea.

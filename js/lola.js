@@ -32,6 +32,7 @@ GAME.lola = (function () {
     casino: 'The Lucky Gull. The wheel\'s honest, mostly, the horses run on the screens down the right, and the bar patches you up. Spend what you can afford to lose.',
     derby: 'Gull Downs! Pick a horse and a stake. The odds are on the board: a 4/1 shot pays four times your stake plus your money back, and the long shots pay big because they mostly lose. Then watch it run.',
     wardrobe: 'Everything you own hangs in here, and changing is free. Buy something at THREADS and it turns up in every place you own.',
+    business: 'A business of your own. The till fills through the day — three days of it, no more — and sits there till you come and empty it at the counter. Leave it too long and somebody with a mask will empty it for you.',
     photo: function () { return 'Nice shot. Your photos are kept in the album — ' + (touch() ? 'PAUSE' : 'Esc') + ', then PHOTOS — and you can download the ones you like.'; }
   };
 
@@ -153,6 +154,9 @@ GAME.lola = (function () {
     if (left) lines.push(left + ' of my jobs are still waiting for you, and the first win on each pays best.');
     if (ST && ST.found < ST.total) lines.push((ST.total - ST.found) + ' stunt jumps still pay their first-time money.');
     if (T && T.found < T.total) lines.push((T.total - T.found) + ' lost tapes are out there, each worth something.');
+    var B = GAME.business;
+    if (B && B.count < B.total) lines.push('Or let money come to you: buy a business — the barber, THREADS, a hardware store, the bar in the Lucky Gull — and its till fills every day.');
+    else if (B && B.count) lines.push('Your businesses are taking money for you — go and empty the tills.');
     lines.push('And there\'s the Lucky Gull, if you feel lucky.');
     return { say: lines.join(' ') };
   }
@@ -199,6 +203,7 @@ GAME.lola = (function () {
       (ST && ST.islaTotal && islaOpen() ? ', and ' + ST.islaFound + ' of ' + ST.islaTotal + ' on the island' : '') + '. Lost tapes: ' + (T ? T.found + ' of ' + T.total : '—') +
       (GAME.strangers ? '. Strangers helped: ' + GAME.strangers.done + ' of ' + GAME.strangers.total : '') +
       (GAME.heist && (GAME.heist.offered() || GAME.heist.step > 0) ? '. The big score: ' + Math.min(GAME.heist.step, 4) + ' of 4 parts' : '') +
+      (GAME.business && GAME.business.count ? '. Businesses: ' + GAME.business.count + ' of ' + GAME.business.total : '') +
       '. You\'re holding $' + P.cash.toLocaleString() + ', you own ' + homes + ' of 3 places' + (g ? ' and ' + g + ' in the garage' : '') +
       '. Call it ' + pct + '% of Costa Rosa. ' + (pct < 25 ? 'Plenty left.' : pct < 75 ? 'Getting somewhere.' : 'Nearly there, kid.') };
   }

@@ -1452,6 +1452,11 @@ GAME.shops = (function () {
   function $(id) { return document.getElementById(id); }
   function note(t) { if (el.note) el.note.textContent = t || ''; }
   function items(loc) {
+    // (and, at a counter that can be bought, the business itself: business.js)
+    var biz = GAME.business ? GAME.business.rows(loc) : [];
+    return tradeItems(loc).concat(biz);
+  }
+  function tradeItems(loc) {
     switch (loc.kind) {
       case 'hardware': return hardwareItems();
       case 'dress': return dressItems();
@@ -1766,6 +1771,13 @@ GAME.shops = (function () {
     var P = GAME.player;
     if (P.cash < it.price) { note('You’re $' + (it.price - P.cash).toLocaleString() + ' short.'); GAME.audio.crash(0.12); GAME.haptics.deny(); return false; }
     GAME.addCash(-it.price);
+    // the place itself, or what is in its till (business.js)
+    if (id.indexOf('biz_') === 0) {
+      GAME.business.act(openShop, id);
+      if (openShop) render();
+      GAME.audio.pickup();
+      return true;
+    }
     switch (openShop.kind) {
       case 'hardware': buyHardware(id); break;
       case 'dress': buyDress(id); break;
@@ -1985,7 +1997,8 @@ GAME.shops = (function () {
       if (!loc.blipColor) loc.blipColor = '#' + loc.color.toString(16).padStart(6, '0');
       var b = blipPool[n] || (blipPool[n] = {});
       b.x = loc.at.x; b.z = loc.at.z;
-      b.color = home ? '#5dff9e' : loc.blipColor;
+      // (a home of yours, or a business: green)
+      b.color = home || (GAME.business && GAME.business.owns(loc.id)) ? '#5dff9e' : loc.blipColor;
       b.label = loc.kind === 'safehouse' ? (home ? '⌂' : '$') : '$';
       b.home = home;
       blipList[n++] = b;
@@ -2023,6 +2036,8 @@ GAME.shops = (function () {
     get isOpen() { return !!openShop; },
     get current() { return openShop; },
     get selected() { return openShop ? items(openShop)[sel] : null; },
+    // headless: what a counter has on it (and, where it can be bought, the business)
+    items: function (loc) { return items(loc || openShop); },
     locations: function () { return locations; },
     // the Gran Rosa Motors hall: its bounds and stairs, what is on display,
     // and how far its doors stand open

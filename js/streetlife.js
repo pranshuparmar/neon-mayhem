@@ -131,6 +131,10 @@ GAME.streetlife = (function () {
       pick.push(l);
     }
     if (!pick.length) return false;
+    // one of yours, if there is one about: the till there is worth the
+    // trouble (business.js)
+    var B = GAME.business, mine = B ? pick.filter(function (l) { return B.owns(l.id); }) : [];
+    if (mine.length) pick = mine;
     var shop = pick[Math.floor(Math.random() * pick.length)];
     var thief = GAME.peds.spawnPed(shop.at.x, shop.at.z);
     if (!thief) return false;
@@ -144,8 +148,11 @@ GAME.streetlife = (function () {
     // running from the door, and on for a good while
     GAME.peds.startFlee(thief, shop.at.x, shop.at.z, 60);
     GAME.audio.yelp(shop.at.x, shop.at.z);
-    say('"STOP, THIEF!" — ' + shop.name + ' has been held up. The thief is running for it.', 4.5);
-    ev = { kind: 'robbery', t: 0, thief: thief, shop: shop, near: false };
+    var stolen = B && B.owns(shop.id) ? B.robbed(shop.id) : 0;
+    say(B && B.owns(shop.id)
+      ? '"STOP, THIEF!" — your place, ' + shop.name + ', has been held up' + (stolen ? ', and he has the till — $' + stolen.toLocaleString() + '.' : '.') + ' He\'s running for it.'
+      : '"STOP, THIEF!" — ' + shop.name + ' has been held up. The thief is running for it.', 4.5);
+    ev = { kind: 'robbery', t: 0, thief: thief, shop: shop, near: false, stolen: stolen };
     return true;
   }
   function stepRobbery() {
@@ -155,7 +162,8 @@ GAME.streetlife = (function () {
     if (th.dead || (th.knockT || 0) > 0 || th.hp < (th.hp0 || 30) * 0.6) {
       // down: the bag goes on the pavement
       if (th.bag) { th.bag.parent.remove(th.bag); th.bag = null; }
-      var amt = 150 + Math.floor(Math.random() * 7) * 25;
+      // (the till he took from one of yours, if that is more)
+      var amt = Math.max(ev.stolen || 0, 150 + Math.floor(Math.random() * 7) * 25);
       GAME.combat.dropPickup(th.pos.x, th.pos.z, 'cash', amt);
       // yours, if it was you that put him down (a passing car is not a hero)
       if (th.byPlayer) {
@@ -166,7 +174,8 @@ GAME.streetlife = (function () {
       return;
     }
     if (th.gone || d > 150 || ev.t > 55) {
-      if (ev.near) say('The thief got away with it.', 2.5);
+      if (ev.stolen) say('The thief got away with your takings — $' + ev.stolen.toLocaleString() + '.', 3);
+      else if (ev.near) say('The thief got away with it.', 2.5);
       end();
     }
   }
