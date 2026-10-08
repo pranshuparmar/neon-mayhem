@@ -193,6 +193,40 @@ GAME.audio = (function () {
     o.onended = function () { try { o.disconnect(); g.disconnect(); } catch (e) { } };
   }
 
+  // A voice with no words (cast.js): one syllable of somebody talking. The
+  // letter picks the note off a scale round their pitch, so the same word
+  // comes out the same way twice, and a vowel opens the filter a little
+  // wider than a consonant. Nothing at all is made while muted or with the
+  // effects off — a silent blip is still three nodes, a line is forty of them.
+  var VOWEL = { a: 1.0, e: 1.35, i: 1.7, o: 0.8, u: 0.65, y: 1.5 };
+  var SCALE = [0, 2, 4, 7, 9, 12, -3, 5];
+  var lastBlipT = -9, voiceNodes = 0;
+  function babble(v, ch) {
+    if (!ctx || muted || !sfxOn || !v) return 0;
+    var t = ctx.currentTime;
+    // (a fast-forwarded scene would stack a sentence into one instant)
+    if (t - lastBlipT < 0.035) return 0;
+    lastBlipT = t;
+    var c = String(ch || 'a').toLowerCase(), code = c.charCodeAt(0) || 97;
+    var semi = SCALE[code % SCALE.length] * (v.spread || 6) / 12 + (Math.random() - 0.5) * 0.6;
+    var f = v.base * Math.pow(2, semi / 12), dur = 0.055 + Math.random() * 0.025;
+    var o = ctx.createOscillator(); o.type = v.wave || 'square';
+    o.frequency.setValueAtTime(f, t);
+    o.frequency.exponentialRampToValueAtTime(f * 0.93, t + dur);
+    var bp = ctx.createBiquadFilter(); bp.type = 'bandpass';
+    bp.frequency.value = (v.formant || 1200) * (VOWEL[c] || 1.15);
+    bp.Q.value = v.q || 1.8;
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(v.wave === 'sine' || v.wave === 'triangle' ? 0.34 : 0.2, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(bp); bp.connect(g); g.connect(sfxBus);
+    o.start(t); o.stop(t + dur + 0.03);
+    o.onended = function () { try { o.disconnect(); bp.disconnect(); g.disconnect(); } catch (e) { } };
+    voiceNodes += 3;
+    return 3;
+  }
+
   // A note held flat and let go cleanly, where tone() strikes and dies away.
   // A horn is held: struck like a bell, it was down to a quarter of itself
   // in a hundred and fifty milliseconds, under the engine.
@@ -645,6 +679,10 @@ GAME.audio = (function () {
       tone(1318, 0.5, 0.11, 'sine', 0, t);
       tone(1046, 0.7, 0.1, 'sine', 0, t + 0.22);
     },
+    // a syllable of somebody talking (cast.js), and how many nodes that has
+    // made so far (headless)
+    babble: babble,
+    get voiceNodes() { return voiceNodes; },
     // a pager going off: two short chirps
     pagerBeep: function () {
       if (!ctx) return;
