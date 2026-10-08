@@ -269,7 +269,7 @@ GAME.streetlife = (function () {
     var vmax = ad > 1.0 ? 8 : ad > 0.55 ? 13 : ad > 0.3 ? 20 : top;
     var th = car.speed > vmax ? -0.6 : 1;
     var fx = Math.sin(car.heading), fz = Math.cos(car.heading), look = 6 + Math.abs(car.speed) * 0.55, bias = 0;
-    var cars = GAME.world.cars;
+    var cars = GAME.world.cars, blk = null;
     for (var i = 0; i < cars.length; i++) {
       var o = cars[i];
       if (o === car || o.dead) continue;
@@ -277,9 +277,18 @@ GAME.streetlife = (function () {
       if (fd < 0.5 || fd > look || Math.abs(ox * fz - oz * fx) > 2.8) continue;
       th = fd < look * 0.45 ? -0.6 : Math.min(th, 0);
       bias = (ox * fz - oz * fx) > 0 ? -0.45 : 0.45;
+      blk = o;
       break;
     }
-    if (Math.abs(car.speed) < 1 && th > 0) car.unstickT = (car.unstickT || 0) + dt; else car.unstickT = 0;
+    // Something stopped in the way — your car pulled up on the line, a van
+    // left in the road — is gone round, not queued behind for good: braking
+    // to nothing and steering is no way past it, because a car at rest does
+    // not turn. Out past it at a crawl, hard over to the freer side.
+    if (blk && Math.abs(blk.speed) < 2 && Math.abs(car.speed) < 6) { th = 0.45; bias *= 2; }
+    // and wedged, whatever it was trying to do: back off and have another go
+    // (it only ever backed off while it was asking to go forward, so a car
+    // braking for something stopped in front sat there till the race ran out)
+    if (Math.abs(car.speed) < 1) car.unstickT = (car.unstickT || 0) + dt; else car.unstickT = 0;
     if (car.unstickT > 1.5) { car.reverseT = 0.9; car.unstickT = 0; }
     if (car.reverseT > 0) { car.reverseT -= dt; c.throttle = -1; c.steer = dh > 0 ? -1 : 1; c.handbrake = false; return; }
     c.throttle = th; c.steer = U.clamp(dh * 2.6 + bias, -1, 1); c.handbrake = false;
@@ -308,7 +317,12 @@ GAME.streetlife = (function () {
   function stepRacer(dt) {
     var p = P(), r = racer.car, mine = p.car;
     racer.t += dt;
-    if (!r || r.gone || r.dead || r.occupied !== 'ai') { dropRacer(); return; }
+    if (!racer.solo && (!r || r.gone || r.dead || r.occupied !== 'ai')) {
+      // crashed out mid-race: the flag is still up, and it is yours to take
+      if (racer.state !== 'race') { dropRacer(); return; }
+      racer.solo = true;
+      say('They\'ve crashed out — the flag is yours if you want it.', 3);
+    }
     if (!p.inCar || !mine || mine.dead || p.state !== 'alive') { dropRacer(); return; }
     var c = r.controls;
     if (racer.state === 'pull') {
@@ -343,14 +357,14 @@ GAME.streetlife = (function () {
       return;
     }
     // the race
-    drive(r, racer.route, 30, dt);
+    if (!racer.solo) drive(r, racer.route, 30, dt);
     var f = racer.fin;
     if (U.dist2(mine.pos.x, mine.pos.z, f[0], f[1]) < FINISH_R * FINISH_R) {
-      pay(300, 'You take them at the flag.');
+      pay(300, racer.solo ? 'You take the flag — they never made it.' : 'You take them at the flag.');
       dropRacer(true);
       return;
     }
-    if (U.dist2(r.pos.x, r.pos.z, f[0], f[1]) < FINISH_R * FINISH_R) {
+    if (!racer.solo && U.dist2(r.pos.x, r.pos.z, f[0], f[1]) < FINISH_R * FINISH_R) {
       say('They take it by a length.', 3);
       dropRacer(true);
       return;

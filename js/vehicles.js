@@ -1965,6 +1965,10 @@ GAME.vehicles = (function () {
     for (var i = 0; i < cars.length; i++) {
       var o = cars[i];
       if (o === car || o.dead) continue;
+      // (the cruiser on its tail is not coming the other way: sat a length
+      // behind a getaway and half over the line, it read as oncoming, and
+      // the getaway never pulled out round anything — streetlife.js)
+      if (o.ai && o.ai.follow === car) continue;
       var odx = o.pos.x - car.pos.x, odz = o.pos.z - car.pos.z;
       var fd = odx * fx + odz * fz;
       if (fd < -6 || fd > 40) continue;

@@ -6355,6 +6355,11 @@ function withTimeout(p, ms) {
     GAME.police.clearWanted();
     GAME.test.fastForward(0.8);
     P.health = 100;
+    // a clear range: a car takes a round, so one parked or passing in the
+    // twelve metres between stops every shot (all three read 0% when it did)
+    GAME.world.cars.slice().forEach(function (c) {
+      if (!(P.inCar && c === P.car) && U.dist2(c.pos.x, c.pos.z, P.pos.x + 6, P.pos.z) < 30 * 30) GAME.vehicles.removeCar(c);
+    });
     var armed = { civ: rate(0.15, 6, 3000), cop1: rate(0.36, 6, 3000), cop3: rate(0.48, 8, 3000) };
     C.set(4);
     var fx = GAME.focus(), shot = 0, tries = 0;
@@ -8523,7 +8528,7 @@ function withTimeout(p, ms) {
   var st = await page.evaluate(function () {
     var r = {}, P = GAME.player, C = GAME.city, S = GAME.streetlife, H = GAME.herald;
     var ff = function (s) { GAME.test.fastForward(s); };
-    var keepPrefs = JSON.stringify(GAME.prefs), keepCash = P.cash, lvl0 = GAME.chaos.level;
+    var keepPrefs = JSON.stringify(GAME.prefs), keepCash = P.cash, lvl0 = GAME.chaos.level, traffic0 = GAME.settings.maxTraffic;
     var msgs = [], ms0 = GAME.hud.message;
     GAME.hud.message = function (t) { msgs.push(String(t)); return ms0.apply(GAME.hud, arguments); };
     var crimes = [], rc0 = GAME.police.reportCrime;
@@ -8541,9 +8546,18 @@ function withTimeout(p, ms) {
       r.offQuiet = S.now;
       GAME.chaos.set(3);
       // --- a getaway car comes your way with a cruiser on its tail ---
+      // (the street to themselves: this is about the chase coming your way,
+      // not the getaway threading a jam — a narrow street with a car parked
+      // on one side and one pulled over for the siren on the other holds it
+      // up for good, now and then — and it can start a long way off)
+      var keepTraffic0 = GAME.settings.maxTraffic;
+      GAME.settings.maxTraffic = 0;
+      GAME.world.cars.slice().forEach(function (c) { if (c.occupied === 'ai') GAME.vehicles.removeCar(c); });
       r.chaseOn = S.start('chase');
       var e = S.event, minD = 1e9, lights = false, siren = false;
-      for (var t = 0; t < 25 * 60 && S.event === e && !e.perp.gone; t++) {
+      // (until it has come to you: run on past that and it is long gone by
+      // the time you would put it into a wall)
+      for (var t = 0; t < 35 * 60 && S.event === e && !e.perp.gone && minD > 25; t++) {
         ff(1 / 60);
         minD = Math.min(minD, Math.hypot(e.perp.pos.x - P.pos.x, e.perp.pos.z - P.pos.z));
         var lb = e.cop.mesh.userData.lightbar;
@@ -8559,6 +8573,7 @@ function withTimeout(p, ms) {
         ff(0.5);
         r.taken = { paid: P.cash - c0, crimes: crimes.length, paper: H.total > n0 && kinds()[kinds().length - 1] === 'hero', now: S.now };
       } else r.taken = { gone: true };
+      GAME.settings.maxTraffic = keepTraffic0;
       settle();
       // --- a hold-up: the thief runs with the bag ---
       H.resetCooldown();
@@ -8605,6 +8620,10 @@ function withTimeout(p, ms) {
         GAME.vehicles.damageCar(van, van.hp * 0.8, 'gun', true);
         ff(0.5);
         r.vanHit = { bags: GAME.world.pickups.filter(function (q) { return q.amount === 250 && lying.indexOf(q) < 0; }).length, wanted: GAME.police.wanted, paper: kinds().indexOf('van') >= 0 };
+        // (and off the road: left where it was robbed, it can be standing
+        // on the next check's race route)
+        settle();
+        if (!van.gone) GAME.vehicles.removeCar(van);
       }
       settle();
       // --- at the lights: somebody pulls up and revs ---
@@ -8616,12 +8635,54 @@ function withTimeout(p, ms) {
       r.racerOn = S.start('racer');
       for (var t2 = 0; t2 < 20 * 60 && S.racer && S.racer.state === 'pull'; t2++) ff(1 / 60);
       r.alongside = S.racer ? { state: S.racer.state, d: +Math.hypot(S.racer.car.pos.x - rc.pos.x, S.racer.car.pos.z - rc.pos.z).toFixed(1), flag: !!S.racer.marker } : null;
+      // The road to the flag is left to the two of you: a crash into
+      // passing traffic is a race too (below), but not this one. Your car
+      // stays where it stops — on the line, in their way.
+      var keepTraffic = GAME.settings.maxTraffic;
+      GAME.settings.maxTraffic = 0;
+      var clearRoad = function () {
+        GAME.world.cars.slice().forEach(function (c) { if (c !== rc && !(S.racer && c === S.racer.car) && c.occupied === 'ai') GAME.vehicles.removeCar(c); });
+      };
+      clearRoad();
       GAME.test.pressKey('KeyW', true); ff(1.5); GAME.test.pressKey('KeyW', false);
       r.raceOn = S.racer && S.racer.state;
+      // and your car, stopped dead in their lane a little way up the road
+      var rr = S.racer && S.racer.car;
+      if (rr) {
+        rc.pos.x = rr.pos.x + Math.sin(rr.heading) * 12; rc.pos.z = rr.pos.z + Math.cos(rr.heading) * 12;
+        rc.heading = rr.heading; rc.speed = 0; rc.vx = rc.vz = 0;
+      }
       msgs.length = 0;
       for (var t3 = 0; t3 < 70 * 60 && S.racer; t3++) { rc.controls.throttle = 0; ff(1 / 60); }
-      r.raceEnd = msgs.filter(function (m) { return /take/.test(m); })[0] || '';
+      r.raceEnd = msgs.filter(function (m) { return /take|peters/.test(m); })[0] || '';
+      // --- they crash out mid-race: the flag is still up, and yours ---
       settle();
+      if (!rc.gone) GAME.vehicles.removeCar(rc);
+      rc = GAME.vehicles.spawnCar('sedan', node.x, node.z, hd);
+      GAME.test.teleport(node.x + 2.5, node.z); ff(0.2);
+      GAME.test.enterNearestCar(rc); ff(1.5);
+      rc.speed = 0; rc.vx = rc.vz = 0; ff(0.5);
+      clearRoad();
+      if (S.start('racer')) {
+        for (var t6 = 0; t6 < 20 * 60 && S.racer && S.racer.state === 'pull'; t6++) ff(1 / 60);
+        GAME.test.pressKey('KeyW', true); ff(1.5); GAME.test.pressKey('KeyW', false);
+        msgs.length = 0;
+        var rv = S.racer && S.racer.car;
+        if (rv && S.racer.state === 'race') {
+          GAME.vehicles.ejectDriver(rv); ff(0.3);
+          r.crashOut = { on: !!S.racer, told: msgs.some(function (m) { return /crashed out/.test(m); }) };
+          var fin = S.racer && S.racer.fin, c6 = P.cash;
+          if (fin) { rc.pos.x = fin[0]; rc.pos.z = fin[1]; rc.speed = 0; ff(0.3); }
+          r.crashOut.paid = P.cash - c6;
+          r.crashOut.won = msgs.some(function (m) { return /You take the flag/.test(m); });
+          r.crashOut.over = !S.racer;
+        }
+      }
+      GAME.settings.maxTraffic = keepTraffic;
+      settle();
+      // (and nothing left standing in the road: your car on the flag and
+      // their empty one can be on a later check's way across town)
+      [rc, rv].forEach(function (c) { if (c && !c.gone) GAME.vehicles.removeCar(c); });
       // --- the papers: a manhunt slipped from four stars ---
       H.resetCooldown();
       GAME.chaos.set(0);
@@ -8665,6 +8726,7 @@ function withTimeout(p, ms) {
       GAME.test.pressKey('KeyW', false);
       settle();
       GAME.chaos.set(lvl0);
+      GAME.settings.maxTraffic = traffic0;
       GAME.prefs = JSON.parse(keepPrefs); P.cash = keepCash;
       GAME.test.teleport(-60, 40); ff(0.5);
     }
@@ -8684,7 +8746,9 @@ function withTimeout(p, ms) {
     st.vanOn && st.armour >= 3 && st.vanHit.bags === 3 && st.vanHit.wanted >= 3 && st.vanHit.paper, JSON.stringify({ armour: st.armour, hit: st.vanHit }));
   check('street: stopped in a car, a racer pulls up alongside, revs, and the flag is marked',
     st.racerOn && st.alongside && st.alongside.state === 'rev' && st.alongside.d < 4.5 && st.alongside.flag, JSON.stringify(st.alongside));
-  check('street: floor it and it is a race, and they run it to the flag', st.raceOn === 'race' && /take it|take them/.test(st.raceEnd), JSON.stringify({ on: st.raceOn, end: st.raceEnd }));
+  check('street: floor it and it is a race, and they run it to the flag — round your car, stopped on the line', st.raceOn === 'race' && /take it|take them/.test(st.raceEnd), JSON.stringify({ on: st.raceOn, end: st.raceEnd }));
+  check('street: and if they crash out mid-race, you are told, and the flag is yours to take',
+    st.crashOut && st.crashOut.on && st.crashOut.told && st.crashOut.paid === 300 && st.crashOut.won && st.crashOut.over, JSON.stringify(st.crashOut));
   check('papers: losing a four-star manhunt makes the front page', st.manhunt.cleared && st.manhunt.paper, JSON.stringify(st.manhunt));
   check('papers: a bust or a bribe is not an escape', st.clearedByHand);
   check('papers: the front page shows — the headline, a 1986 date — keeps out of the pause screen, and goes',
