@@ -113,6 +113,15 @@
 //       failure or a retry stays kind; paid, she waits out the card and sends
 //       you to CORTES CUTS, and after the chair the wider picture; driving
 //       off or abandoning lets you go, and her menu has the way back.
+//   5r. OUT ON THE WATER — a Wave Rider is moored off the northern pier and
+//       you ride it astride; switched on, people come out on jet skis and
+//       boats, keep to the water, go places and give you a wide berth; run
+//       one down and it is a crime and they flee; one can be taken from the
+//       water; they are held at the shut channel; a hull on the sand backs
+//       off it; inland the bay empties. Wanted at sea, the harbour patrol
+//       sends launches — none on land, one at two stars, two at three —
+//       that come alongside a stopped boat, haul a swimmer out, wait off
+//       the beach for you, and stand down to potter off when the heat goes.
 //   4y. AROUND THE GAME — messages stack; the district name keeps out of a
 //       mission's title; every overlay uses the game's face; the title says
 //       LOADING until it can answer; pause takes keys, ignores a click that
@@ -344,6 +353,11 @@ function withTimeout(p, ms) {
     // three seconds in. Every group below measures the game as it was
     // before she offered; group 5q asks it for itself.
     GAME.prefs.guide = 'done';
+    // And the bay empty: the leisure fleet (sealife.js) puts boats out
+    // wherever there is sea near you, and the groups on the water measure
+    // races, swims and moorings as they were before anybody else was out
+    // there. Group 5r puts them out for itself.
+    GAME.settings.maxBoats = 0;
     GAME.test.fastForward(1);
     var a = GAME.audio;
     var engine0 = a.engineState, skid0 = a.skid, siren0 = a.siren, vol0 = a.radio.setVolume;
@@ -2899,20 +2913,26 @@ function withTimeout(p, ms) {
     press('KeyF');
     GAME.test.fastForward(1);
     r.backIn = P.inCar && P.car === b && !P.swimming;
-    GAME.exitCar();
-    GAME.test.fastForward(0.2);
-    // wanted, out on the water: cruisers stay ashore, the helicopter comes
+    // wanted, out on the water: cruisers stay ashore, and the harbour patrol
+    // comes out by water instead — no helicopter below four stars (sealife,
+    // police.js). Kept moving, round in a circle, so nobody comes alongside.
     GAME.test.setWanted(2);
-    var wet = 0, heli = false;
-    for (var t = 0; t < 25; t += 1 / 30) {
+    GAME.test.pressKey('KeyW', true); GAME.test.pressKey('KeyA', true);
+    var wet = 0, heli = false, launch = false;
+    for (var t = 0; t < 15; t += 1 / 30) {
       GAME.test.fastForward(1 / 30);
       GAME.world.cars.forEach(function (c) {
-        if (c.isPolice && !c.spec.heli && (c.sinking || C.isInWater(c.pos.x, c.pos.z))) wet++;
+        if (c.isPolice && !c.spec.heli && !c.spec.boat && (c.sinking || C.isInWater(c.pos.x, c.pos.z))) wet++;
         if (c.aiAir) heli = true;
+        if (c.isPolice && c.spec.boat && c.ai && c.ai.mode === 'chase') launch = true;
       });
+      if (GAME.police.wanted < 2) GAME.test.setWanted(2);
     }
-    r.cops = { wet: wet, heli: heli, swimming: !!P.swimming, state: P.state };
+    GAME.test.pressKey('KeyW', false); GAME.test.pressKey('KeyA', false);
+    r.cops = { wet: wet, heli: heli, launch: launch, aboard: P.inCar && P.car === b, state: P.state };
     GAME.police.clearWanted();
+    GAME.exitCar();
+    GAME.test.fastForward(0.2);
     GAME.test.teleport(400, 0);
     GAME.test.fastForward(0.3);
     return r;
@@ -2927,8 +2947,8 @@ function withTimeout(p, ms) {
   check('boats: step off beside a pier and you are on the pier', boat.offPier && !boat.offPier.inCar && boat.offPier.onPier && !boat.offPier.swimming, JSON.stringify(boat.offPier));
   check('boats: step off in open water and you are over the side, swimming', boat.over && !boat.over.inCar && boat.over.swimming, JSON.stringify(boat.over));
   check('boats: and you can climb back in from the water', boat.backIn === true);
-  check('water: wanted out on the water — no cruiser follows you in, and the helicopter comes',
-    boat.cops && boat.cops.wet === 0 && boat.cops.heli, JSON.stringify(boat.cops));
+  check('water: wanted out on the water — no cruiser follows you in; the harbour patrol does, and no helicopter at two stars',
+    boat.cops && boat.cops.wet === 0 && boat.cops.launch && !boat.cops.heli && boat.cops.aboard && boat.cops.state === 'alive', JSON.stringify(boat.cops));
 
   // ---------- 5c: more to do ----------
   var con = await page.evaluate(function () {
@@ -8218,6 +8238,269 @@ function withTimeout(p, ms) {
   check('guide: so does abandoning the run', gd.abandoned.started && gd.abandoned.step === null && gd.abandoned.pref === 'left', JSON.stringify(gd.abandoned));
   check('guide: outside her day BEACH RUN is untouched', gd.untouched);
   check('guide: with the island open she does not call it shut', !gd.openIsland.tease && !gd.openIsland.skipTease, JSON.stringify(gd.openIsland));
+
+  // ---------- 5r: out on the water ----------
+  var sea = await page.evaluate(function () {
+    var r = {}, P = GAME.player, C = GAME.city, SL = GAME.sealife, V = GAME.vehicles.TYPES;
+    var ff = function (s) { GAME.test.fastForward(s); };
+    if (P.inCar) GAME.exitCar();
+    GAME.police.clearWanted();
+    GAME.settings.maxBoats = 0; SL.clear();
+    var keepIsla = GAME.isla.isOpen();
+    GAME.isla.setOpen(false);
+    var msgs = [], ms0 = GAME.hud.message;
+    GAME.hud.message = function (t) { msgs.push(String(t)); return ms0.apply(GAME.hud, arguments); };
+    var crimes = [], rc0 = GAME.police.reportCrime;
+    GAME.police.reportCrime = function (k) { crimes.push(k); return rc0.apply(GAME.police, arguments); };
+    try {
+      // --- a Wave Rider moored off the northern pier's north side, on your
+      // left walking out, as the Squalo is on its right ---
+      var mo = C.moorings.filter(function (m) { return m.vtype === 'jetski'; })[0];
+      r.moored = mo ? { x: mo.x, z: mo.z, left: mo.z < -188 && mo.z > -196 && mo.x > 370 && mo.x < 470 } : null;
+      GAME.test.teleport(mo.x, -186.5); ff(1.5);
+      var ski = GAME.world.cars.filter(function (c) { return c.spec.jetski && Math.hypot(c.pos.x - mo.x, c.pos.z - mo.z) < 3; })[0];
+      r.there = !!ski;
+      P.heading = Math.PI;
+      GAME.test.pressKey('KeyF', true); ff(0.05); GAME.test.pressKey('KeyF', false); ff(1.2);
+      r.aboard = !!ski && P.inCar && P.car === ski;
+      var j = P.mesh.userData.joints;
+      r.astride = r.aboard && P.mesh.visible && j.legL.rotation.x < -0.5 && j.torso.rotation.x > 0.1 &&
+        Math.abs(P.mesh.position.y - (ski.pos.y + 0.72 - 0.82)) < 0.35;
+      GAME.test.pressKey('KeyW', true); ff(1.5); GAME.test.pressKey('KeyW', false);
+      r.away = r.aboard ? +ski.speed.toFixed(1) : 0;
+      r.quicker = V.jetski.accel > V.boat.accel && V.jetski.maxSpeed > V.boat.maxSpeed && V.jetski.turn > V.boat.turn;
+      // --- out in the bay: with the fleet switched off, nobody comes out ---
+      ski.pos.set(505, C.seaY(505, -60), -60); ski.vx = ski.vz = 0; ski.speed = 0; ski.heading = 0;
+      ff(4);
+      r.noneWhenOff = SL.fleet.length;
+      // --- switched on, people come out for the day: on the water, somebody
+      // aboard every one, going places, and nobody runs you down. (By day,
+      // and on a full frame budget: both thin the fleet, and the groups above
+      // can leave the clock at night and the budget cut back.) ---
+      var mode0 = GAME.timeMode;
+      GAME.setTimeMode('day');
+      GAME.perf.testReset();
+      GAME.settings.maxBoats = 5;
+      var fl = { most: 0, types: {}, riders: true, dry: 0, minD: 1e9 }, seen = {};
+      for (var t = 0; t < 45 * 60; t++) {
+        ff(1 / 60);
+        var f = SL.fleet;
+        fl.most = Math.max(fl.most, f.length);
+        for (var i = 0; i < f.length; i++) {
+          var c = f[i];
+          fl.minD = Math.min(fl.minD, Math.hypot(c.pos.x - ski.pos.x, c.pos.z - ski.pos.z));
+          if (t % 30) continue;
+          fl.types[c.type] = 1;
+          if (!c.riderMesh) fl.riders = false;
+          if (!C.isBoatWater(c.pos.x, c.pos.z)) fl.dry++;
+          if (!seen[c.serial]) seen[c.serial] = { x: c.pos.x, z: c.pos.z, t: t, hp: c.hp, c: c };
+        }
+      }
+      var moved = 0, still = 0, worst = 0;
+      Object.keys(seen).forEach(function (k) {
+        var s = seen[k];
+        if (s.c.gone || s.c.dead) return;
+        worst = Math.max(worst, (s.hp - s.c.hp) / s.c.spec.hp);
+        if (s.t > 25 * 60) return;
+        if (Math.hypot(s.c.pos.x - s.x, s.c.pos.z - s.z) > 30) moved++; else still++;
+      });
+      fl.moved = moved; fl.still = still; fl.worstHull = +worst.toFixed(2);
+      GAME.setTimeMode(mode0);
+      fl.minD = +fl.minD.toFixed(1);
+      r.fleet = fl;
+      // --- run one down: it is a crime, and they make off ---
+      var lb = GAME.vehicles.spawnCar('jetski', ski.pos.x, ski.pos.z + 22, Math.PI / 2, { occupied: 'ai', ai: { mode: 'cruise' } });
+      lb.pos.y = C.seaY(lb.pos.x, lb.pos.z);
+      SL.adopt(lb); lb.cruise.idleT = 30;
+      ski.heading = 0; ski.speed = 16; ski.vx = 0; ski.vz = 16;
+      crimes.length = 0;
+      GAME.test.pressKey('KeyW', true); ff(1.6); GAME.test.pressKey('KeyW', false); ff(0.4);
+      r.ram = { crime: crimes.indexOf('hit_car') >= 0, fled: lb.cruise.fleeT > 0, crimes: crimes.slice() };
+      GAME.police.clearWanted();
+      // --- and one can be taken off its rider, from the water ---
+      ski.speed = 0; ski.vx = ski.vz = 0;
+      var tk = GAME.vehicles.spawnCar('jetski', 470, 60, 0, { occupied: 'ai', ai: { mode: 'cruise' } });
+      tk.pos.y = C.seaY(470, 60);
+      SL.adopt(tk); tk.cruise.idleT = 30;
+      GAME.exitCar(); ff(0.3);
+      GAME.test.teleport(472.5, 60); ff(0.3);
+      P.heading = -Math.PI / 2;
+      r.swimmingUp = !!P.swimming;
+      GAME.test.pressKey('KeyF', true); ff(0.05); GAME.test.pressKey('KeyF', false); ff(1.5);
+      r.taken = { aboard: P.inCar && P.car === tk, managed: SL.fleet.indexOf(tk) >= 0 };
+      // --- a leisure craft is held at the shut channel the way you are, and
+      // nobody is told about it ---
+      var edge = GAME.aircraft.edges().closed.maxX;
+      var ov = GAME.vehicles.spawnCar('jetski', edge - 4, 0, Math.PI / 2, { occupied: 'ai', ai: { mode: 'cruise' } });
+      ov.pos.y = C.seaY(ov.pos.x, 0);
+      SL.adopt(ov); ov.cruise.wp = { x: edge + 200, z: 0 }; ov.speed = 25; ov.vx = 25; ov.vz = 0;
+      msgs.length = 0;
+      var far = 0;
+      for (var e = 0; e < 120; e++) { ff(1 / 60); far = Math.max(far, ov.pos.x); }
+      r.held = { far: +far.toFixed(1), edge: edge, told: msgs.filter(function (m) { return /channel/.test(m); }).length };
+      // --- a hull nosed onto the sand backs off it ---
+      GAME.exitCar(); ff(0.3);
+      var sq = GAME.vehicles.spawnCar('boat', C.shoreline(-60) + 2.5, -60, -Math.PI / 2);
+      sq.pos.y = C.seaY(sq.pos.x, -60);
+      GAME.test.teleport(sq.pos.x + 3, -62.5); ff(0.3);
+      GAME.test.enterNearestCar(sq); ff(1.2);
+      sq.heading = -Math.PI / 2; sq.speed = 0; sq.vx = sq.vz = 0;
+      sq.pos.x = C.shoreline(-60) + 2.5;
+      var x0 = sq.pos.x;
+      r.bowDry = !C.isBoatWater(x0 - 2.9, -60);
+      GAME.test.pressKey('KeyS', true); ff(2.5); GAME.test.pressKey('KeyS', false);
+      r.backedOff = +(sq.pos.x - x0).toFixed(1);
+      // --- far inland, the bay empties and nobody new is put out ---
+      GAME.exitCar(); ff(0.3);
+      GAME.test.teleport(-60, 40); ff(2);
+      r.goneInland = SL.fleet.length;
+      ff(10);
+      r.noneInland = SL.fleet.length;
+      // --- Lola's word for the boat ---
+      r.tip = GAME.lola.line('boat');
+    } finally {
+      GAME.hud.message = ms0;
+      GAME.police.reportCrime = rc0;
+      GAME.test.pressKey('KeyW', false); GAME.test.pressKey('KeyS', false);
+      GAME.settings.maxBoats = 0; SL.clear();
+      if (P.inCar) GAME.exitCar();
+      GAME.isla.setOpen(keepIsla);
+      GAME.police.clearWanted();
+      GAME.test.teleport(-60, 40); ff(0.5);
+    }
+    return r;
+  });
+  check('sea: a Wave Rider is moored off the northern pier, on the left walking out',
+    sea.moored && sea.moored.left && sea.there, JSON.stringify(sea.moored));
+  check('sea: you board it off the pier and sit astride it, and it is quick away',
+    sea.aboard && sea.astride && sea.away > 8 && sea.quicker, JSON.stringify({ aboard: sea.aboard, astride: sea.astride, away: sea.away, quicker: sea.quicker }));
+  check('sea: with the fleet off, nobody is out on the water', sea.noneWhenOff === 0, String(sea.noneWhenOff));
+  check('sea: switched on, jet skis and boats come out, each with somebody aboard, always on the water',
+    sea.fleet.most >= 3 && sea.fleet.types.jetski && sea.fleet.types.boat && sea.fleet.riders && sea.fleet.dry === 0, JSON.stringify(sea.fleet));
+  check('sea: they go places, and come through it in one piece',
+    sea.fleet.moved >= 2 && sea.fleet.moved >= sea.fleet.still && sea.fleet.worstHull < 0.5, JSON.stringify(sea.fleet));
+  check('sea: nobody out for the day runs you down', sea.fleet.minD > 5, 'closest ' + sea.fleet.minD + ' m');
+  check('sea: run one down and it is a crime, and they make off', sea.ram.crime && sea.ram.fled, JSON.stringify(sea.ram));
+  check('sea: one can be taken off its rider from the water, and is yours', sea.swimmingUp && sea.taken.aboard && !sea.taken.managed, JSON.stringify(sea.taken));
+  check('sea: a leisure craft is held at the shut channel, and nobody is told', sea.held.far <= sea.held.edge + 0.01 && sea.held.told === 0, JSON.stringify(sea.held));
+  check('sea: a hull nosed onto the sand backs off it', sea.bowDry && sea.backedOff > 1.5, JSON.stringify({ bowDry: sea.bowDry, backedOff: sea.backedOff }));
+  check('sea: far inland the bay empties, and nobody new is put out', sea.goneInland === 0 && sea.noneInland === 0, sea.goneInland + ' / ' + sea.noneInland);
+  check('sea: Lola says the harbour patrol has boats', /harbour patrol/.test(sea.tip), sea.tip);
+
+  // The harbour patrol. Out on the water a cruiser can only wait on the
+  // shore, so wanted at sea brings launches — and they are a real pursuit.
+  var pat = await page.evaluate(function () {
+    var r = {}, P = GAME.player, C = GAME.city, ff = function (s) { GAME.test.fastForward(s); };
+    function lc() { return GAME.world.cars.filter(function (c) { return c.spec.boat && c.isPolice && !c.dead && !c.gone && c.ai && c.ai.mode === 'chase'; }); }
+    if (P.inCar) GAME.exitCar();
+    GAME.police.clearWanted(); GAME.settings.maxBoats = 0; GAME.sealife.clear();
+    // --- on land, wanted: no launch is put out ---
+    GAME.test.teleport(-60, 40); ff(0.5);
+    GAME.police.setWanted(2);
+    var most = 0;
+    for (var t = 0; t < 6 * 60; t++) { ff(1 / 60); most = Math.max(most, lc().length); }
+    r.onLand = most;
+    GAME.police.clearWanted(); ff(1);
+    // --- at sea in a boat, two stars: one launch, police through and through ---
+    GAME.test.teleport(505, -62); ff(0.5);
+    var bt = GAME.vehicles.spawnCar('boat', 505, -60, 0);
+    bt.pos.y = C.seaY(505, -60);
+    GAME.test.enterNearestCar(bt); ff(1.2);
+    r.inBoat = P.inCar && P.car === bt;
+    GAME.police.setWanted(2);
+    GAME.test.pressKey('KeyW', true); GAME.test.pressKey('KeyA', true);
+    var first = null, lights = false, minD = 1e9, cap = 0, dry = 0, l0 = null;
+    for (var t2 = 0; t2 < 25 * 60; t2++) {
+      ff(1 / 60);
+      var L = lc();
+      cap = Math.max(cap, L.length);
+      if (L.length && first === null) { first = t2 / 60; l0 = L[0]; }
+      for (var i = 0; i < L.length; i++) {
+        var lb = L[i].mesh.userData.lightbar;
+        if (lb && (lb[0].visible || lb[1].visible)) lights = true;
+        minD = Math.min(minD, Math.hypot(L[i].pos.x - bt.pos.x, L[i].pos.z - bt.pos.z));
+        if (t2 % 30 === 0 && !C.isBoatWater(L[i].pos.x, L[i].pos.z)) dry++;
+      }
+      if (GAME.police.wanted < 2) GAME.police.setWanted(2);
+    }
+    GAME.test.pressKey('KeyW', false); GAME.test.pressKey('KeyA', false);
+    r.launch = { first: first, cap: cap, lights: lights, dry: dry, minD: +minD.toFixed(1),
+      police: !!l0 && l0.isPolice && l0.type === 'policeboat',
+      cop: !!l0 && !!l0.riderMesh && l0.riderMesh.userData.look.shirt === 0x2a4a8a };
+    // --- stop, and they come alongside and take you ---
+    var bustT = null;
+    for (var t3 = 0; t3 < 30 * 60 && bustT === null; t3++) {
+      ff(1 / 60);
+      if (GAME.police.wanted < 2 && P.state === 'alive') GAME.police.setWanted(2);
+      if (P.state === 'busted') bustT = t3 / 60;
+    }
+    r.taken = bustT;
+    return r;
+  });
+  await comeBack();
+  var pat2 = await page.evaluate(function () {
+    var r = {}, P = GAME.player, C = GAME.city, ff = function (s) { GAME.test.fastForward(s); };
+    function lc() { return GAME.world.cars.filter(function (c) { return c.spec.boat && c.isPolice && !c.dead && !c.gone && c.ai && c.ai.mode === 'chase'; }); }
+    if (P.inCar) GAME.exitCar();
+    GAME.police.clearWanted(); ff(1);
+    // --- in the water at three stars: two launches, and nobody outswims one ---
+    GAME.test.teleport(505, -60); ff(0.5);
+    r.swimming = !!P.swimming;
+    GAME.police.setWanted(3);
+    var bustT = null, cap = 0;
+    for (var t = 0; t < 40 * 60 && bustT === null; t++) {
+      ff(1 / 60);
+      cap = Math.max(cap, lc().length);
+      if (P.state === 'busted') bustT = t / 60;
+    }
+    r.hauled = bustT; r.cap = cap;
+    return r;
+  });
+  await comeBack();
+  var pat3 = await page.evaluate(function () {
+    var r = {}, P = GAME.player, C = GAME.city, ff = function (s) { GAME.test.fastForward(s); };
+    function lc() { return GAME.world.cars.filter(function (c) { return c.spec.boat && c.isPolice && !c.dead && !c.gone && c.ai && c.ai.mode === 'chase'; }); }
+    if (P.inCar) GAME.exitCar();
+    GAME.police.clearWanted(); ff(1);
+    // --- gone ashore: the launch sits off the beach, and no more are sent
+    // (wanted in the water just off it, so where they last saw you is
+    // where you climbed out, as it would be) ---
+    GAME.test.teleport(C.shoreline(-60) + 18, -60); ff(0.5);
+    GAME.police.setWanted(1);
+    for (var t = 0; t < 10 * 60 && !lc().length; t++) ff(1 / 60);
+    ff(3);
+    var n0 = lc().length;
+    GAME.test.teleport(C.shoreline(-60) - 12, -60); ff(0.5);
+    var more = 0;
+    for (var t2 = 0; t2 < 15 * 60; t2++) { if (GAME.police.wanted < 1) GAME.police.setWanted(1); ff(1 / 60); more = Math.max(more, lc().length - n0); }
+    var L = lc();
+    r.ashore = { n0: n0, more: more, swim: !!P.swimming, waits: L.map(function (c) { return { d: Math.round(Math.hypot(c.pos.x - P.pos.x, c.pos.z - P.pos.z)), wet: C.isBoatWater(c.pos.x, c.pos.z), sp: +Math.abs(c.speed).toFixed(1) }; }) };
+    // --- and when the heat is off, it stands down and potters off ---
+    var l0 = L[0];
+    GAME.police.clearWanted(); ff(0.3);
+    var p0 = l0 ? { x: l0.pos.x, z: l0.pos.z } : null;
+    r.stoodDown = l0 ? { mode: l0.ai && l0.ai.mode, fleet: GAME.sealife.fleet.indexOf(l0) >= 0,
+      lights: l0.mesh.userData.lightbar[0].visible || l0.mesh.userData.lightbar[1].visible } : null;
+    ff(8);
+    r.pottered = l0 && !l0.gone ? Math.round(Math.hypot(l0.pos.x - p0.x, l0.pos.z - p0.z)) : -1;
+    GAME.sealife.clear();
+    GAME.test.teleport(-60, 40); ff(0.5);
+    return r;
+  });
+  check('patrol: wanted on land, no launch is put out', pat.onLand === 0, String(pat.onLand));
+  check('patrol: wanted at sea, a launch comes — a police boat, lights going, an officer at the helm',
+    pat.inBoat && pat.launch.first !== null && pat.launch.first < 4 && pat.launch.police && pat.launch.cop && pat.launch.lights && pat.launch.dry === 0,
+    JSON.stringify(pat.launch));
+  check('patrol: one launch at two stars, and it runs you close', pat.launch.cap === 1 && pat.launch.minD < 40, JSON.stringify(pat.launch));
+  check('patrol: stop, and they come alongside and take you', pat.taken !== null && pat.taken < 25, String(pat.taken));
+  check('patrol: in the water at three stars, two launches, and a swimmer is hauled out',
+    pat2.swimming && pat2.hauled !== null && pat2.hauled < 35 && pat2.cap === 2, JSON.stringify(pat2));
+  check('patrol: gone ashore, the launch waits off the beach and no more are sent',
+    pat3.ashore.n0 >= 1 && pat3.ashore.more === 0 && !pat3.ashore.swim && pat3.ashore.waits.length >= 1 &&
+    pat3.ashore.waits.every(function (w) { return w.wet && w.d < 70; }), JSON.stringify(pat3.ashore));
+  check('patrol: heat off, the launch stands down, lights out, and potters off about the bay',
+    pat3.stoodDown && pat3.stoodDown.mode === 'cruise' && pat3.stoodDown.fleet && !pat3.stoodDown.lights && pat3.pottered > 20,
+    JSON.stringify({ stood: pat3.stoodDown, moved: pat3.pottered }));
 
   // ---------- 6: a rider follows the deck when it tilts ----------
   // vehicles.js pitches a chassis over a ramp (negative rotation.x lifts the

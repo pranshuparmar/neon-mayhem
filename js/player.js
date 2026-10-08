@@ -1292,7 +1292,8 @@ function playerHorn(on, low) {
 function hornAndSiren(car, dt, T) {
   var press = GAME.keyPressed('KeyG') || T.horn;
   T.horn = false;
-  if (car.type === 'police') {
+  // a cruiser, or a harbour launch: the switch is the lights and siren
+  if (car.isPolice) {
     if (press) {
       car.sirenOn = !car.sirenOn;
       GAME.hud.message(car.sirenOn ? 'Lights and siren on — traffic will pull over.' : 'Lights and siren off.', 1.8);
@@ -1325,7 +1326,7 @@ function hornAndSiren(car, dt, T) {
 // the player's own cruiser with its siren going, if they are in one
 GAME.playerSiren = function () {
   var P = GAME.player;
-  return P.inCar && P.car && P.car.type === 'police' && P.car.sirenOn && !P.car.dead ? P.car : null;
+  return P.inCar && P.car && P.car.isPolice && P.car.sirenOn && !P.car.dead ? P.car : null;
 };
 
 function updateDriving(dt) {
@@ -1426,14 +1427,14 @@ var _helm = null;
 function updateHelm(car) {
   var P = GAME.player, m = P.mesh;
   if (!_helm) _helm = new THREE.Vector3();
-  _helm.set(0, 0.55, -0.15).applyEuler(car.mesh.rotation).add(car.pos);
+  // at a boat's console, or astride a jet ski's saddle (vehicles.js poseHelm)
+  var ski = !!car.spec.jetski;
+  var seat = ski ? HELM_SEAT.jetski : HELM_SEAT.boat;
+  _helm.set(0, seat.y, seat.z).applyEuler(car.mesh.rotation).add(car.pos);
   m.visible = true;
   m.position.copy(_helm);
   m.rotation.set(car.mesh.rotation.x, car.heading, car.mesh.rotation.z);
-  var j = m.userData.joints;
-  j.legL.rotation.set(0, 0, 0.08); j.legR.rotation.set(0, 0, -0.08);
-  j.armL.rotation.set(-0.95, 0, 0); j.armR.rotation.set(-0.95, 0, 0);
-  j.torso.rotation.x = 0.06;
+  poseHelm(m.userData.joints, ski);
 }
 
 // what coming down at `impact` m/s does to you

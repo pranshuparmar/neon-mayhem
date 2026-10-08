@@ -80,7 +80,7 @@ GAME.touch = (function () {
   // What switching to touch changes outside the layer, so switching back can
   // put it back as it was.
   var saved = null;
-  var TOUCH_BUDGET = { pixelRatioCap: 1.4, bubbleRadius: 110, maxTraffic: 8, maxPeds: 12, maxParked: 9 };
+  var TOUCH_BUDGET = { pixelRatioCap: 1.4, bubbleRadius: 110, maxTraffic: 8, maxPeds: 12, maxParked: 9, maxBoats: 3 };
   function applySettings(vals, fogFar) {
     var S = GAME.settings;
     for (var k in vals) S[k] = vals[k];

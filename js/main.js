@@ -523,6 +523,7 @@
     GAME.combat.update(dt);
     GAME.combat.updatePickups(dt);
     GAME.police.update(dt);
+    GAME.sealife.update(dt);
     GAME.missions.update(dt);
     GAME.guide.update(dt);
     GAME.tapes.update(dt);

@@ -4,7 +4,7 @@ window.GAME = {
   started: false,
   paused: false,
   isTouch: false,
-  settings: { pixelRatioCap: 2, bubbleRadius: 150, maxTraffic: 12, maxPeds: 18, maxParked: 14 }
+  settings: { pixelRatioCap: 2, bubbleRadius: 150, maxTraffic: 12, maxPeds: 18, maxParked: 14, maxBoats: 5 }
 };
 
 function mulberry32(seed) {

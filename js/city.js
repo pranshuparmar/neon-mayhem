@@ -2915,8 +2915,11 @@ GAME.city = (function () {
     // a speedboat moored off each of the east piers, bow out to sea, close
     // enough alongside to step down into from the planks
     city.moorings.push({ x: 485, z: 238.5 }, { x: 445, z: -168.5 });
+    // and a jet ski at the northern pier's other side — on your left, walking
+    // out along it — for anybody who wants the bay at a gallop
+    city.moorings.push({ x: 445, z: -191.5, vtype: 'jetski' });
     city.moorings.forEach(function (mo) {
-      city.parkedSpots.push({ x: mo.x, z: mo.z, y: -0.35, heading: Math.PI / 2, vtype: 'boat' });
+      city.parkedSpots.push({ x: mo.x, z: mo.z, y: -0.35, heading: Math.PI / 2, vtype: mo.vtype || 'boat' });
     });
 
     // starter pickups within sight of the spawn point (356, 40)
@@ -2930,8 +2933,9 @@ GAME.city = (function () {
   }
 
   // ---------- things a car can knock down ----------
-  // Lamp posts and boardwalk benches (hydrants stand: see above). A half-metre post stopped a
-  // car at 29 m/s as dead as a building would; now something moving takes it
+  // Lamp posts and boardwalk benches (hydrants stand: see above). A
+  // half-metre post stopped a car at 29 m/s as dead as a building would; now
+  // something moving takes it
   // down for a little of its pace and a dent (vehicles.js collideStatic), and
   // it is put back up once nobody has been near it for a while.
   var knocked = [], knockCheckT = 0, KNOCK_BACK_AFTER = 45, KNOCK_BACK_R = 120;

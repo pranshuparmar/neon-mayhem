@@ -20,7 +20,7 @@ GAME.lola = (function () {
     stars3: 'Three stars: they know your face now, so paint won\'t fool them. Break their line of sight and lie low, or go and see the sergeant. A night at home helps too.',
     wasted: 'You\'ll live. The hospital keeps your cash but your guns are gone. Own a place and you wake up there instead, with everything.',
     busted: 'Busted. They take a fine and your hardware. Next time lose the stars before they box you in — a car stopped next to a cruiser is a car they can cuff you out of.',
-    boat: 'A boat! No cruiser can follow you out on the water. The bay has work of its own, too — look for the rings by the piers.',
+    boat: 'A boat! No cruiser can follow you out on the water — but the harbour patrol has launches of its own. The bay has work too: look for the rings by the piers.',
     heli: function () { return touch() ? 'Now you\'re flying. UP and DN take her up and down. The ceiling\'s around two hundred metres — and the law follows up here with a helicopter of its own.'
       : 'Now you\'re flying. ' + K('Space') + ' takes her up, ' + K('ShiftLeft') + ' down. The ceiling\'s around two hundred metres — and the law follows up here with a helicopter of its own.'; },
     plane: function () { return 'Runway\'s that way. Build some speed, pull up, and if it all goes wrong, ' + (touch() ? 'EXIT' : K('KeyF')) + ' gets you out with a parachute.'; },

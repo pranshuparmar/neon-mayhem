@@ -1772,7 +1772,8 @@ GAME.missions = (function () {
     var best = playerType, bestSp = mine.maxSpeed;
     for (var k in T) {
       var s = T[k];
-      if (s.heli || s.plane || k === 'police') continue;
+      // (nor the law's own launch, nor a jet ski: a regatta is raced in boats)
+      if (s.heli || s.plane || k === 'police' || s.police || s.jetski) continue;
       if (!!s.bike !== !!mine.bike || !!s.boat !== !!mine.boat) continue;
       if (s.maxSpeed > bestSp && s.maxSpeed <= mine.maxSpeed * RIVAL_CAP) { best = k; bestSp = s.maxSpeed; }
     }

@@ -16,8 +16,8 @@ A free, fan-made tribute inspired by Grand Theft Auto: Vice City (2002). Everyth
 ## What you can do
 
 - 🚗 **Drive anything** — sports cars, bikes, a limo, an ice-cream truck, a monster truck. Drift, crash, catch fire.
-- 🚁 **Fly and sail** — a helicopter, a plane that loops and rolls, parachutes and speedboats. Or swim off the beach.
-- 🚓 **Outrun the law** — five stars of heat: roadblocks, spike strips, a helicopter. Break their line of sight to lose them.
+- 🚁 **Fly and sail** — a helicopter, a plane that loops and rolls, parachutes, speedboats and a jet ski. Or swim off the beach.
+- 🚓 **Outrun the law** — five stars of heat: roadblocks, spike strips, harbour launches, a helicopter. Break their line of sight to lose them.
 - 💼 **Take the work** — street races, couriers, rampages, takedowns, taxi and ambulance shifts, and Lola's story jobs.
 - 🏝️ **Two islands** — the neon mainland, and Isla Verde across the channel once you've earned the bridges.
 - 🏠 **Walk in** — every shop, a casino with horse racing, a glass car showroom, and homes you can buy.
@@ -45,6 +45,7 @@ Want the details? **[Read the full tour →](docs/FEATURES.md)**
 
 ## What's new
 
+- 🌊 **Life on the water** — jet skis and boats out in the bay, a jet ski of your own at the northern pier, and the harbour patrol's launches when you're wanted at sea.
 - 🎓 **Lola's first day** — a new game can be shown around: a ride, a first delivery, then a new look at the barber with the pay.
 - 🏠 **Walk-in interiors** — every shop, your homes, the casino's horse races, and a glass showroom with the helicopters on its roof.
 - 🌊 **The sea** — swim, take a speedboat, run the BAY REGATTA and CONTRABAND jobs.

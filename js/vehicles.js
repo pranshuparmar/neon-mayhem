@@ -157,7 +157,15 @@ var VEHICLES = {
   // the only thing that goes on the water: moored off the piers and at the
   // marina, never on a road. Grip is how fast the hull's way swings round to
   // where the bow points — low, so it carries through a turn and slides.
-  boat: { label: 'Squalo', maxSpeed: 31, accel: 11, grip: 1.7, turn: 1.55, hp: 250, l: 6.2, w: 2.0, cabinH: 0, bodyH: 0.7, colors: [0x38e8ff, 0xff2f7a, 0xffe14f, 0x2a2e3a], boat: true }
+  boat: { label: 'Squalo', maxSpeed: 31, accel: 11, grip: 1.7, turn: 1.55, hp: 250, l: 6.2, w: 2.0, cabinH: 0, bodyH: 0.7, colors: [0x38e8ff, 0xff2f7a, 0xffe14f, 0x2a2e3a], boat: true },
+  // A jet ski: quicker off the mark and on the turn than the Squalo and a
+  // little faster flat out, but a sit-on toy — light, and it gives up a lot
+  // less punishment. One is moored on the north side of the northern pier,
+  // and they buzz about the bay with somebody on board.
+  jetski: { label: 'Wave Rider', maxSpeed: 34, accel: 17, grip: 2.0, turn: 2.3, hp: 130, l: 3.1, w: 1.2, cabinH: 0, bodyH: 0.5, colors: [0xffe14f, 0xff2f7a, 0x38e8ff, 0xf0f0f4], boat: true, jetski: true },
+  // the harbour patrol: a heavier launch in police white, a light bar on the
+  // console, sent after you once you are wanted out on the water
+  policeboat: { label: 'Harbour Patrol', maxSpeed: 32, accel: 12.5, grip: 1.8, turn: 1.6, hp: 340, l: 6.6, w: 2.2, cabinH: 0, bodyH: 0.7, colors: [0xf2f4f8], boat: true, police: true }
 };
 
 // Merged bodies are keyed by everything that shapes their vertices — type
@@ -222,14 +230,31 @@ function buildBikeRider(look) {
 
 // whoever has the helm of a boat somebody else is driving: stood at the
 // wheel the way the player stands there (player.js updateHelm)
-function buildHelmsman(look) {
-  var r = GAME.peds.buildPedMesh(look ? { look: look } : {});
+function buildHelmsman(look, jetski, cop) {
+  var r = GAME.peds.buildPedMesh(cop ? { cop: true } : look ? { look: look } : {});
   var j = r.userData.joints;
-  j.legL.rotation.z = 0.08; j.legR.rotation.z = -0.08;
-  j.armL.rotation.x = -0.95; j.armR.rotation.x = -0.95;
-  j.torso.rotation.x = 0.06;
-  r.position.set(0, 0.55, -0.15);
+  poseHelm(j, jetski);
+  var seat = jetski ? HELM_SEAT.jetski : HELM_SEAT.boat;
+  r.position.set(0, seat.y, seat.z);
   return r;
+}
+// Where whoever has the helm stands (or sits), from the hull's origin: at a
+// boat's console, or with the hips on a jet ski's saddle (whose top is at
+// 0.72; a figure's hips are 0.82 up it). player.js puts you in the same spot.
+var HELM_SEAT = { boat: { y: 0.55, z: -0.15 }, jetski: { y: -0.08, z: -0.12 } };
+// Stood at a boat's console, or astride a jet ski: thighs down either side of
+// the saddle to the footwells, leaning in, hands on the bars. (player.js
+// poses you the same.)
+function poseHelm(j, jetski) {
+  if (jetski) {
+    j.legL.rotation.set(-0.95, 0, 0.3); j.legR.rotation.set(-0.95, 0, -0.3);
+    j.armL.rotation.set(-1.05, 0, 0.12); j.armR.rotation.set(-1.05, 0, -0.12);
+    j.torso.rotation.x = 0.25;
+    return;
+  }
+  j.legL.rotation.set(0, 0, 0.08); j.legR.rotation.set(0, 0, -0.08);
+  j.armL.rotation.set(-0.95, 0, 0); j.armR.rotation.set(-0.95, 0, 0);
+  j.torso.rotation.x = 0.06;
 }
 
 function buildHeliMesh(colorHex, gunship) {
@@ -342,7 +367,7 @@ function buildMonsterMesh(colorHex) {
 // A speedboat, origin at the waterline amidships: a hull with a raked bow, a
 // deck, a console with its screen, a bench aft and an outboard on the
 // transom — and running lights, red to port and green to starboard.
-function buildBoatMesh(colorHex) {
+function buildBoatMesh(colorHex, police) {
   var g = new THREE.Group();
   var body = new THREE.Mesh(cachedGeo('boat|' + colorHex, function (b) {
     b.addBox(0, 0.15, -0.5, 2.0, 0.7, 4.2, 0, colorHex, 0);          // hull
@@ -363,13 +388,52 @@ function buildBoatMesh(colorHex) {
     glow.addBox(-0.8, 0.6, 1.9, 0.08, 0.12, 0.3, 0, 0x30ff70, 0);    // starboard
     glow.addBox(0, 1.35, -2.95, 0.12, 0.12, 0.12, 0, 0xfff2c0, 0);   // stern light
   }), sharedVertexBasic()));
+  if (police) {
+    // a blue band down each side, POLICE on the bow in spirit, and the bar
+    // on the console roof that flashes like a cruiser's (police.js)
+    g.add(new THREE.Mesh(cachedGeo('boatpolice', function (b) {
+      b.addBox(1.03, 0.3, -0.4, 0.04, 0.18, 3.8, 0, 0x1a3cff, 0);
+      b.addBox(-1.03, 0.3, -0.4, 0.04, 0.18, 3.8, 0, 0x1a3cff, 0);
+      b.addBox(0, 1.52, 0.55, 0.9, 0.08, 0.5, 0, 0x20242e, 0);
+    }), sharedVertexLambert()));
+    var barR = new THREE.Mesh(sharedBoxGeo(0.34, 0.2, 0.3), sharedBasic(0xff2030));
+    barR.position.set(0.22, 1.66, 0.55);
+    var barB = new THREE.Mesh(sharedBoxGeo(0.34, 0.2, 0.3), sharedBasic(0x2050ff));
+    barB.position.set(-0.22, 1.66, 0.55);
+    g.add(barR); g.add(barB);
+    g.userData.lightbar = [barR, barB];
+  }
+  g.userData.bodyMesh = body;
+  return g;
+}
+
+// A jet ski, origin at the waterline: a short hull with a pointed nose, a
+// saddle you sit astride, handlebars on a steering column, and a jet nozzle
+// at the back. Somebody always rides one in the open.
+function buildJetskiMesh(colorHex) {
+  var g = new THREE.Group();
+  var body = new THREE.Mesh(cachedGeo('jetski|' + colorHex, function (b) {
+    b.addBox(0, 0.12, -0.2, 1.1, 0.5, 2.3, 0, 0xf0f0f4, 0);           // hull
+    b.addBox(0, 0.16, 1.15, 0.8, 0.42, 0.6, 0, 0xf0f0f4, 0);          // nose
+    b.addBox(0, 0.2, 1.55, 0.42, 0.3, 0.3, 0, 0xf0f0f4, 0);           // tip
+    b.addBox(0, 0.42, 0.2, 1.0, 0.16, 1.9, 0, colorHex, 0);           // deck and cowl
+    b.addBox(0, 0.62, -0.5, 0.46, 0.2, 1.0, 0, 0x20242e, 0);          // saddle
+    b.addBox(0, 0.78, 0.42, 0.14, 0.42, 0.14, 0, 0x20242e, 0);        // steering column
+    b.addBox(0, 0.98, 0.46, 0.78, 0.07, 0.07, 0, 0x20242e, 0);        // handlebars
+    b.addBox(0, 0.1, -1.38, 0.36, 0.2, 0.2, 0, 0x30343e, 0);          // jet nozzle
+  }), sharedVertexLambert());
+  g.add(body);
+  g.add(new THREE.Mesh(cachedGeo('jetskiglow', function (glow) {
+    glow.addBox(0, 0.62, 1.1, 0.16, 0.08, 0.1, 0, 0xfff2c0, 0);      // a lamp in the nose
+  }), sharedVertexBasic()));
   g.userData.bodyMesh = body;
   return g;
 }
 
 function buildCarMesh(type, colorHex) {
   var s = VEHICLES[type];
-  if (s.boat) return buildBoatMesh(colorHex);
+  if (s.jetski) return buildJetskiMesh(colorHex);
+  if (s.boat) return buildBoatMesh(colorHex, !!s.police);
   if (s.monster) return buildMonsterMesh(colorHex);
   if (s.plane) return buildPlaneMesh(s.colors);
   if (s.heli) return buildHeliMesh(colorHex, s.gunship);
@@ -502,7 +566,7 @@ GAME.vehicles = (function () {
       speed: 0, lat: 0,
       hp: spec.hp, stage: 0, dead: false, fireFuse: 0,
       occupied: opts.occupied || null,
-      isPolice: type === 'police',
+      isPolice: type === 'police' || !!spec.police,
       controls: { throttle: 0, steer: 0, handbrake: false },
       ai: opts.ai || null,
       parkedSpot: opts.parkedSpot || null,
@@ -1019,7 +1083,7 @@ GAME.vehicles = (function () {
   function seatOccupant(car, look) {
     car.occupied = 'ai';
     if ((car.spec.bike || car.spec.boat) && !car.riderMesh) {
-      car.riderMesh = car.spec.boat ? buildHelmsman(look) : buildBikeRider(look);
+      car.riderMesh = car.spec.boat ? buildHelmsman(look, !!car.spec.jetski, car.isPolice) : buildBikeRider(look);
       car.mesh.add(car.riderMesh);
     }
   }
@@ -1284,7 +1348,7 @@ GAME.vehicles = (function () {
             var other = a === pc ? b : a;
             // a mission rival in a cruiser is a racer, not the law
             if (other.isPolice && !other.mission) GAME.police.reportCrime('hit_cop_car', pc.pos);
-            else if (other.ai && other.ai.mode === 'traffic' && !other.perp) GAME.police.reportCrime('hit_car', pc.pos);
+            else if (other.ai && (other.ai.mode === 'traffic' || other.ai.mode === 'cruise') && !other.perp) GAME.police.reportCrime('hit_car', pc.pos);
           }
           // Rammed by YOU. Traffic used to take it like weather and drive on.
           // Now the horn goes, and then either the foot goes down and they
@@ -1575,11 +1639,18 @@ GAME.vehicles = (function () {
   // ground it climbs out onto, and it rides the swell rather than a road.
   var FX_WAKE = { count: 2, color: 0xe8f4ff, spread: 0.7, vy: 0.5, life: 0.6, grav: -3, keep: true, floor: -9 };
   var FX_SPRAY = { count: 2, color: 0xffffff, spread: 0.8, vy: 2.4, life: 0.5, grav: -9, keep: true, floor: -9 };
+  // how many of a hull's bow, middle and stern are off the water
+  function dryPoints(C, x, z, fx, fz, hl) {
+    return (C.isBoatWater(x, z) ? 0 : 1) + (C.isBoatWater(x + fx * hl, z + fz * hl) ? 0 : 1) +
+      (C.isBoatWater(x - fx * hl, z - fz * hl) ? 0 : 1);
+  }
   function stepBoat(car, dt) {
     var s = car.spec, c = car.controls, C = GAME.city, P = GAME.player;
     var driven = car === P.car && P.inCar;
-    // a rival in a boat race steers by the controls the race hands it
-    var raced = !driven && car.occupied === 'ai' && car.ai && car.ai.mode === 'race';
+    // a rival in a boat race steers by the controls the race hands it, and
+    // so does a police launch (police.js) and anybody out for the day
+    // (sealife.js) — each writes the controls it wants
+    var raced = !driven && car.occupied === 'ai' && car.ai && (car.ai.mode === 'race' || car.ai.mode === 'chase' || car.ai.mode === 'cruise');
     var helm = driven || raced;
     var th = helm ? c.throttle : 0, st = helm ? c.steer : 0, slide = helm && c.handbrake;
     // (and rides the race's rubber band, as a rival car does)
@@ -1600,9 +1671,14 @@ GAME.vehicles = (function () {
     car.vx += (fx * car.speed - car.vx) * k;
     car.vz += (fz * car.speed - car.vz) * k;
     car.lat = car.vx * fz - car.vz * fx;
-    // only over open water: bow, stern and middle all have to stay on it
+    // only over open water: bow, stern and middle all have to stay on it.
+    // A hull already partly out of it — shoved there by another boat, or
+    // held at the sea's edge — may make any move that puts no more of it
+    // ashore: judged on the rule alone it could neither go on nor back off,
+    // and a boat nosed onto the sand sat there for good.
     var nx = car.pos.x + car.vx * dt, nz = car.pos.z + car.vz * dt, hl = s.l / 2 - 0.2;
-    if (!C.isBoatWater(nx, nz) || !C.isBoatWater(nx + fx * hl, nz + fz * hl) || !C.isBoatWater(nx - fx * hl, nz - fz * hl)) {
+    var dryNext = dryPoints(C, nx, nz, fx, fz, hl);
+    if (dryNext && dryNext > dryPoints(C, car.pos.x, car.pos.z, fx, fz, hl)) {
       var impact = Math.sqrt(car.vx * car.vx + car.vz * car.vz);
       if (impact > 4 && (car.hitCd || 0) <= 0) {
         car.hitCd = 0.3;
@@ -1619,8 +1695,9 @@ GAME.vehicles = (function () {
     car.pos.x = nx; car.pos.z = nz;
     if (car.hitCd > 0) car.hitCd -= dt;
     // the edges of the sea, and the closed channel (aircraft.js): held at
-    // the line, the way comes off it as if it had run into a boom
-    if (driven && GAME.aircraft && GAME.aircraft.enforceSea(car.pos)) {
+    // the line, the way comes off it as if it had run into a boom — and the
+    // same line for anybody else at a helm, without the word about it
+    if ((driven || raced) && GAME.aircraft && GAME.aircraft.enforceSea(car.pos, !driven)) {
       var held = Math.exp(-4 * dt);
       car.speed *= held; car.vx *= held; car.vz *= held;
     }

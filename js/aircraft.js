@@ -47,13 +47,14 @@ GAME.aircraft = (function () {
   // well — but with no strikes and no air units for it: there is no barrier
   // out there to have ignored, just a line you cannot cross and a word on why.
   var seaToldT = -99;
-  function enforceSea(pos) {
+  // (quiet: a boat somebody else is driving, which nobody needs told)
+  function enforceSea(pos, quiet) {
     var lim = airLimit(), held = false, channel = false;
     if (pos.x > lim.maxX) { pos.x = lim.maxX; held = true; channel = lim.maxX <= CLOSED_X; }
     if (pos.x < WEST_X) { pos.x = WEST_X; held = true; }
     if (pos.z < lim.minZ) { pos.z = lim.minZ; held = true; }
     if (pos.z > lim.maxZ) { pos.z = lim.maxZ; held = true; }
-    if (held && GAME.time - seaToldT > 6) {
+    if (held && !quiet && GAME.time - seaToldT > 6) {
       seaToldT = GAME.time;
       GAME.hud.message(channel ? 'The channel is closed until the bridges open — turn back.'
         : 'Nothing out there but open sea — turn back.', 2.5);
@@ -211,7 +212,7 @@ GAME.aircraft = (function () {
         // and the same two crimes the ground guns report on these hits
         if (byPlayer) {
           if (c.isPolice && !c.mission) GAME.police.reportCrime('hit_cop_car', P.pos);
-          else if (c.ai && c.ai.mode === 'traffic') GAME.police.reportCrime('shoot_car', P.pos);
+          else if (c.ai && (c.ai.mode === 'traffic' || c.ai.mode === 'cruise')) GAME.police.reportCrime('shoot_car', P.pos);
         }
       }
     }

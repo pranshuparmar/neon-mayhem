@@ -16,7 +16,7 @@ Every action, on all three: keyboard and mouse, a controller (standard layout �
 | Weapon | `1`–`5` | D-pad ↓ (next) | WPN (next, once you own two) |
 | Get in · jack a car · climb into a boat | `F` | Y | ENTER (in reach) |
 
-**Cars, bikes and boats**
+**Cars, bikes and boats** (the jet ski too)
 
 | Action | Keyboard & mouse | Controller | Touch |
 |---|---|---|---|
