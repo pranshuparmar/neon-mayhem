@@ -45,6 +45,7 @@ Want the details? **[Read the full tour →](docs/FEATURES.md)**
 
 ## What's new
 
+- 🏗 **Import/export** — two lists of wanted cars for the crane on the docks, paid by condition, with a bonus for each full list.
 - 📻 **Radio with personality** — a frequency, a jingle and a DJ for every station, with talk and 1986 ads between the songs.
 - 🔧 **Damage you can see** — bumpers that come off, bonnets that spring, tyres that burst and spark.
 - 🏛 **Landmarks** — the Malibu on the strip, a stadium, a film lot and Rico's villa in the hills.

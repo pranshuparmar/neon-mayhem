@@ -304,6 +304,8 @@
 //      burst tyres that sit the car down; the paint shop mends them.
 //  24. THE RADIO      — a place on the dial, a jingle and a DJ for every
 //      station, talk and ads in captions and a voice; MUSIC: OFF takes them.
+//  25. EXPORT         — wanted cars into the ring at the harbour crane, paid
+//      and ticked off once each; wrecks turned away; a full list's bonus.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -12927,6 +12929,66 @@ function withTimeout(p, ms) {
   check('radio: tuning in shows where it is on the dial and plays its jingle', djr.dial && djr.jingle, JSON.stringify(djr));
   check('radio: the DJ talks, in a caption and a voice, and stops', djr.talks && djr.voice && djr.done, JSON.stringify(djr));
   check('radio: MUSIC: OFF takes the jingle and the talk; so does getting out', djr.offNoJingle && djr.footQuiet, JSON.stringify(djr));
+
+  // ---------- 25: import/export ----------
+  // A crane on the harbour and a board of wanted cars: drive one off the
+  // board into the ring and stop, and it ships — paid by what it is and the
+  // state it is in, ticked off, and not wanted again; a wreck is turned away;
+  // a full list pays a bonus.
+  var ex = await page.evaluate(function () {
+    var X = GAME.exporter, P = GAME.player, r = {}, spawned = [];
+    var saved = JSON.stringify(GAME.prefs.exported || {});
+    GAME.prefs.exported = {};
+    try {
+      var s = X.site;
+      r.site = !!s && GAME.city.districtAt(s.x, s.z) === 'harbor';
+      function drive(type) {
+        if (P.inCar) { GAME.exitCar(); GAME.test.fastForward(1.5); }
+        var c = GAME.test.spawnCar(type, 4, 0); spawned.push(c);
+        GAME.test.fastForward(0.2); GAME.test.enterNearestCar(c); GAME.test.fastForward(1.5);
+        return c;
+      }
+      // a wreck is turned away
+      var c0 = drive('sedan');
+      c0.hp = c0.spec.hp * 0.2;
+      GAME.test.teleport(s.x, s.z); GAME.test.fastForward(0.5);
+      r.wreck = P.inCar && X.wanted('sedan') && /one piece/.test(X.hint);
+      // a good one ships
+      GAME.exitCar(); GAME.test.fastForward(1.5);
+      GAME.test.teleport(s.x + 30, s.z); GAME.test.fastForward(0.3);
+      var c1 = drive('sedan');
+      var cash = P.cash;
+      GAME.test.teleport(s.x, s.z); GAME.test.fastForward(0.5);
+      r.shipped = !P.inCar && P.cash > cash && !X.wanted('sedan') && c1.gone !== false;
+      // and the same again is not wanted
+      GAME.test.teleport(s.x + 30, s.z); GAME.test.fastForward(0.3);
+      drive('sedan');
+      var cash2 = P.cash;
+      GAME.test.teleport(s.x, s.z); GAME.test.fastForward(0.5);
+      r.once = P.inCar && P.cash === cash2 && /already/.test(X.hint);
+      // the rest of list one, and its bonus
+      ['taxi', 'van', 'sports', 'motorcycle', 'police'].forEach(function (t) { GAME.prefs.exported[t] = true; });
+      delete GAME.prefs.exported.police;
+      GAME.exitCar(); GAME.test.fastForward(1.5);
+      GAME.test.teleport(s.x + 30, s.z); GAME.test.fastForward(0.3);
+      drive('police');
+      GAME.police.clearWanted();
+      var cash3 = P.cash;
+      GAME.test.teleport(s.x, s.z); GAME.test.fastForward(0.5);
+      r.bonus = P.cash - cash3 >= X.LISTS[0].bonus;
+    } finally {
+      GAME.police.clearWanted();
+      if (P.inCar) GAME.exitCar();
+      GAME.test.fastForward(1.5);
+      spawned.forEach(function (c) { if (!c.gone) GAME.vehicles.removeCar(c); });
+      GAME.prefs.exported = JSON.parse(saved);
+      GAME.test.teleport(-60, 40); GAME.test.fastForward(0.5);
+    }
+    return r;
+  });
+  check('export: a crane on the harbour, and a car off the board ships for cash', ex.site && ex.shipped, JSON.stringify(ex));
+  check('export: a wreck is turned away, and nobody wants the same car twice', ex.wreck && ex.once, JSON.stringify(ex));
+  check('export: a full list pays the buyer\'s bonus', ex.bonus, JSON.stringify(ex));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the

@@ -1132,6 +1132,9 @@ GAME.hud = (function () {
     // and the strangers with a favour to ask (strangers.js)
     var kb = GAME.strangers ? GAME.strangers.blips() : [];
     for (var ki = 0; ki < kb.length; ki++) blip(kb[ki].x, kb[ki].z, kb[ki].color, kb[ki].size);
+    // and the export crane on the harbour (export.js)
+    var xb = GAME.exporter && GAME.exporter.blip();
+    if (xb) blip(xb.x, xb.z, xb.color, 3.4 / zoom);
     // and both sides' people on the corners near you (gangs.js)
     var gb = GAME.gangs ? GAME.gangs.blips() : [];
     for (var gi = 0; gi < gb.length; gi++) blip(gb[gi].x, gb[gi].z, gb[gi].color, gb[gi].size / zoom);

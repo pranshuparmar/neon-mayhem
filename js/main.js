@@ -549,6 +549,8 @@
     GAME.business.update(dt);
     GAME.missions.update(dt);
     GAME.guide.update(dt);
+    GAME.exporter.update(dt);
+    if (GAME.exporter.hint) GAME.hud.setPoiHint(GAME.exporter.hint);
     GAME.tapes.update(dt);
     if (GAME.isla) GAME.isla.tick(dt);
     GAME.shops.update(dt);
