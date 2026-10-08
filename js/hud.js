@@ -418,6 +418,7 @@ GAME.hud = (function () {
     // legend entries behave like a mixer's solo buttons: tap one to show ONLY
     // that marker family, tap again to show all. The choice persists.
     mapSolo = (GAME.prefs && GAME.prefs.mapSolo) || null;
+    if (mapSolo === 'icecream') mapSolo = 'shops';   // (a save from when the depot had its own row)
     refreshLegend();
   }
 
@@ -430,8 +431,10 @@ GAME.hud = (function () {
     // the rampage's
     ['#c86bff', 'S — Respray', 'respray'], [HOSPITAL_HEX, 'H — Hospital', 'hospital'], ['#5aa0ff', 'P — Police', 'police'],
     ['#eef0ff', 'Weapon', 'weapon'], ['#ff4d6a', 'Health', 'health'], ['#4a6cff', 'Armor', 'armor'],
-    ['#8de0ff', '✈ Airport · Ⓗ Helipad · ⚓ Boats', 'airport'], [DEPOT_HEX, '☀ Ice cream depot', 'icecream'],
-    ['#8de8b0', '$ Shops & property', 'shops'], ['#5dff9e', '⌂ Your safehouse', 'home'],
+    ['#8de0ff', '✈ Airport · Ⓗ Helipad · ⚓ Boats', 'airport'],
+    // (the ice cream depot is a place of business like the rest: one family,
+    // and one less row in the legend)
+    ['#8de8b0', '$ Shops & property · ☀ Depot', 'shops'], ['#5dff9e', '⌂ Your safehouse', 'home'],
     [DEST_HEX, 'Destination', 'dest'], ['#ffe14f', 'Objective', 'objective']
   ];
   // Tap-to-SOLO, like muting a mixing desk: tap a legend and everything ELSE
@@ -703,7 +706,7 @@ GAME.hud = (function () {
       g.fillRect(hx - 1.2, hy + 1.4, 2.4, 3.6); // door
     });
     if (catVis('airport')) badge(GAME.city.airport.apron.x, GAME.city.airport.apron.z, '#8de0ff', '✈');
-    if (catVis('icecream') && GAME.city.islaPois) badge(GAME.city.islaPois.factory.x, GAME.city.islaPois.factory.z, DEPOT_HEX, '☀');
+    if (catVis('shops') && GAME.city.islaPois) badge(GAME.city.islaPois.factory.x, GAME.city.islaPois.factory.z, DEPOT_HEX, '☀');
     // helipads: a ringed cyan disc with an H, one per pad. Both of them —
     // the Alta Verde summit across the channel, and the one on the downtown
     // tower here, which is where the mainland's only helicopter stands.
@@ -723,7 +726,10 @@ GAME.hud = (function () {
     // cannot be counted on in a canvas) — shown with the airfield and pads,
     // the other places to find something that is not a car
     if (catVis('airport')) (GAME.city.moorings || []).forEach(function (mo) {
-      if (mo.isla && GAME.isla && !GAME.isla.isOpen()) return;
+      // (the island's are drawn while its bridges are shut too, dimmed: they
+      // are there, just not yet to be had)
+      var shut = mo.isla && GAME.isla && !GAME.isla.isOpen();
+      g.globalAlpha = shut ? 0.4 : 1;
       var ax = w2mx(mo.x), ay = w2my(mo.z);
       g.fillStyle = '#8de0ff';
       g.beginPath(); g.arc(ax, ay, 8, 0, Math.PI * 2); g.fill();
@@ -735,6 +741,7 @@ GAME.hud = (function () {
       g.moveTo(ax - 4, ay + 1); g.quadraticCurveTo(ax - 3.5, ay + 4.5, ax, ay + 4.5);
       g.quadraticCurveTo(ax + 3.5, ay + 4.5, ax + 4, ay + 1);
       g.stroke();
+      g.globalAlpha = 1;
     });
     // player arrow
     var h = P.inCar && P.car ? P.car.heading : P.heading;
@@ -1134,7 +1141,7 @@ GAME.hud = (function () {
     if (catVis('airport')) landmark(GAME.city.airport.apron.x, GAME.city.airport.apron.z);
     var pads = shownHelipads();
     for (pi = 0; pi < pads.length; pi++) landmark(pads[pi].x, pads[pi].z);
-    if (catVis('icecream') && GAME.city.islaPois) landmark(GAME.city.islaPois.factory.x, GAME.city.islaPois.factory.z);
+    if (catVis('shops') && GAME.city.islaPois) landmark(GAME.city.islaPois.factory.x, GAME.city.islaPois.factory.z);
     var cars = GAME.world.cars;
     for (var c = 0; c < cars.length; c++) {
       var pc = cars[c];

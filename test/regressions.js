@@ -138,6 +138,10 @@
 //       which empties into your pocket; left, it stops at three days and
 //       Lola pages once; a hold-up there runs with the till, and stopping
 //       the thief gets it back. The bar is for sale too; Lola counts them.
+//   5v. ISLA VERDE BOATS — four moorings on the island, two at the marina
+//       and two at a jetty in the east-coast cove, each afloat; the cove's
+//       speedboat is boarded from the planks and taken out. And the map's
+//       depot sits in the Shops & property row, and its solo.
 //   4y. AROUND THE GAME — messages stack; the district name keeps out of a
 //       mission's title; every overlay uses the game's face; the title says
 //       LOADING until it can answer; pause takes keys, ignores a click that
@@ -9358,6 +9362,87 @@ function withTimeout(p, ms) {
     JSON.stringify({ rob: bz.rob, bag: bz.bag, back: bz.backInHand }));
   check('business: the bar in the Lucky Gull is for sale too', bz.bar === 45000, String(bz.bar));
   check('business: and Lola counts them, and says where the money is', /business/i.test(bz.money || '') && /Businesses: 1 of 5/.test(bz.how || ''), JSON.stringify({ money: bz.money, how: bz.how }));
+
+  // ---------- 5v: boats on Isla Verde, and the depot on the legend ----------
+  // The island had one speedboat, at the marina, and the map left its anchor
+  // off while the bridges were shut — so it read as an island with no boats.
+  // Now the marina has a jet ski beside it and the east-coast cove has a
+  // jetty with a speedboat and a jet ski. Each one floats, and can be boarded
+  // and taken out. And the depot is under Shops & property, not a row of its
+  // own: solo Shops and its badge stays; solo anything else and it goes.
+  var iv = await page.evaluate(function () {
+    var r = {}, C = GAME.city, P = GAME.player, H = GAME.hud, ff = function (s) { GAME.test.fastForward(s); };
+    var wasOpen = GAME.isla.isOpen(), solo0 = (GAME.prefs || {}).mapSolo || null;
+    try {
+      if (P.inCar) GAME.exitCar();
+      GAME.police.clearWanted();
+      GAME.isla.setOpen(true);
+      var mo = C.moorings.filter(function (m) { return m.isla; });
+      r.moorings = mo.map(function (m) {
+        return { x: Math.round(m.x), z: Math.round(m.z), type: m.vtype || 'boat', wet: C.isBoatWater(m.x, m.z),
+          spot: C.parkedSpots.some(function (s) { return s.isla && s.x === m.x && s.z === m.z; }) };
+      });
+      r.jetty = !!C.islaPois.coveJetty;
+      // the cove's speedboat: walk out along the jetty, board it, take it out
+      var cb = mo.filter(function (m) { return C.islaPois.coveJetty && Math.abs(m.x - C.islaPois.coveJetty.x) < 40 && !m.vtype; })[0];
+      if (cb) {
+        GAME.test.teleport(cb.x, cb.z - 3); ff(1.0);
+        r.onPlanks = { y: +P.pos.y.toFixed(2), swimming: !!P.swimming };
+        var sp = C.parkedSpots.filter(function (s) { return s.x === cb.x && s.z === cb.z; })[0];
+        var boat = sp && sp.live;
+        r.spawned = boat ? boat.type : null;
+        if (boat) {
+          GAME.test.enterNearestCar(boat); ff(1.5);
+          r.aboard = P.inCar && P.car === boat;
+          var p0 = { x: boat.pos.x, z: boat.pos.z };
+          GAME.test.pressKey('KeyW', true); ff(4); GAME.test.pressKey('KeyW', false);
+          r.away = Math.round(Math.hypot(boat.pos.x - p0.x, boat.pos.z - p0.z));
+          r.stillWet = C.isBoatWater(boat.pos.x, boat.pos.z);
+          if (P.inCar) GAME.exitCar(); ff(0.3);
+        }
+      }
+      // the legend: one row for shops, property and the depot
+      H.toggleMap(true);
+      var legend = Array.prototype.map.call(document.querySelectorAll('#map-legend .lgd'), function (e) {
+        return { k: e.getAttribute('data-k'), t: e.textContent };
+      });
+      r.legendKeys = legend.map(function (l) { return l.k; });
+      r.shopsRow = (legend.filter(function (l) { return l.k === 'shops'; })[0] || {}).t || '';
+      // the depot badge (its cream, nowhere else on the map) under each solo
+      function depotInk() {
+        var cv = document.getElementById('bigmap'), d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data, n = 0;
+        for (var i = 0; i < d.length; i += 4) if (d[i] > 245 && Math.abs(d[i + 1] - 233) < 8 && Math.abs(d[i + 2] - 176) < 10) n++;
+        return n;
+      }
+      if (solo0) H.testToggleCat(solo0);            // start from no solo
+      r.inkAll = depotInk();
+      H.testToggleCat('shops'); H.toggleMap(false); H.toggleMap(true);
+      r.inkShops = depotInk();
+      H.testToggleCat('shops'); H.testToggleCat('health'); H.toggleMap(false); H.toggleMap(true);
+      r.inkHealth = depotInk();
+      H.testToggleCat('health');
+      H.toggleMap(false);
+    } finally {
+      if (GAME.mapOpen) H.toggleMap(false);
+      if (P.inCar) GAME.exitCar();
+      GAME.prefs = GAME.prefs || {};
+      if (((GAME.prefs.mapSolo) || null) !== solo0) H.testToggleCat(solo0 || GAME.prefs.mapSolo);
+      GAME.isla.setOpen(wasOpen);
+      GAME.test.teleport(-60, 40); ff(0.5);
+    }
+    return r;
+  });
+  check('isla boats: the island has four moorings — two at the marina, two at the cove jetty — each on open water with a boat',
+    iv.moorings.length === 4 && iv.jetty && iv.moorings.every(function (m) { return m.wet && m.spot; }) &&
+    iv.moorings.filter(function (m) { return m.type === 'jetski'; }).length === 2, JSON.stringify(iv.moorings));
+  check('isla boats: the cove jetty holds you up beside its speedboat',
+    iv.onPlanks && !iv.onPlanks.swimming && iv.onPlanks.y > 0.5, JSON.stringify(iv.onPlanks));
+  check('isla boats: and the speedboat is there, takes you aboard, and goes',
+    iv.spawned === 'boat' && iv.aboard && iv.away > 20 && iv.stillWet, JSON.stringify({ spawned: iv.spawned, aboard: iv.aboard, away: iv.away, wet: iv.stillWet }));
+  check('map legend: the depot rides with Shops & property, not a row of its own',
+    iv.legendKeys.indexOf('icecream') < 0 && iv.legendKeys.indexOf('shops') >= 0 && /Depot/.test(iv.shopsRow), JSON.stringify({ keys: iv.legendKeys, shops: iv.shopsRow }));
+  check('map legend: solo Shops and the depot stays; solo Health and it goes',
+    iv.inkAll > 20 && iv.inkShops > 20 && iv.inkHealth === 0, JSON.stringify({ all: iv.inkAll, shops: iv.inkShops, health: iv.inkHealth }));
 
   // ---------- 6: a rider follows the deck when it tilts ----------
   // vehicles.js pitches a chassis over a ramp (negative rotation.x lifts the

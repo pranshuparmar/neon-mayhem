@@ -1485,6 +1485,34 @@ GAME.isla = (function () {
     var bm = { x: POI.marina.x - 50, z: POI.marina.z - 12.2, isla: true };
     city.moorings.push(bm);
     city.parkedSpots.push({ x: bm.x, z: bm.z, y: -0.35, heading: -Math.PI / 2, vtype: 'boat', isla: true });
+    // and a jet ski alongside the next jetty, in the gap the yachts leave
+    var jm = { x: POI.marina.x - 40, z: POI.marina.z + 3.8, isla: true, vtype: 'jetski' };
+    city.moorings.push(jm);
+    city.parkedSpots.push({ x: jm.x, z: jm.z, y: -0.35, heading: -Math.PI / 2, vtype: 'jetski', isla: true });
+
+    // The cove on the east coast gets a jetty of its own, out from the beach
+    // to where the water is deep enough, with a speedboat and a jet ski tied
+    // up either side of its far end: the island's boats were all at the
+    // marina, on the channel side, and none where its beach is.
+    (function () {
+      var cz = POI.cove.z, sx = null;
+      for (var cx = POI.cove.x; cx < POI.cove.x + 260 && sx === null; cx += 2) if (!contains(cx, cz)) sx = cx;
+      if (sx === null) return;
+      var x0 = sx - 8, x1 = sx + 24, jy = 0.5, len = x1 - x0, mid = (x0 + x1) / 2;
+      b.addBox(mid, jy, cz, len, 0.6, 3.2, 0, 0x7a5a40, 0);
+      city.addDeck({ x: mid, z: cz, w: len, len: 3.2, rot: 0, y0: jy + 0.3, y1: jy + 0.3 });
+      // posts down its length, and a string of lights along one rail
+      for (var px = x0 + 2; px <= x1; px += 6) {
+        b.addBox(px, jy + 1.1, cz - 1.4, 0.22, 2.2, 0.22, 0, 0x8a7a5a, 0);
+        b.addBox(px, jy + 1.1, cz + 1.4, 0.22, 2.2, 0.22, 0, 0x8a7a5a, 0);
+      }
+      batches.glow.addBox(mid, jy + 2.0, cz - 1.4, len - 2, 0.13, 0.13, 0, 0xffd890, 0);
+      var cb = { x: x1 - 6, z: cz + 3.6, isla: true }, cj = { x: x1 - 10, z: cz - 3.6, isla: true, vtype: 'jetski' };
+      city.moorings.push(cb, cj);
+      city.parkedSpots.push({ x: cb.x, z: cb.z, y: -0.35, heading: Math.PI / 2, vtype: 'boat', isla: true });
+      city.parkedSpots.push({ x: cj.x, z: cj.z, y: -0.35, heading: Math.PI / 2, vtype: 'jetski', isla: true });
+      POI.coveJetty = { x: mid, z: cz, x0: x0, x1: x1 };
+    })();
 
     // Container port: stacks and two gantry cranes, and every last one of them
     // checked against the road network before it goes down. A yard laid out on
