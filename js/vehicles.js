@@ -672,6 +672,9 @@ GAME.vehicles = (function () {
       // a job's car (missions.js): a takedown's target, locked while he is in
       // it, and the car of Rico's men that comes after the ledger
       perp: false, locked: false, heavy: false,
+      // a side's car (gangs.js), and the law's top end (police.js tactics,
+      // army.js): declared here so every car keeps the one shape
+      gang: null, tactic: null, armyUnit: false, pitT: 0, pitDir: 0, pitCool: 0, gunT: 0,
       aiSteer: 0, aiTX: NaN, aiTZ: NaN, aiAir: false, airLights: null,
       copsOut: NaN, shootT: NaN, aimSkill: NaN, deployT: 0, fireT: 0, bailT: 0,
       heliSpeed: 0, rotorSpin: 0, mgT: 0, rkT: 0, pitch: 0, roll: 0, sinkV: 0,

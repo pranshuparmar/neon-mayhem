@@ -205,6 +205,7 @@ GAME.peds = (function () {
       stolenCar: null, hadDriver: undefined, yankT: 0, yankWarned: false, leftCar: 0,
       jobPed: false, iceServed: false, carrying: undefined,
       missionArmed: false, missionFoe: false,   // a job's armed man (missions.js), and one to mark
+      gang: null, boss: false,                  // a side's man (gangs.js), a crew's boss (missions.js)
       patrol: false, onCase: null, beatX: 0, beatZ: 0, beatT: 0, grabbing: false,
       aimSkill: NaN, lastShotT: 0,
       enterX: NaN, enterZ: NaN, enterT: 0   // a door they are making for (walkInto)

@@ -298,6 +298,8 @@
 //      whose cannon and tracks work for you; cruisers that ram, PIT, box.
 //  21. CHEATS         — Vice City's codes, typed into CHEATS on the pause
 //      screen; a word that is not one does nothing.
+//  22. LANDMARKS      — a club, a stadium, a film lot and a villa, solid,
+//      signed, open at the gate, with nothing buried in them.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -12766,6 +12768,38 @@ function withTimeout(p, ms) {
   check('cheats: ASPIRINE heals; a word that is not a code does nothing', cheat.health && cheat.nothing, JSON.stringify(cheat));
   check('cheats: armour, the nutter\'s weapons, and a tank beside you', cheat.armour && cheat.nutter && cheat.panzer, JSON.stringify(cheat));
   check('cheats: the stars up and off, and the weather', cheat.up && cheat.clear && cheat.rain && cheat.count >= 15, JSON.stringify(cheat));
+
+  // ---------- 22: landmarks ----------
+  // One a district, on a lot the blocks left empty: THE MALIBU on the strip,
+  // the stadium in Las Colinas, ROSA PICTURES in Centro Alto, VILLA SALAZAR
+  // up in the hills. Each is solid where it is built, signed, and open where
+  // you would go in; nothing that was lying about ended up inside one.
+  var lm = await page.evaluate(function () {
+    var C = GAME.city, r = { sites: [] };
+    GAME.landmarks.sites().forEach(function (s) {
+      var walls = C.hash.query(s.x, s.z, s.lot / 2).filter(function (b) {
+        return b.tag === 'building' && b.minX > s.x - s.lot / 2 - 2 && b.maxX < s.x + s.lot / 2 + 2 && b.minZ > s.z - s.lot / 2 - 2 && b.maxZ < s.z + s.lot / 2 + 2;
+      }).length;
+      r.sites.push({ id: s.id, district: C.districtName(s.x, s.z), walls: walls, faces: !!s.frame });
+    });
+    // the stadium's gate is open to the road: a clear line from the street to the pitch
+    var st = GAME.landmarks.sites().filter(function (s) { return s.id === 'stadium'; })[0];
+    var gate = st.frame.at(0, 30), pitch = st.frame.at(0, 0);
+    r.gateOpen = C.hash.segmentClear(gate.x, gate.z, pitch.x, pitch.z);
+    // nothing to pick up is inside a wall of theirs
+    r.buried = GAME.world.pickups.concat(GAME.tapes.list().map(function (t) { return { pos: { x: t.x, y: t.y, z: t.z } }; })).filter(function (p) {
+      return C.hash.query(p.pos.x, p.pos.z, 0.3).some(function (b) {
+        return b.tag === 'building' && p.pos.x > b.minX && p.pos.x < b.maxX && p.pos.z > b.minZ && p.pos.z < b.maxZ && (b.h === undefined || b.h > p.pos.y + 0.3) &&
+          !!GAME.landmarks.near(p.pos.x, p.pos.z, 40);
+      });
+    }).length;
+    return r;
+  });
+  check('landmarks: four of them, in four districts, each built and solid',
+    lm.sites.length === 4 && lm.sites.every(function (s) { return s.walls >= 3 && s.faces; }) &&
+    lm.sites.map(function (s) { return s.district; }).filter(function (d, i, a) { return a.indexOf(d) === i; }).length >= 3, JSON.stringify(lm));
+  check('landmarks: the stadium\'s gate is open from the road to the pitch', lm.gateOpen, JSON.stringify(lm));
+  check('landmarks: nothing to find ended up inside one', lm.buried === 0, JSON.stringify(lm));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the

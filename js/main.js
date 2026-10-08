@@ -55,6 +55,7 @@
     GAME.share.init();
     GAME.shops.init(scene);
     GAME.interiors.build();
+    GAME.landmarks.build();
     GAME.initInput(canvas);
     GAME.combat.refreshWeaponHud();
     GAME.hud.wantedChanged(0);
@@ -552,6 +553,7 @@
     if (GAME.isla) GAME.isla.tick(dt);
     GAME.shops.update(dt);
     GAME.interiors.update(dt);
+    GAME.landmarks.update(dt);
     GAME.robbery.update(dt);
     GAME.derby.update(dt);
     GAME.photo.update(dt);
