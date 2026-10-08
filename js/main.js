@@ -80,6 +80,8 @@
     GAME.onKeyDown = function (code) {
       if (code === 'Enter' && !GAME.started) { GAME.startGame(); return; }
       if (!GAME.started) return;
+      // the cheat box has the keyboard while it is open (cheats.js)
+      if (GAME.cheatOpen) return;
       // an open dialog owns the keys — Esc must cancel it, not unpause
       if (GAME.hud.dialogOpen()) { GAME.hud.dialogKey(code); return; }
       // and so does Lola, while you are talking to her

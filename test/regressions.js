@@ -296,6 +296,8 @@
 //      dropping it brings the stars; a day to restock; never your own.
 //  20. THE TOP END    — a sixth star and the army; a tank you can take,
 //      whose cannon and tracks work for you; cruisers that ram, PIT, box.
+//  21. CHEATS         — Vice City's codes, typed into CHEATS on the pause
+//      screen; a word that is not one does nothing.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -12709,6 +12711,61 @@ function withTimeout(p, ms) {
   check('law: from three stars the cruisers ram, PIT and box you in', law.tactics === 'box,pit,ram' || law.tactics === 'box,chase,pit,ram', JSON.stringify(law));
   check('law: a PIT at your back wheel spins you round', law.pitT && law.spun, JSON.stringify(law));
   check('law: with the tactics off they only follow', law.politeOff, JSON.stringify(law));
+
+  // ---------- 21: cheats ----------
+  // Vice City's words, typed into CHEATS on the pause screen: health,
+  // armour, the three weapon sets, the stars off and on, a tank, cars, the
+  // weather. A word that is not one does nothing.
+  var cheat = await page.evaluate(function () {
+    var P = GAME.player, C = GAME.cheats, r = {};
+    var weapons0 = JSON.parse(JSON.stringify(P.weapons, function (k, v) { return v === Infinity ? 'INF' : v; }));
+    var cur0 = P.currentWeapon, spawned = [];
+    try {
+      if (P.inCar) GAME.exitCar();
+      GAME.test.teleport(-60, 40); GAME.test.fastForward(0.5);
+      // the box, off the pause screen, typed into
+      GAME.togglePause();
+      document.getElementById('pause-cheats').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      r.open = !!GAME.cheatOpen && document.getElementById('cheat-box').style.display === 'flex';
+      var inp = document.getElementById('cheat-input');
+      P.health = 30;
+      inp.value = 'aspirine';
+      inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      r.health = P.health === 100 && /Health/.test(document.getElementById('cheat-said').textContent);
+      inp.value = 'NOTACHEAT';
+      inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      r.nothing = /Nothing/.test(document.getElementById('cheat-said').textContent);
+      C.close();
+      if (GAME.paused) GAME.togglePause();
+      GAME.test.fastForward(0.2);
+      r.closed = !GAME.cheatOpen;
+      // the rest straight through the same door
+      r.armour = !!C.enter('PRECIOUSPROTECTION') && P.armor === 100;
+      r.nutter = !!C.enter('NUTTERTOOLS') && P.weapons.chainsaw.have && P.weapons.rocket.have && P.weapons.sniper.have;
+      var cars0 = GAME.world.cars.length;
+      r.panzer = !!C.enter('panzer') && GAME.world.cars.some(function (c) { if (c.spec.tank && c.occupied !== 'ai') { spawned.push(c); return true; } return false; });
+      r.up = !!C.enter('YOUWONTTAKEMEALIVE') && GAME.police.wanted === 2;
+      r.clear = !!C.enter('LEAVEMEALONE') && GAME.police.wanted === 0;
+      r.rain = !!C.enter('CATSANDDOGS') && GAME.weather.mode === 'rain';
+      C.enter('ALOVELYDAY');
+      r.count = C.codes().length;
+    } finally {
+      C.close();
+      if (GAME.paused) GAME.togglePause();
+      GAME.weather.setMode('clear', true);
+      spawned.forEach(function (c) { if (!c.gone) GAME.vehicles.removeCar(c); });
+      P.weapons = JSON.parse(JSON.stringify(weapons0), function (k, v) { return v === 'INF' ? Infinity : v; });
+      P.currentWeapon = cur0; GAME.combat.refreshWeaponHud();
+      P.armor = 0; P.health = 100;
+      GAME.police.clearWanted();
+      GAME.test.fastForward(0.3);
+    }
+    return r;
+  });
+  check('cheats: CHEATS on the pause screen opens a box to type a code in', cheat.open && cheat.closed, JSON.stringify(cheat));
+  check('cheats: ASPIRINE heals; a word that is not a code does nothing', cheat.health && cheat.nothing, JSON.stringify(cheat));
+  check('cheats: armour, the nutter\'s weapons, and a tank beside you', cheat.armour && cheat.nutter && cheat.panzer, JSON.stringify(cheat));
+  check('cheats: the stars up and off, and the weather', cheat.up && cheat.clear && cheat.rain && cheat.count >= 15, JSON.stringify(cheat));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the

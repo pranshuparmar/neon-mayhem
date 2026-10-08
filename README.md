@@ -45,6 +45,7 @@ Want the details? **[Read the full tour →](docs/FEATURES.md)**
 
 ## What's new
 
+- 🕹 **Cheats** — PANZER, ASPIRINE, the weapon sets and the rest of Vice City's words, typed into CHEATS on the pause screen.
 - 🪖 **Six stars** — the army, its soldiers and a tank you can take; and cruisers that ram, PIT and box you in.
 - 💵 **Store robberies** — a gun on the clerk empties the till while you keep it there, and the law is waiting outside.
 - 🔪 **The arsenal** — bat, knife, katana, chainsaw, grenades, Molotovs, a scoped sniper rifle and a rocket launcher, and a weapon wheel to pick them from.

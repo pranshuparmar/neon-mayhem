@@ -69,6 +69,17 @@
   .wslot.cur { border-color:rgba(141,255,216,.7); }
   .wslot.sel { border-color:#ff4fa3; background:rgba(255,79,163,.3); transform:scale(1.15); box-shadow:0 0 18px rgba(255,79,163,.6); }
   #wheel-name { position:relative; font:900 18px 'Segoe UI', Arial, sans-serif; letter-spacing:3px; color:#ffe8f6; text-shadow:0 0 10px rgba(255,79,163,.9); }
+  /* the cheat box (cheats.js), over the pause screen */
+  #cheat-box { position:fixed; inset:0; z-index:70; display:none; align-items:center; justify-content:center; padding:16px; background:rgba(6,2,14,.6);
+    font-family:'Segoe UI', Arial, Helvetica, sans-serif; }
+  #cheat-card { width:min(420px,100%); background:rgba(10,4,20,.96); border:1px solid rgba(255,79,163,.85); border-radius:10px; padding:16px; text-align:center;
+    box-shadow:0 0 26px rgba(255,79,163,.4); }
+  #cheat-title { color:#ffe8f6; font-weight:900; letter-spacing:3px; font-size:18px; }
+  #cheat-sub { color:#9fd8ff; font-size:12.5px; margin:6px 0 10px; }
+  #cheat-input { width:100%; box-sizing:border-box; padding:10px 12px; font:800 18px 'Segoe UI', Arial, sans-serif; letter-spacing:3px; text-transform:uppercase;
+    background:#14081f; color:#8dffd8; border:1px solid rgba(141,255,216,.6); border-radius:6px; outline:none; }
+  #cheat-said { min-height:20px; margin:8px 0 4px; color:#ffe14f; font-weight:700; font-size:13px; }
+  #cheat-btns { display:flex; gap:8px; justify-content:center; }
   /* down the sniper's scope */
   #scope { position:fixed; inset:0; z-index:9; display:none; pointer-events:none;
     background:radial-gradient(circle at 50% 50%, transparent 0, transparent min(36vh,36vw), #000 calc(min(36vh,36vw) + 2px)); }
@@ -558,6 +569,7 @@
     <span class="mbtn" id="pause-chaos">🌆 CITY: LIVELY</span>
     <span class="mbtn" id="pause-day">🕓 TIME: AUTO</span>
     <span class="mbtn" id="pause-weather">🌧 WEATHER: AUTO</span>
+    <span class="mbtn" id="pause-cheats">🕹 CHEATS</span>
     <span class="mbtn" id="pause-export">💾 EXPORT SAVE</span>
     <span class="mbtn" id="pause-import">📂 IMPORT SAVE</span>
     <span class="mbtn" id="pause-reset">🗑 RESET PROGRESS</span>
@@ -574,6 +586,11 @@
 <div id="lola-screen"><div id="lola-card"><div id="lola-head"><div id="lola-face"></div><div id="lola-words"><div id="lola-from">📟 LOLA</div><div id="lola-say"></div></div></div><div id="lola-opts"></div><div id="lola-hint"></div></div></div>
 <div id="weapon-wheel"><div id="wheel-ring"></div><div id="wheel-name"></div></div>
 <div id="scope"><div class="scope-x"></div><div class="scope-y"></div></div>
+<div id="cheat-box"><div id="cheat-card"><div id="cheat-title">🕹 CHEATS</div>
+  <div id="cheat-sub">Type a code and press Enter — Vice City's own words, mostly.</div>
+  <input id="cheat-input" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="32">
+  <div id="cheat-said"></div>
+  <div id="cheat-btns"><span class="mbtn" id="cheat-ok">ENTER</span><span class="mbtn" id="cheat-close">CLOSE</span></div></div></div>
 <div id="cine"><div class="cine-bar cine-top"></div><div class="cine-bar cine-bot"><span id="cine-skip"></span></div><div id="scene-sub"><div id="scene-face"></div><div id="scene-words"><div id="scene-name"></div><div id="scene-text"></div></div></div></div>
 <div id="photo-toast"><img id="photo-toast-img" alt=""><div id="photo-toast-text"></div></div>
 <div id="photo-view">
@@ -730,6 +747,7 @@ window.addEventListener('load', function () {
 <script src="js/photo.js"></script>
 <script src="js/hud.js"></script>
 <script src="js/scenes.js"></script>
+<script src="js/cheats.js"></script>
 <script src="js/share.js"></script>
 <script src="js/shops.js"></script>
 <script src="js/derby.js"></script>
