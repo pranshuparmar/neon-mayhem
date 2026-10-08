@@ -12670,9 +12670,15 @@ function withTimeout(p, ms) {
         GAME.enterCar(t); GAME.test.fastForward(3);
         r.mine = P.inCar && P.car === t;
         GAME.input.lockGraceT = 0;
-        var car = GAME.test.spawnCar('sedan', 0, 25); spawned.push(car);
+        // (down the road it is sat on, in plain sight, the gun level: put
+        // anywhere else it could be round a corner from wherever the tank
+        // stopped, and the shell went into a wall)
+        t.speed = 0;
+        var car = GAME.test.spawnCar('sedan', 0, 0); spawned.push(car);
+        car.pos.set(t.pos.x + Math.sin(t.heading) * 18, car.pos.y, t.pos.z + Math.cos(t.heading) * 18);
+        car.occupied = null; car.speed = 0;
         GAME.test.fastForward(0.3);
-        for (var k = 0; k < 90; k++) { GAME.cam.freeT = 2; GAME.cam.yaw = Math.atan2(car.pos.x - t.pos.x, car.pos.z - t.pos.z); GAME.test.fastForward(1 / 60); }
+        for (var k = 0; k < 90; k++) { GAME.cam.freeT = 2; GAME.cam.pitch = 0.3; GAME.cam.yaw = Math.atan2(car.pos.x - t.pos.x, car.pos.z - t.pos.z); t.speed = 0; GAME.test.fastForward(1 / 60); }
         var hp0 = car.hp;
         GAME.input.lmbPressed = true; GAME.test.fastForward(1.2);
         r.cannon = car.dead || car.hp < hp0;
@@ -12700,12 +12706,18 @@ function withTimeout(p, ms) {
       // the PIT: one at your back wheel, moving with you, turns you round
       var pc = P.car;
       if (pit && pc) {
-        var fx = Math.sin(pc.heading), fz = Math.cos(pc.heading);
-        pit.pos.set(pc.pos.x - fx * 2.4 + fz * 1.6, pc.pos.y, pc.pos.z - fz * 2.4 - fx * 1.6);
-        pit.heading = pc.heading; pit.speed = 15; pc.speed = 15;
+        // (put back at the wheel each frame until it takes: one frame alone
+        // could go to anything else on the road nudging either car)
         var h0 = pc.heading;
-        GAME.test.fastForward(1 / 60);
+        for (var pf = 0; pf < 15 && !(pc.pitT > 0); pf++) {
+          var fx = Math.sin(pc.heading), fz = Math.cos(pc.heading);
+          pit.pos.set(pc.pos.x - fx * 2.4 + fz * 1.6, pc.pos.y, pc.pos.z - fz * 2.4 - fx * 1.6);
+          pit.heading = pc.heading; pit.speed = 15; pc.speed = 15;
+          h0 = pc.heading;
+          GAME.test.fastForward(1 / 60);
+        }
         r.pitT = pc.pitT > 0;
+        if (!r.pitT) r.pitWhy = { mode: pit.ai && pit.ai.mode, tactic: pit.tactic, dead: pit.dead, cs: +pc.speed.toFixed(1), ps: +pit.speed.toFixed(1) };
         GAME.test.fastForward(0.5);
         r.spun = Math.abs(U.wrapPI(pc.heading - h0)) > 0.5;
       }
