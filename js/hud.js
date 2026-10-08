@@ -1580,8 +1580,10 @@ GAME.hud = (function () {
     },
     radioPopup: function (name) {
       el['radio-popup'].textContent = '♪ ' + name;
+      // where it is on the dial and what it plays, and its jingle (dj.js)
+      if (GAME.dj) GAME.dj.tuned(name);
       el['radio-popup'].style.opacity = 1;
-      radioT = 2.2;
+      radioT = 2.6;
     },
     damageFlash: function () {
       GAME.haptics.hurt();

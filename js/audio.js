@@ -1,5 +1,5 @@
 GAME.audio = (function () {
-  var ctx = null, master, sfxBus, radioBus, engineBus, ambBus, verb;
+  var ctx = null, master, sfxBus, radioBus, engineBus, ambBus, verb, musicDuck, talkBus;
   var sfxSwitch = null, musicSwitch = null;
   var muted = false, musicOn = true, sfxOn = true;
   var noiseBuf = null, brownBuf = null;
@@ -72,7 +72,12 @@ GAME.audio = (function () {
     musicSwitch = ctx.createGain(); musicSwitch.gain.value = musicOn ? 1 : 0; musicSwitch.connect(master);
     sfxSwitch = ctx.createGain(); sfxSwitch.gain.value = sfxOn ? 1 : 0; sfxSwitch.connect(master);
     sfxBus = ctx.createGain(); sfxBus.gain.value = 0.72; sfxBus.connect(sfxSwitch);
-    radioBus = ctx.createGain(); radioBus.gain.value = 0; radioBus.connect(musicSwitch);
+    radioBus = ctx.createGain(); radioBus.gain.value = 0;
+    // (the DJ dips the songs under the talk: dj.js)
+    musicDuck = ctx.createGain(); musicDuck.gain.value = 1;
+    radioBus.connect(musicDuck); musicDuck.connect(musicSwitch);
+    // and the talk on a bus of its own, at the radio's volume but not ducked
+    talkBus = ctx.createGain(); talkBus.gain.value = 0; talkBus.connect(musicSwitch);
     // the engine sits under everything else and is gently rolled off up top so
     // it doesn't mask the radio
     engineBus = ctx.createGain(); engineBus.gain.value = 0;
@@ -420,8 +425,56 @@ GAME.audio = (function () {
         step++;
       }
     }
+    // The DJ's hooks (dj.js): the music dipped under talk, a station's
+    // jingle, and a voice on the radio's own bus, so MUSIC: OFF and the
+    // radio's volume take them like the songs
+    var duckG = 1, jingles = 0, talkNodes = 0;
+    function duck(level, secs) {
+      if (!ctx) return;
+      var t = ctx.currentTime;
+      musicDuck.gain.cancelScheduledValues(t);
+      musicDuck.gain.setTargetAtTime(level, t, 0.15);
+      musicDuck.gain.setTargetAtTime(1, t + secs, 0.4);
+    }
+    function jingle(notes, wave) {
+      if (!ctx || radioSilent() || current === OFF) return false;
+      var t = ctx.currentTime + 0.05;
+      for (var i = 0; i < notes.length; i++) {
+        tone(midi(notes[i]), 0.22, 0.16, wave || 'square', 0, t + i * 0.13, radioBus);
+        tone(midi(notes[i] - 12), 0.22, 0.08, 'sine', 0, t + i * 0.13, radioBus);
+      }
+      tone(midi(notes[notes.length - 1] + 12), 0.6, 0.06, 'triangle', 0, t + notes.length * 0.13, verb);
+      jingles++;
+      return true;
+    }
+    function talk(v, ch) {
+      if (!ctx || radioSilent() || current === OFF || !v) return 0;
+      var t = ctx.currentTime;
+      var c = String(ch || 'a').toLowerCase(), code = c.charCodeAt(0) || 97;
+      var SC = [0, 2, 4, 7, 9, 12, -3, 5];
+      var f = v.base * Math.pow(2, SC[code % SC.length] * (v.spread || 6) / 12 / 12);
+      var o = ctx.createOscillator(); o.type = v.wave || 'square';
+      o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 0.93, t + 0.07);
+      var bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = v.formant || 1200; bp.Q.value = v.q || 1.8;
+      var g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.32, t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+      // (a radio voice is band-limited: the bandpass above, and no reverb)
+      o.connect(bp); bp.connect(g); g.connect(talkBus);
+      o.start(t); o.stop(t + 0.1);
+      o.onended = function () { try { o.disconnect(); bp.disconnect(); g.disconnect(); } catch (e) { } };
+      talkNodes += 3;
+      return 3;
+    }
     return {
       stations: stations,
+      duck: duck,
+      jingle: jingle,
+      talk: talk,
+      get jingles() { return jingles; },
+      get talkNodes() { return talkNodes; },
+      get audible() { return !!ctx && !radioSilent() && current !== OFF; },
       get name() { return nameOf(current); },
       get index() { return current; },
       get off() { return current === OFF; },
@@ -450,6 +503,7 @@ GAME.audio = (function () {
         if (v <= 0 && radioVol > 0) noteQuiet();
         radioVol = v;
         radioBus.gain.setTargetAtTime(v, ctx.currentTime, 0.3);
+        talkBus.gain.setTargetAtTime(v, ctx.currentTime, 0.3);
       }
     };
   })();

@@ -566,6 +566,7 @@
     // last of the sound: everything has moved, so it hears where things are
     GAME.ambience.tick(dt);
     GAME.herald.update(dt);
+    GAME.dj.update(dt);
     updateHeadlight();
     GAME.touch.update();
     GAME.hud.update(dt);

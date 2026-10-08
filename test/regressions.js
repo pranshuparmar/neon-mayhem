@@ -302,6 +302,8 @@
 //      signed, open at the gate, with nothing buried in them.
 //  23. WEAR           — bumpers off at the end that took it, a sprung bonnet,
 //      burst tyres that sit the car down; the paint shop mends them.
+//  24. THE RADIO      — a place on the dial, a jingle and a DJ for every
+//      station, talk and ads in captions and a voice; MUSIC: OFF takes them.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -445,6 +447,10 @@ function withTimeout(p, ms) {
     // costs a bumper, a bonnet or a tyre (vehicles.js wear), and the groups
     // below drive, shoot at and measure cars that never lost anything.
     GAME.vehicles.wear = false;
+    // And the radio's DJs quiet (dj.js): a station's jingle and the talk
+    // over it are notes of their own, and the radio groups below count
+    // every voice a station plays and where it lands on the beat.
+    GAME.dj.enabled = false;
     GAME.test.fastForward(1);
     var a = GAME.audio;
     var engine0 = a.engineState, skid0 = a.skid, siren0 = a.siren, vol0 = a.radio.setVolume;
@@ -1527,6 +1533,7 @@ function withTimeout(p, ms) {
     if (GAME.gangs) GAME.gangs.enabled = false;   // and the gangs off the corners
     GAME.police.tactics = false;   // and the chase polite
     GAME.vehicles.wear = false;   // and the cars whole
+    GAME.dj.enabled = false;   // and the DJs quiet
     GAME.test.start();
     GAME.test.fastForward(0.5);
     var layer = document.getElementById('touch-layer');
@@ -11308,6 +11315,7 @@ function withTimeout(p, ms) {
     if (GAME.gangs) GAME.gangs.enabled = false;   // and the gangs off the corners
     GAME.police.tactics = false;   // and the chase polite
     GAME.vehicles.wear = false;   // and the cars whole
+    GAME.dj.enabled = false;   // and the DJs quiet
     GAME.test.start();
     GAME.test.fastForward(1);
     var zone = document.getElementById('tstick-zone');
@@ -12862,6 +12870,63 @@ function withTimeout(p, ms) {
   check('wear: a car short of its bumpers costs no geometry of its own', wr.shared, JSON.stringify(wr));
   check('wear: a round by a wheel bursts that tyre, and the car sits down on it', wr.missFar && wr.tyre && wr.sits, JSON.stringify(wr));
   check('wear: the paint shop mends the lot; switched off, a knock is only hp', wr.mended && wr.off, JSON.stringify(wr));
+
+  // ---------- 24: the radio's personality ----------
+  // Every station has a place on the dial, a sound and a DJ: tuning in
+  // shows the frequency and plays its jingle; a minute or so on the songs
+  // dip and the DJ (or an ad) talks, in a caption and a voice on the
+  // radio's own bus. MUSIC: OFF takes the lot.
+  var djr = await page.evaluate(function () {
+    var A = GAME.audio, R = A.radio, D = GAME.dj, P = GAME.player, r = {};
+    A.init();
+    var mute0 = A.muted, music0 = A.musicOn;
+    if (A.muted) A.toggleMute();
+    A.setMusicOn(true);
+    D.enabled = true;
+    var car = null;
+    try {
+      r.ids = R.stations.every(function (s) { var id = D.identity(s.name); return id && id.freq && id.genre && id.dj && id.jingle.length >= 3 && id.lines.length >= 4; });
+      car = GAME.test.spawnCar('sedan', 4, 0);
+      GAME.test.fastForward(0.2); GAME.test.enterNearestCar(car); GAME.test.fastForward(1.5);
+      var j0 = R.jingles;
+      var name = R.switchStation(1);
+      if (name === 'RADIO OFF') name = R.switchStation(1);
+      GAME.hud.radioPopup(name);
+      r.dial = /FM|PIRATE/.test(document.getElementById('radio-popup').textContent);
+      r.jingle = R.jingles === j0 + 1;
+      var seg = D.segment();
+      r.talks = !!seg && document.getElementById('radio-talk').classList.contains('on') &&
+        document.getElementById('radio-talk').textContent.indexOf(seg.text) >= 0;
+      var t0 = R.talkNodes;
+      GAME.test.fastForward(1.0);
+      r.voice = R.talkNodes > t0;
+      GAME.test.fastForward(10);
+      r.done = !D.talking && !document.getElementById('radio-talk').classList.contains('on');
+      // MUSIC: OFF: no jingle, no talk
+      A.setMusicOn(false);
+      GAME.test.fastForward(2.5);
+      var j1 = R.jingles;
+      GAME.hud.radioPopup(R.switchStation(1));
+      r.offNoJingle = R.jingles === j1 && !D.segment();
+      A.setMusicOn(true);
+      // out of the car, the talk stops with the songs
+      D.segment();
+      GAME.test.exitCar(); GAME.test.fastForward(3.5);
+      r.footQuiet = !D.talking;
+    } finally {
+      D.enabled = false;
+      if (P.inCar) GAME.test.exitCar();
+      GAME.test.fastForward(1);
+      if (car && !car.gone) GAME.vehicles.removeCar(car);
+      A.setMusicOn(music0);
+      if (A.muted !== mute0) A.toggleMute();
+    }
+    return r;
+  });
+  check('radio: every station has a frequency, a sound, a DJ and a jingle', djr.ids, JSON.stringify(djr));
+  check('radio: tuning in shows where it is on the dial and plays its jingle', djr.dial && djr.jingle, JSON.stringify(djr));
+  check('radio: the DJ talks, in a caption and a voice, and stops', djr.talks && djr.voice && djr.done, JSON.stringify(djr));
+  check('radio: MUSIC: OFF takes the jingle and the talk; so does getting out', djr.offNoJingle && djr.footQuiet, JSON.stringify(djr));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the

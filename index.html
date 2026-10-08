@@ -97,6 +97,13 @@
 
   #radio-popup { left:50%; top:16%; transform:translateX(-50%); font-size:22px; font-weight:800; font-style:italic;
     color:#9df3ff; text-shadow:0 0 12px rgba(60,220,255,.9); opacity:0; transition:opacity .4s; }
+  #radio-popup .rsub { font-size:12px; font-style:normal; letter-spacing:2px; margin-top:2px; text-align:center; }
+  /* the DJ or an ad, under the station (dj.js) */
+  #radio-talk { left:50%; top:calc(16% + 52px); transform:translateX(-50%); width:min(560px, 80vw); text-align:center; font-size:14px; color:#f4ecff;
+    text-shadow:0 1px 3px #000; opacity:0; transition:opacity .4s; pointer-events:none; line-height:1.35;
+    background:rgba(10,4,20,.62); padding:6px 12px; border-radius:6px; box-sizing:border-box; }
+  #radio-talk.on { opacity:.95; }
+  #radio-talk b { letter-spacing:1px; }
   #zone-popup { left:50%; top:12px; transform:translateX(-50%); text-align:center; font-size:22px; font-weight:800; font-style:italic; color:#ffd9f2;
     text-shadow:0 0 12px rgba(255,100,200,.9), 2px 2px 0 #3a0f33; opacity:0; transition:opacity .6s; }
 
@@ -512,6 +519,7 @@
     <div id="vehicle-line"></div>
   </div>
   <div class="panel" id="radio-popup"></div>
+    <div class="panel" id="radio-talk"></div>
   <div class="panel" id="zone-popup"></div>
   <div class="panel" id="poi-hint"></div>
   <div class="panel" id="msg-line"></div>
@@ -746,6 +754,7 @@ window.addEventListener('load', function () {
 <script src="js/lola.js"></script>
 <script src="js/photo.js"></script>
 <script src="js/hud.js"></script>
+<script src="js/dj.js"></script>
 <script src="js/scenes.js"></script>
 <script src="js/cheats.js"></script>
 <script src="js/share.js"></script>
