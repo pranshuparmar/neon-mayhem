@@ -108,11 +108,27 @@ GAME.heist = (function () {
     if (job.target && job.target[0] === x && job.target[1] === z) return;
     job.target = [x, z]; routeT = 0;
   }
+  // The pitch, the first time: a cut to the lock-up, where she says what she
+  // has been saving you for (scenes.js). Once said, a second go — after a
+  // part that went wrong — goes straight in.
+  var PITCH = { id: 'bigscore', shots: [{ set: 'lockup', cast: ['lola', 'you'], lines: [
+    ['lola', 'Every job you did for me was practice for this one.'],
+    ['you', 'Which one?'],
+    ['lola', 'The Costa Rosa Savings & Loan. A Mosler vault, a door nobody ever opened, and twenty-five thousand behind it.'],
+    ['you', 'Nobody walks out of a bank with that.'],
+    ['lola', 'So we walk in first. Take a camera and case it: the front from across the street, then the vault, as a customer.']] }] };
+  // and Benny, the first time he gets in your car: no cut, just his say
+  var BENNY = { id: 'benny', shots: [{ set: null, lines: [
+    ['benny', 'Lola\'s friend? Nice car. Don\'t talk while I\'m thinking.'],
+    ['you', 'I didn\'t say anything.'],
+    ['benny', 'You were thinking about it. Drive.']] }] };
   function begin() {
     if (job || !offered()) return false;
     var p = P(), M = GAME.missions;
     if (p.state !== 'alive' || (M && M.active) || (GAME.strangers && GAME.strangers.busy) || GAME.police.wanted > 0) return false;
     var n = step();
+    if (n === 0 && !prefs().pitched && GAME.scenes &&
+        GAME.scenes.play(PITCH, function () { prefs().pitched = true; GAME.save(); begin(); })) return true;
     job = { step: n, t: 0, phase: '', target: null, bits: [], t0: GAME.time };
     GAME.hud.missionStart('THE BIG SCORE — ' + STEPS[n], '');
     GAME.audio.pickup();
@@ -216,7 +232,8 @@ GAME.heist = (function () {
       var car = p.inCar && p.car;
       if (j.ped && car && land(car) && dist(car.pos, j.ped.pos.x, j.ped.pos.z) < 12 && Math.abs(car.speed) < 2) {
         j.phase = 'board'; j.car = car;
-        say('BENNY: "Lola\'s friend? Nice car. Don\'t talk while I\'m thinking."', 3.5);
+        if (!prefs().bennyMet && GAME.scenes && GAME.scenes.play(BENNY)) prefs().bennyMet = true;
+        else say('BENNY: "Lola\'s friend? Nice car. Don\'t talk while I\'m thinking."', 3.5);
       } else if (j.ped && car && !land(car) && dist(car.pos, j.ped.pos.x, j.ped.pos.z) < 20 && !j.told) {
         j.told = true; say('BENNY: "In that? Four wheels, kid."', 2.5);
       }

@@ -212,6 +212,7 @@ GAME.strangers = (function () {
     var d = q.def;
     GAME.lola.offer({
       from: '🗣 ' + d.who,
+      face: d.id,
       say: d.ask,
       top: true,
       escSays: 'to walk on',

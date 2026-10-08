@@ -246,6 +246,89 @@ GAME.missions = (function () {
       'It\'s over. Costa Rosa\'s ours, kid — both islands. Enjoy the view.']
   };
   function lola(text, dur) { if (text && GAME.hud.pager) GAME.hud.pager('LOLA', text, dur); }
+  function rico(text, dur) { if (text && GAME.hud.pager) GAME.hud.pager('RICO', text, dur); }
+
+  // And the same story told face to face (scenes.js): the cut to Lola's
+  // lock-up before a job you have not done yet, her and you at the roll-up
+  // door. What she pages above is what she says here, in more words — the
+  // pager line is still how a job you have done before starts, and how all
+  // of them start with the scenes switched off. Rico gets his own cut to the
+  // marina on Isla Verde, once he has run there.
+  var SCENES = {
+    race0: [['lola', 'New in town? Then nobody knows your name yet.'],
+      ['you', 'Is that a problem?'],
+      ['lola', 'It\'s an opportunity. The strip racers meet tonight — win, and they stop laughing.']],
+    race1: [['lola', 'The harbour crews run a loop past the warehouses every night.'],
+      ['you', 'Whose crews?'],
+      ['lola', 'Rico Salazar\'s. Beat them on their own turf, kid, and let him hear about it.']],
+    race2: [['lola', 'Downtown money likes a show. The suits bet on these races like it\'s the stock market.'],
+      ['you', 'And you?'],
+      ['lola', 'I bet on you. First past the last gate — don\'t make me look stupid.']],
+    courier0: [['lola', 'A friend needs some plates moved before the cops run them.'],
+      ['you', 'How many stops?'],
+      ['lola', 'All of them, against the clock. Don\'t sightsee.']],
+    courier1: [['lola', 'Envelopes. Don\'t open them.'],
+      ['you', 'What\'s in them?'],
+      ['lola', 'That was opening them, kid. And don\'t be late.']],
+    courier2: [['lola', 'The beach bars need their "supplies" before the lunch crowd.'],
+      ['you', 'Supplies.'],
+      ['lola', 'Ice. Limes. Napkins. Whatever helps you sleep — just drive.']],
+    rampage0: [['lola', 'Somebody\'s selling on my strip without asking.'],
+      ['you', 'Want me to ask them to stop?'],
+      ['lola', 'Make a mess they\'ll remember. That IS asking, round here.']],
+    rampage1: [['lola', 'Rico Salazar\'s people moved into my warehouses last night. Walked in like they had the keys.'],
+      ['you', 'Did they?'],
+      ['lola', 'They had bolt cutters. Show them what that costs.']],
+    rampage2: [['lola', 'Uptown thinks it\'s above all this. Doormen, tennis clubs, private security.'],
+      ['you', 'And?'],
+      ['lola', 'And they buy from the same people everybody does. Remind them.']],
+    boat0: [['lola', 'The yacht club thinks the bay is theirs.'],
+      ['you', 'I\'ve never sailed.'],
+      ['lola', 'Neither have they — they pay people. Take a boat off the pier and show them whose bay it is.']],
+    boat1: [['lola', 'A crew of mine dumped a cargo over the side when the coastguard came sniffing.'],
+      ['you', 'And it floats?'],
+      ['lola', 'Wrapped tight, it floats. Fish it out of the bay before it drifts to Havana.']],
+    hit0: [['lola', 'Rico\'s collector drives a black limo round MY strip, picking up MY money.'],
+      ['you', 'You want it back?'],
+      ['lola', 'I want him out of business. Careful, kid — he shoots back.']],
+    hit1: [['lola', 'A Salazar bookkeeper is skipping town with my ledger. Names, numbers — everybody I pay.'],
+      ['you', 'Skipping in what?'],
+      ['lola', 'Something fast. He knows you\'re coming and he\'s scared enough to shoot. Stop him and bring me that book.']],
+    race3: [['lola', 'Isla Verde\'s rich kids race the Alta Verde switchbacks.'],
+      ['you', 'On Rico\'s island.'],
+      ['lola', 'For now. Beat them to the top and the whole island hears your name.']],
+    race4: [['lola', 'The Mirador loop. Fast, blind, and a long way down.'],
+      ['you', 'Any advice?'],
+      ['lola', 'Win it. Second place is a long fall.']],
+    courier3: [['lola', 'The ice cream factory moves more than ice cream.'],
+      ['you', 'I figured.'],
+      ['lola', 'Then figure this: it melts. Keep it cold and keep it moving.']],
+    rampage3: { shots: [
+      { set: 'marina', cast: ['rico', 'manny'], lines: [
+        ['rico', 'She sends a kid. Lola Reyes sends a KID to take my island.'],
+        ['manny', 'He took the hill, boss. And the factory.'],
+        ['rico', 'Then Puerto Dorado is where he stops. Tell the boys.']] },
+      { set: 'lockup', cast: ['lola', 'you'], lines: [
+        ['lola', 'Rico\'s holed up in Puerto Dorado, and he thinks it\'s a fortress.'],
+        ['you', 'Is it?'],
+        ['lola', 'Shake it and find out. Bring it down on him.']] }] },
+    hit2: { shots: [
+      { set: 'marina', cast: ['rico', 'manny'], lines: [
+        ['manny', 'Boat\'s fuelled, boss. Tide turns at six.'],
+        ['rico', 'Load the pickup. Costa Rosa can keep its sunshine.'],
+        ['rico', 'And if the kid shows up — he doesn\'t leave the marina.']] },
+      { set: 'lockup', cast: ['lola', 'you'], lines: [
+        ['lola', 'Rico\'s running. A black pickup, heading for the marina and a boat out at high tide.'],
+        ['you', 'Then I\'d better be early.'],
+        ['lola', 'This ends today, kid. Both islands.']] }] }
+  };
+  for (var sk in SCENES) SCENES[sk].id = sk;
+  // Rico has his say too, by pager, the first time a job of yours costs him
+  var RICO = {
+    rampage1: 'Those were MY warehouses for one night. Enjoy them while you can, kid.',
+    hit0: 'My collector. You took my collector. I\'ll remember your face — I\'m very good with faces.',
+    race3: 'You like my hills? Come up them again. My boys will be waiting at the top.'
+  };
 
   // Island mission anchors, resolved after the island registers. A race's
   // checkpoints are road points around a named loop, so the route follows the
@@ -1665,7 +1748,18 @@ GAME.missions = (function () {
     GAME.cam.freeT = 0;
   }
 
-  function start(def) {
+  // Into a job from its ring: the cut to Lola's first, if this is one you have
+  // not done yet (scenes.js), and the job when she is done talking. A retry
+  // never comes this way — relaunch goes straight to start — so a run you
+  // just failed is not talked through twice, as GTA's never was.
+  function begin(def) {
+    var base = def.orig || def, sc = SCENES[base.id];
+    if (sc && (GAME.bests || {})[bestKey(base)] === undefined && GAME.scenes &&
+        GAME.scenes.play(sc, function () { start(def, true); })) return;
+    start(def);
+  }
+
+  function start(def, briefed) {
     var P = GAME.player;
     GAME.track('mission-started-' + def.type);
     retry = null;
@@ -1754,7 +1848,7 @@ GAME.missions = (function () {
     setMarkersVisible(false);
     GAME.hud.missionStart(def.name, objectiveText());
     GAME.audio.pickup();
-    if (LOLA[def.id]) lola(LOLA[def.id][0]);
+    if (LOLA[def.id] && !briefed) lola(LOLA[def.id][0]);
     updateCp();
   }
 
@@ -1919,6 +2013,7 @@ GAME.missions = (function () {
       // Lola's word on it, the first time — and the next chapter when the
       // bridges open, or the last when there is no work of hers left
       if (prev === undefined && LOLA[d.id]) lola(LOLA[d.id][1]);
+      if (prev === undefined && RICO[d.id]) rico(RICO[d.id], 7);
       if (opened) lola('The bridges east are open. Isla Verde is waiting for you — and so is Rico. Find my rings over there.', 7);
       else if (prev === undefined && !d.job && namedDone() === DEFS.length) {
         lola('That\'s every job I had. The town is yours to enjoy — and somebody told me about tapes hidden all over it…', 8);
@@ -2298,7 +2393,7 @@ GAME.missions = (function () {
         if (d.type === 'race' && air) continue;
         if (inRing && slow && leaveFirst !== d) {
           // her guided first run is the same job, made gentler (guide.js)
-          start(GAME.guide ? GAME.guide.jobFor(d) : d);
+          begin(GAME.guide ? GAME.guide.jobFor(d) : d);
           hk = 0;
           break;
         }

@@ -252,6 +252,12 @@ GAME.lola = (function () {
     // (somebody else asking — a stranger on the pavement: strangers.js)
     $('lola-from').textContent = v.from || '📟 LOLA';
     $('lola-say').textContent = v.say;
+    // whose face it is: hers, or the stranger asking (cast.js)
+    var fc = $('lola-face'), id = v.face || (v.from ? GAME.cast && GAME.cast.idFor(v.from) : 'lola');
+    if (fc && fc.getAttribute('data-who') !== String(id)) {
+      fc.innerHTML = id && GAME.cast ? GAME.cast.portrait(id) : '';
+      fc.setAttribute('data-who', String(id));
+    }
     opts = (v.list || []).slice();
     (v.acts || []).forEach(function (a) { opts.push(a); });
     if (!v.top) {
@@ -272,7 +278,12 @@ GAME.lola = (function () {
     if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest' });
     $('lola-hint').textContent = touch() ? 'Tap one' : '↑↓ and Enter, or click  ·  Esc ' + (v.escSays || 'to go back');
   }
-  function show(v) { view = v; sel = 0; render(); }
+  function show(v) {
+    view = v; sel = 0; render();
+    // a word or two of it in their voice, as the card comes up
+    var id = v.face || (v.from ? GAME.cast && GAME.cast.idFor(v.from) : 'lola');
+    if (id && GAME.cast) GAME.cast.say(id, v.say, 1.4);
+  }
   function answer(v) { if (GAME.audio) GAME.audio.cashTick(); show(v); }
   // a choice is an answer: whatever it does, closing after it is not a no
   function pick() { var o = opts[sel]; if (o) { onClose = null; o.fn(); } }
@@ -304,6 +315,7 @@ GAME.lola = (function () {
     onClose = null;
     GAME.lolaOpen = false;
     $('lola-screen').style.display = 'none';
+    if (GAME.cast) GAME.cast.hush();
     if (GAME.syncOverlayMusic) GAME.syncOverlayMusic();
     if (GAME.regainPointer) GAME.regainPointer();
     if (then) then();
