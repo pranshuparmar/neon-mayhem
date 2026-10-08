@@ -128,7 +128,7 @@ GAME.hud = (function () {
     var abandonSure = false;
     function paintAbandon() {
       // (a stranger's favour walks away the same way: strangers.js)
-      var b = $('pause-abandon'), a = GAME.missions && (GAME.missions.active || (GAME.strangers && GAME.strangers.activeJob));
+      var b = $('pause-abandon'), a = GAME.missions && (GAME.missions.active || (GAME.strangers && GAME.strangers.activeJob) || (GAME.heist && GAME.heist.activeJob));
       b.style.display = a ? '' : 'none';
       if (!a) return;
       var what = a.def.job ? 'CLOCK OFF' : 'ABANDON MISSION';
@@ -141,7 +141,7 @@ GAME.hud = (function () {
     pauseBtn('pause-tips', function () { if (GAME.lola) GAME.lola.setTips(!GAME.lola.tips); paintTips(); });
     paintTips();
     pauseBtn('pause-abandon', function () {
-      if (!GAME.missions || !(GAME.missions.active || (GAME.strangers && GAME.strangers.busy))) return;
+      if (!GAME.missions || !(GAME.missions.active || (GAME.strangers && GAME.strangers.busy) || (GAME.heist && GAME.heist.busy))) return;
       if (!abandonSure) { abandonSure = true; paintAbandon(); return; }
       abandonSure = false;
       if (GAME.paused) GAME.togglePause();
@@ -1122,6 +1122,9 @@ GAME.hud = (function () {
     // and the strangers with a favour to ask (strangers.js)
     var kb = GAME.strangers ? GAME.strangers.blips() : [];
     for (var ki = 0; ki < kb.length; ki++) blip(kb[ki].x, kb[ki].z, kb[ki].color, kb[ki].size);
+    // and where Lola's big score goes next (heist.js)
+    var hb = GAME.heist ? GAME.heist.blips() : [];
+    for (var hi = 0; hi < hb.length; hi++) blip(hb[hi].x, hb[hi].z, hb[hi].color, hb[hi].size);
     // POI dots, live and legend-aware (they used to be baked into the base
     // image, where the legend couldn't touch them)
     var pois = GAME.city.pois, pi;
@@ -1570,6 +1573,8 @@ GAME.hud = (function () {
     },
     missionObjective: function (obj) { el['mission-obj'].textContent = obj; },
     missionTimer: function (t, countdown) {
+      // (null: no clock on this one any more)
+      if (t === null) { el['mission-timer'].textContent = ''; return; }
       var s = Math.max(0, t);
       var mm = Math.floor(s / 60), ss = Math.floor(s % 60);
       el['mission-timer'].textContent = mm + ':' + (ss < 10 ? '0' : '') + ss;

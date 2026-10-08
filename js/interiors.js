@@ -44,7 +44,9 @@ GAME.interiors = (function () {
     barber: { w: 10, d: 9, h: 3.2, floor: 0xeeeeee, wall: 0xdcecf4, trim: 0x3a6a8a, accent: 0x8fd0ff,
       hello: ' — take the empty chair.' },
     bribe: { w: 12, d: 10, h: 3.6, floor: 0x5c6272, wall: 0xb4bccc, trim: 0x22305a, accent: 0x4da3ff,
-      hello: ' — the sergeant is at the desk.' }
+      hello: ' — the sergeant is at the desk.' },
+    bank: { w: 18, d: 14, h: 4.6, floor: 0xd8d2c4, wall: 0xece4d0, trim: 0x2e4a3a, accent: 0xe8c86a,
+      hello: ' — the tellers are at the back, the vault behind the rope.' }
   };
   var byId = {};
   var cur = null;            // { room, loc, door: {x,y,z}, heading }
@@ -493,7 +495,7 @@ GAME.interiors = (function () {
   }
   function furnishShop(b, room) {
     var ox = room.ox, oz = room.oz, w = room.w, d = room.d, h = room.h, back = oz + d / 2;
-    var fn = { hardware: furnishHardware, dress: furnishThreads, barber: furnishBarber, bribe: furnishDesk }[room.shop];
+    var fn = { hardware: furnishHardware, dress: furnishThreads, barber: furnishBarber, bribe: furnishDesk, bank: furnishBank }[room.shop];
     if (fn) fn(b, room, ox, oz, w, d, h, back);
     // a strip light or two across the ceiling, whatever the trade
     glow(ox, h - 0.08, oz, Math.min(6, w * 0.4), 0.06, 0.4, 0xfff2dc);
@@ -606,6 +608,102 @@ GAME.interiors = (function () {
     });
     box(b, ox + w / 2 - 0.8, 1.3, back - 0.8, 0.06, 2.6, 0.06, 0xc0c0c8);
     box(b, ox + w / 2 - 0.8, 2.25, back - 1.25, 0.04, 0.6, 0.9, 0x4da3ff);
+  }
+
+  // The Savings & Loan: marble and brass, a long counter at the back with a
+  // teller at each window, a guard by the rope, and in the back wall the
+  // vault — a round steel door on a hinge, which heist.js swings open.
+  // `room.bank` hands the job what it needs: who is standing where, the
+  // door, and the spot in front of it.
+  function furnishBank(b, room, ox, oz, w, d, h, back) {
+    var cx = ox - 3, cz = back - 3.0, len = 10;
+    // the counter, its marble top, and a brass grille between the windows
+    box(b, cx, 0.55, cz, len, 1.1, 0.9, 0x5a4632);
+    box(b, cx, 1.13, cz, len + 0.1, 0.06, 1.0, 0xe8e2d4);
+    solid(cx, cz, len, 0.9, 1.15);
+    for (var gr = 0; gr < 4; gr++) box(b, cx - len / 2 + 0.2 + gr * (len - 0.4) / 3, 1.75, cz, 0.08, 1.2, 0.08, 0xb89a4a);
+    box(b, cx, 2.38, cz, len, 0.08, 0.1, 0xb89a4a);
+    var looks = [{ shirt: 0xf0f0f4, pants: 0x2a2a34, skin: 0xa8704a, hair: 'afro', hairCol: 0x1a1010 },
+      { shirt: 0xc8d8e8, pants: 0x2a2a34, skin: 0x8a5a3a, hair: 'crew', hairCol: 0x141010 },
+      { shirt: 0xf0e0f0, pants: 0x3a2a3a, skin: 0xf0d0b8, hair: 'ponytail', hairCol: 0x8a5a2a }];
+    var tellers = [];
+    [-3.3, 0, 3.3].forEach(function (tx, k) {
+      var fig = figure(cx + tx, back - 2.0, Math.PI, { look: looks[k] });
+      room.anim.push({ fig: fig, sway: 0.3 + k * 0.2 });
+      tellers.push(fig);
+    });
+    ring(room, cx, cz - 1.5, room.accent, 'THE TELLER — step up', function () {
+      GAME.hud.message(GAME.heist && GAME.heist.busy ? '"Can I help — oh."' : '"Good afternoon! Deposits at any window. We close at six."', 2.5);
+    });
+    // the vault: a frame in the back wall, the dark of the strongroom in it,
+    // and the door — a pivot at its hinge, so it swings
+    var vx = ox + w / 2 - 3.2, vz = back - 0.06;
+    box(b, vx, 1.75, vz, 3.4, 3.3, 0.12, 0x6a6e76);
+    box(b, vx, 1.75, vz - 0.02, 2.7, 2.7, 0.1, 0x0c0c10);
+    var pivot = new THREE.Group();
+    pivot.position.set(vx - 1.3, 1.75, vz - 0.32);
+    var disc = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.4, 28), new THREE.MeshBasicMaterial({ color: 0x9aa0aa }));
+    disc.rotation.x = Math.PI / 2;
+    disc.position.x = 1.3;
+    pivot.add(disc);
+    var hub = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.5, 18), new THREE.MeshBasicMaterial({ color: 0xc8a850 }));
+    hub.rotation.x = Math.PI / 2;
+    hub.position.set(1.3, 0, -0.1);
+    pivot.add(hub);
+    for (var sp = 0; sp < 3; sp++) {
+      var spoke = new THREE.Mesh(sharedBoxGeo(1.5, 0.1, 0.1), sharedBasic(0xc8a850));
+      spoke.position.set(1.3, 0, -0.32);
+      spoke.rotation.z = sp * Math.PI / 3;
+      pivot.add(spoke);
+    }
+    GAME.scene.add(pivot);
+    // and the takings, on a trolley in the strongroom, out of sight behind it
+    var trolley = new THREE.Group();
+    for (var tb = 0; tb < 4; tb++) {
+      var bag = new THREE.Mesh(sharedBoxGeo(0.55, 0.5, 0.45), sharedBasic(tb % 2 ? 0x4a6a3a : 0x3a5a2e));
+      bag.position.set((tb % 2) * 0.6 - 0.3, 0.95 + (tb >> 1) * 0.45, 0);
+      trolley.add(bag);
+    }
+    var deckT = new THREE.Mesh(sharedBoxGeo(1.4, 0.08, 0.7), sharedBasic(0x8a8e96));
+    deckT.position.y = 0.7;
+    trolley.add(deckT);
+    trolley.position.set(vx, 0, vz - 1.2);
+    trolley.visible = false;
+    GAME.scene.add(trolley);
+    // the rope across the way to it, on brass posts
+    for (var rp = 0; rp < 3; rp++) {
+      var rx = vx - 2.4 + rp * 2.4;
+      box(b, rx, 0.5, back - 3.4, 0.14, 1.0, 0.14, 0xb89a4a);
+    }
+    box(b, vx, 0.85, back - 3.4, 4.8, 0.08, 0.08, 0x9a1626);
+    // the guard by it, and two customers in the line
+    var guard = figure(vx - 3.6, back - 4.2, Math.PI * 0.85, { look: { shirt: 0x3a4a6a, pants: 0x1e2430, skin: 0xc89878, hair: 'crew', hairCol: 0x2a2018 } });
+    room.anim.push({ fig: guard, sway: 0.15 });
+    var custs = [figure(cx - 1.2, cz - 2.7, 0.15), figure(cx + 2.4, cz - 3.4, -0.2)];
+    custs.forEach(function (c, k) { room.anim.push({ fig: c, sway: 0.5 + k * 0.3 }); });
+    // columns down both sides, a clock on the back wall, a desk by the door
+    [-1, 1].forEach(function (sd) {
+      for (var cc = 0; cc < 2; cc++) {
+        var px = ox + sd * (w / 2 - 1.3), pz = oz - 2.5 + cc * 4.5;
+        box(b, px, h / 2, pz, 0.7, h, 0.7, 0xf2ead6);
+        box(b, px, 0.15, pz, 0.95, 0.3, 0.95, 0xd8ccb0);
+        solid(px, pz, 0.7, 0.7, h);
+      }
+    });
+    box(b, ox - 3, 3.6, back - 0.08, 1.1, 1.1, 0.06, 0xf6f0e0);
+    box(b, ox - 3, 3.7, back - 0.12, 0.06, 0.45, 0.04, 0x14101c);
+    box(b, ox - 2.85, 3.6, back - 0.12, 0.35, 0.06, 0.04, 0x14101c);
+    box(b, ox - w / 2 + 2.6, 0.4, oz - d / 2 + 3.4, 2.0, 0.8, 1.0, 0x5a4632);
+    solid(ox - w / 2 + 2.6, oz - d / 2 + 3.4, 2.0, 1.0, 0.85);
+    glow(ox - w / 2 + 2.2, 1.0, oz - d / 2 + 3.4, 0.3, 0.3, 0.3, 0x9adf8a);
+    for (var cl = 0; cl < 3; cl++) glow(ox - 5 + cl * 5, h - 0.3, oz, 1.4, 0.2, 1.4, 0xfff2d0);
+    room.bank = {
+      tellers: tellers, guard: guard, customers: custs,
+      door: pivot, trolley: trolley,
+      vault: { x: vx, z: back - 2.2 },        // where you stand to get at it
+      vaultFace: { x: vx, z: vz },
+      floor: { x: ox - 1, z: oz - 0.5 }       // the middle of the room
+    };
   }
 
   // the counter at the bar is a shop like any other (shops.js, kind 'bar')
@@ -917,6 +1015,15 @@ GAME.interiors = (function () {
           continue;
         }
         an.fig.position.y = 0;
+        // held up (heist.js): hands where everybody can see them — or one
+        // going for the alarm under the counter
+        var pose = an.fig.userData.pose;
+        if (pose) {
+          j.armL.rotation.x = pose === 'reach' ? -0.3 : -2.7 + s * 0.06;
+          j.armR.rotation.x = pose === 'reach' ? -1.5 : -2.75 - s * 0.06;
+          j.torso.rotation.y = 0;
+          continue;
+        }
         j.armL.rotation.x = s * 0.12; j.armR.rotation.x = -s * 0.1 - 0.2;
         j.torso.rotation.y = s * 0.05;
       }

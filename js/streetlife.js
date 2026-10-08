@@ -21,6 +21,7 @@ GAME.streetlife = (function () {
     if (!GAME.started || p.state !== 'alive' || p.interior || p.swimming) return false;
     if (M && M.active) return false;
     if (GAME.strangers && GAME.strangers.busy) return false;
+    if (GAME.heist && GAME.heist.busy) return false;
     if (GAME.police.wanted > 0) return false;
     if (GAME.guide && GAME.guide.step) return false;
     if (p.inCar && p.car && (p.car.spec.heli || p.car.spec.plane || p.car.spec.boat)) return false;

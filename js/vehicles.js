@@ -561,6 +561,8 @@ GAME.vehicles = (function () {
       serial: ++carSerial,   // who is who, for anything that must not hold the car itself
       kind: 'car',
       type: type, spec: spec, mesh: mesh,
+      color: color,          // the paint it wears (a respray changes it: repaint)
+      resprayT: NaN,         // when it last came out of the paint shop (missions.js)
       pos: mesh.position,
       heading: heading || 0,
       speed: 0, lat: 0,
@@ -603,6 +605,20 @@ GAME.vehicles = (function () {
     if (car.occupied === 'ai') seatOccupant(car);
     world.cars.push(car);
     return car;
+  }
+
+  // A fresh coat (the paint shop: missions.js). The body is the only part
+  // that wears the paint — wheels, glass and lamps are the same on every
+  // car of a type — so it is swapped for that body in the new colour, from
+  // the same cache every car of that colour already shares.
+  function repaint(car, color) {
+    var bm = car && car.mesh && car.mesh.userData.bodyMesh;
+    if (!bm || car.spec.plane || car.dead) return false;
+    var fresh = buildCarMesh(car.type, color).userData.bodyMesh;
+    if (!fresh) return false;
+    bm.geometry = fresh.geometry;
+    car.color = color;
+    return true;
   }
 
   function removeCar(car) {
@@ -2277,6 +2293,7 @@ GAME.vehicles = (function () {
   return {
     TYPES: VEHICLES,
     spawnCar: spawnCar,
+    repaint: repaint,
     removeCar: removeCar,
     ejectDriver: ejectDriver,
     shotAt: shotAt,

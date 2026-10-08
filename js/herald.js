@@ -34,9 +34,14 @@ GAME.herald = (function () {
     ],
     rico: [
       function () { return { head: 'SALAZAR\'S LAST RIDE ENDS AT THE MARINA', sub: 'Rico Salazar, long said to run the harbour, is gone at high tide. The strip, they say, belongs to Lola Reyes now.' }; }
+    ],
+    heist: [
+      function (o) { return { head: 'SAVINGS & LOAN CLEANED OUT', sub: o.alarm
+        ? 'The alarm was ringing, the street was full of police, and still the vault on the strip stands empty. "Professionals," says a detective, with something like respect.'
+        : 'Nobody heard a thing. The vault on the strip was opened like a tin of sardines, and the getaway car was a colour no witness can agree on.' }; }
     ]
   };
-  var ONCE = { rico: true, samaritan: true };
+  var ONCE = { rico: true, samaritan: true, heist: true };
 
   function prefs() { GAME.prefs = GAME.prefs || {}; return GAME.prefs; }
   function runs(kind) { var h = prefs().herald || {}; return h[kind] || 0; }

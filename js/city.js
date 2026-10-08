@@ -400,6 +400,8 @@ GAME.city = (function () {
     { minX: 318, maxX: 346, minZ: 78, maxZ: 106 },     // tailor
     { minX: 318, maxX: 346, minZ: -134, maxZ: -106 },  // barber
     { minX: 318, maxX: 346, minZ: 194, maxZ: 222 },    // strip condo
+    { minX: 316, maxX: 346, minZ: -16, maxZ: 24 },     // the Savings & Loan (shops.js)
+    { minX: -146, maxX: -124, minZ: 194, maxZ: 218 },  // Lola's lock-up by the harbour (heist.js)
     { minX: -448, maxX: -408, minZ: -200, maxZ: -160 },
     { minX: 252, maxX: 292, minZ: -440, maxZ: -400 }
   ];
@@ -650,7 +652,9 @@ GAME.city = (function () {
     'ROSA HARDWARE', 'VERDE HARDWARE', 'THREADS', 'CORTES CUTS',
     'GRAN ROSA MOTORS', 'THE LUCKY GULL', 'DOCKSIDE FLAT', 'STRIP CONDO', 'MARINA VILLA',
     // civic lettering for the landmark dressing (43, 44)
-    'EMERGENCY', 'DEPARTURES'];
+    'EMERGENCY', 'DEPARTURES',
+    // the bank on the strip (45: shops.js SIGN_SLOT)
+    'SAVINGS & LOAN'];
   var SIGN_COLORS = ['#ff4fa3', '#38e8ff', '#ffe14f', '#7dff6a', '#ff8a3d', '#c86bff', '#ff5d5d', '#59ffc8'];
   function signAtlas() {
     var cv = document.createElement('canvas');

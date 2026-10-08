@@ -1748,7 +1748,7 @@ GAME.missions = (function () {
   var ABANDON_CONFIRM = 3, ABANDONED = 'abandoned', abandonAsk = 0;
   function abandon() {
     abandonAsk = 0;
-    if (!active) return GAME.strangers ? GAME.strangers.abandon() : false;
+    if (!active) return (GAME.strangers && GAME.strangers.abandon()) || (GAME.heist ? GAME.heist.abandon() : false);
     GAME.track('mission-abandoned');
     if (active.def.job) endJob('clocked off');
     else finish(false, ABANDONED);
@@ -1919,7 +1919,8 @@ GAME.missions = (function () {
       if (P.state !== 'alive') return;
       // a stranger's favour under way is finished (or walked away from)
       // before anything else starts (strangers.js)
-      if (GAME.strangers && GAME.strangers.busy) { GAME.jobAvailable = null; GAME.retryAvailable = false; GAME.hud.setPoiHint(''); return; }
+      // (and so is a part of Lola's big score: heist.js)
+      if ((GAME.strangers && GAME.strangers.busy) || (GAME.heist && GAME.heist.busy)) { GAME.jobAvailable = null; GAME.retryAvailable = false; GAME.hud.setPoiHint(''); return; }
       // taxi / ambulance jobs start from within the vehicle
       var jobKind = null;
       if (P.inCar && P.car) {
@@ -2284,6 +2285,8 @@ GAME.missions = (function () {
     return true;
   }
 
+  // what the paint shop has in: loud enough to read as a different car
+  var RESPRAY_COATS = [0xd83040, 0x2a6ad8, 0xf0f0f4, 0x1c1c26, 0xe8c040, 0x3aa860, 0xff7a2a, 0x8a4ad8, 0x38e8ff, 0xff4fa3];
   function checkRespray() {
     var P = GAME.player;
     if (!P.inCar || !P.car || resprayCooldown > 0 || P.state !== 'alive') return;
@@ -2323,6 +2326,12 @@ GAME.missions = (function () {
       car.mesh.userData.bodyMesh.material = sharedVertexLambert();
       if (oldPaint && oldPaint.dispose && !(oldPaint.userData && oldPaint.userData.shared)) oldPaint.dispose();
     }
+    // and it is a respray: it comes out another colour. (It used to come out
+    // the colour it went in — the paint was baked in at the factory.)
+    var coats = RESPRAY_COATS.filter(function (c) { return c !== car.color; });
+    GAME.vehicles.repaint(car, coats[Math.floor(Math.random() * coats.length)]);
+    car.resprayT = GAME.time;
+    if (GAME.heist && GAME.heist.resprayed) GAME.heist.resprayed(car);
     GAME.fx.flash(car.pos.x, 1.5, car.pos.z, 4);
     GAME.audio.pickup();
     GAME.hud.message(w >= 3
@@ -2353,7 +2362,7 @@ GAME.missions = (function () {
     objectiveText: objectiveText,
     getRoutePoints: function () {
       // (a stranger's favour has its own way there: strangers.js)
-      if (!active) return GAME.strangers ? GAME.strangers.route() : null;
+      if (!active) return (GAME.strangers && GAME.strangers.route()) || (GAME.heist ? GAME.heist.route() : null);
       if (active.state === 'fade' || active.state === 'countdown') return null;
       if (active.def.type === 'race') return active.raceRoute || active.def.cps.slice(active.cpIndex);
       if (active.courierRoute) return active.courierRoute; // courier / taxi / ambulance
@@ -2361,7 +2370,7 @@ GAME.missions = (function () {
     },
     // the immediate target marker (checkpoint / stop / pickup / drop-off)
     getObjectivePoint: function () {
-      if (!active) return GAME.strangers ? GAME.strangers.target() : null;
+      if (!active) return (GAME.strangers && GAME.strangers.target()) || (GAME.heist ? GAME.heist.target() : null);
       if (active.state === 'fade' || active.state === 'countdown') return null;
       return currentCp();
     },

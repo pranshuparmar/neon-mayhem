@@ -129,6 +129,11 @@
 //       a slipped four-star manhunt does too, a bust does not). Six
 //       strangers on the mainland pavements ask a favour each, six more on
 //       Isla Verde once the bridges open, and Lola counts them.
+//   5t. THE BIG SCORE — once the bridges open, Lola's job on the strip's
+//       Savings & Loan, part by part: the camera (front and vault), Benny
+//       from the marina, a Vulture GT through the paint shop (which sends a
+//       car out another colour), and the job — hands up, the floor kept or
+//       the alarm let go, the vault, the bags, the street, the lock-up.
 //   4y. AROUND THE GAME — messages stack; the district name keeps out of a
 //       mission's title; every overlay uses the game's face; the title says
 //       LOADING until it can answer; pause takes keys, ignores a click that
@@ -369,6 +374,8 @@ function withTimeout(p, ms) {
     // she asks, with her question over the game, which no group above
     // expects. Group 5s brings them back for itself.
     if (GAME.strangers) GAME.strangers.enabled = false;
+    // and Lola keeps her big score to herself until a group asks (heist.js)
+    if (GAME.heist) GAME.heist.enabled = false;
     GAME.test.fastForward(1);
     var a = GAME.audio;
     var engine0 = a.engineState, skid0 = a.skid, siren0 = a.siren, vol0 = a.radio.setVolume;
@@ -1445,6 +1452,7 @@ function withTimeout(p, ms) {
   var hybrid = await hpage.evaluate(function () {
     GAME.prefs.guide = 'done';   // her welcome answered, as on the main page
     if (GAME.strangers) GAME.strangers.enabled = false;   // and the strangers stood down, as there
+    if (GAME.heist) GAME.heist.enabled = false;
     GAME.test.start();
     GAME.test.fastForward(0.5);
     var layer = document.getElementById('touch-layer');
@@ -8507,8 +8515,13 @@ function withTimeout(p, ms) {
     r.pottered = l0 && !l0.gone ? Math.round(Math.hypot(l0.pos.x - p0.x, l0.pos.z - p0.z)) : -1;
     GAME.sealife.clear();
     GAME.test.teleport(-60, 40); ff(0.5);
+    r.after = GAME.player.state;
     return r;
   });
+  // Fifteen seconds at one star on the beach is long enough for an officer
+  // on foot to walk up and take you — and a player left in the cells takes
+  // every group after this down with it. Back on your feet, whatever.
+  await comeBack();
   check('patrol: wanted on land, no launch is put out', pat.onLand === 0, String(pat.onLand));
   check('patrol: wanted at sea, a launch comes — a police boat, lights going, an officer at the helm',
     pat.inBoat && pat.launch.first !== null && pat.launch.first < 4 && pat.launch.police && pat.launch.cop && pat.launch.lights && pat.launch.dry === 0,
@@ -8555,9 +8568,11 @@ function withTimeout(p, ms) {
       GAME.world.cars.slice().forEach(function (c) { if (c.occupied === 'ai') GAME.vehicles.removeCar(c); });
       r.chaseOn = S.start('chase');
       var e = S.event, minD = 1e9, lights = false, siren = false;
-      // (until it has come to you: run on past that and it is long gone by
-      // the time you would put it into a wall)
-      for (var t = 0; t < 35 * 60 && S.event === e && !e.perp.gone && minD > 25; t++) {
+      // (until it is on its way in: run on past that and it is long gone by
+      // the time you would put it into a wall — and stop it any closer and
+      // the cruiser on its tail, still at full chat, can run you down where
+      // you stand in the road)
+      for (var t = 0; t < 35 * 60 && S.event === e && !e.perp.gone && minD > 60; t++) {
         ff(1 / 60);
         minD = Math.min(minD, Math.hypot(e.perp.pos.x - P.pos.x, e.perp.pos.z - P.pos.z));
         var lb = e.cop.mesh.userData.lightbar;
@@ -8571,7 +8586,7 @@ function withTimeout(p, ms) {
         var c0 = P.cash, n0 = H.total;
         GAME.vehicles.damageCar(e.perp, e.perp.hp * 0.75, 'gun', true);
         ff(0.5);
-        r.taken = { paid: P.cash - c0, crimes: crimes.length, paper: H.total > n0 && kinds()[kinds().length - 1] === 'hero', now: S.now };
+        r.taken = { paid: P.cash - c0, crimes: crimes.length, paper: H.total > n0 && kinds()[kinds().length - 1] === 'hero', now: S.now, you: P.state };
       } else r.taken = { gone: true };
       GAME.settings.maxTraffic = keepTraffic0;
       settle();
@@ -8590,7 +8605,7 @@ function withTimeout(p, ms) {
           GAME.peds.kill(th, 'gun', true);
           ff(0.3);
           var bag = GAME.world.pickups.filter(function (q) { return q.amount && q.type === 'cash'; })[0];
-          r.robDown = { crimes: crimes.length, amount: bag ? bag.amount : 0, paper: H.total > n1 };
+          r.robDown = { crimes: crimes.length, amount: bag ? bag.amount : 0, paper: H.total > n1, you: P.state };
           if (bag) { var c1 = P.cash; GAME.test.teleport(bag.pos.x, bag.pos.z); ff(0.4); r.robDown.picked = P.cash - c1; }
         }
       }
@@ -9071,6 +9086,179 @@ function withTimeout(p, ms) {
   check('strangers: all twelve, both islands, and the papers have heard', sg.tallyAll === 'Strangers helped: 12 of 12' && sg.paper, JSON.stringify({ tally: sg.tallyAll, paper: sg.paper }));
   check('strangers: X twice walks away from a favour, and they are back on the pavement',
     sg.oneX === true && !sg.twoX.busy && /walked away/.test(sg.twoX.msg) && sg.twoX.backOut, JSON.stringify({ one: sg.oneX, two: sg.twoX }));
+
+  // ---------- 5t: the big score ----------
+  // Lola's job on the Savings & Loan, part by part: the camera, Benny, the
+  // car through the paint shop, and the bank itself — the floor kept or
+  // not, the vault, the bags, the street outside, and the lock-up.
+  var hz = await page.evaluate(async function () {
+    var r = {}, P = GAME.player, C = GAME.city, H = GAME.heist, ff = function (s) { GAME.test.fastForward(s); };
+    var wait = function (ms) { return new Promise(function (res) { setTimeout(res, ms); }); };
+    async function developed() { for (var i = 0; i < 80 && GAME.photo.pending; i++) await wait(100); }
+    var keepPrefs = JSON.stringify(GAME.prefs), keepCash = P.cash, keepIsla = GAME.isla.isOpen();
+    var msgs = [], ms0 = GAME.hud.message, pages = [], pg0 = GAME.hud.pager;
+    GAME.hud.message = function (t) { msgs.push(String(t)); return ms0.apply(GAME.hud, arguments); };
+    GAME.hud.pager = function (f, t) { pages.push(String(t)); return pg0.apply(GAME.hud, arguments); };
+    function last(re) { for (var i = msgs.length - 1; i >= 0; i--) if (re.test(msgs[i])) return msgs[i]; return ''; }
+    function out() { if (GAME.interiors.current) { GAME.interiors.leave(); ff(0.8); } if (P.inCar) GAME.exitCar(); GAME.police.clearWanted(); ff(0.3); }
+    // (a part that did not come off is left as done, so the parts after it
+    // are still looked at — its own check says what went wrong)
+    function onTo(n) { if (H.busy) H.abandon(); if (H.step < n) H.step = n; ff(0.2); }
+    try {
+      out();
+      // --- the bank, on the strip, with a vault ---
+      var b = H.bank(), rm = H.room();
+      r.bank = { there: !!b && Math.abs(b.at.x - 337) < 20 && Math.abs(b.at.z - 4) < 25, name: b && b.name, room: !!(rm && rm.bank), vault: !!(rm && rm.bank && rm.bank.door) };
+      // --- not before the bridges open; then Lola has it on her menu ---
+      GAME.isla.setOpen(false);
+      H.reset();
+      r.shut = { offered: H.offered(), began: H.begin() };
+      GAME.isla.setOpen(true);
+      GAME.lola.open();
+      r.menu = GAME.lola.options().some(function (o) { return /BIG SCORE/.test(o); });
+      GAME.lola.choose(/BIG SCORE/);
+      r.board = GAME.lola.says;
+      r.boardNext = GAME.lola.options().filter(function (o) { return /CASE IT/.test(o); })[0] || null;
+      GAME.lola.choose(/CASE IT/); ff(0.2);
+      r.caseOn = H.busy && H.step === 0;
+      // --- 1. CASE IT: the front from across the street; the vault from inside ---
+      var rp = C.nearestRoadPoint(b.at.x, b.at.z), dl = Math.hypot(b.at.x - rp.x, b.at.z - rp.z);
+      var nx = (rp.x - b.at.x) / dl, nz = (rp.z - b.at.z) / dl;
+      GAME.test.teleport(b.at.x + nx * 32, b.at.z + nz * 32); ff(0.3);
+      P.heading = Math.atan2(b.at.x - P.pos.x, b.at.z - P.pos.z) + Math.PI; GAME.cam.yaw = P.heading; GAME.cam.pitch = 0.1; ff(0.5);
+      GAME.photo.snap(); ff(0.3);
+      r.caseAway = { front: !!(H.job && H.job.front), msg: last(/bank|front/i) };
+      await developed();
+      P.heading = Math.atan2(b.at.x - P.pos.x, b.at.z - P.pos.z); GAME.cam.yaw = P.heading; ff(0.5);
+      var snapped = GAME.photo.snap(); ff(0.3);
+      r.caseFront = !!(H.job && H.job.front);
+      if (!r.caseFront) {
+        var cp = GAME.cameraObj.position, gyb = C.groundY(b.at.x, b.at.z);
+        r.frontWhy = { snapped: snapped, msg: last(/bank|front|close|far/i), cam: [cp.x, cp.y, cp.z].map(Math.round), P: [P.pos.x, P.pos.z].map(Math.round),
+          seen: GAME.inPlainView(b.at.x - nx * 0.8, gyb + 5, b.at.z - nz * 0.8), tod: +(GAME.timeOfDay || 0).toFixed(2), weather: GAME.weather && GAME.weather.mode, fog: GAME.scene.fog && Math.round(GAME.scene.fog.far), inCar: P.inCar, state: P.state };
+      }
+      await developed();
+      GAME.interiors.enter(b); ff(0.8);
+      var V = rm.bank.vaultFace;
+      P.pos.x = V.x; P.pos.z = V.z - 6; P.heading = 0; GAME.cam.yaw = 0; GAME.cam.pitch = 0.05; ff(0.5);
+      GAME.photo.snap(); ff(0.3);
+      r.caseDone = { step: H.step, busy: H.busy, msg: last(/CASE IT/), page: /Benny/.test(pages[pages.length - 1] || '') };
+      await developed();
+      out();
+      onTo(1);
+      // --- 2. THE EAR: Benny by the marina, into a car, to the lock-up ---
+      H.begin(); ff(0.2);
+      var spot = H.job.spot, L = H.LOCKUP;
+      r.benny = { isla: GAME.isla.contains(spot.x, spot.z), nearMarina: Math.hypot(spot.x - C.islaPois.marina.x, spot.z - C.islaPois.marina.z) < 80 };
+      var rp1 = C.nearestRoadPoint(spot.x, spot.z);
+      var c1 = GAME.vehicles.spawnCar('sedan', rp1.x, rp1.z, 0);
+      GAME.test.teleport(rp1.x + 2, rp1.z); ff(0.3); GAME.test.enterNearestCar(c1); ff(1.3);
+      c1.speed = 0;
+      for (var t = 0; t < 10 * 60 && H.job && H.job.phase !== 'ride'; t++) ff(1 / 60);
+      r.benny.aboard = H.job && H.job.phase === 'ride';
+      c1.pos.x = L.x; c1.pos.z = L.z; c1.speed = 0; ff(0.5);
+      r.earDone = { step: H.step, busy: H.busy };
+      out(); GAME.vehicles.removeCar(c1);
+      onTo(2);
+      // --- 3. THE WHEELS: a sedan will not do; a Vulture GT, resprayed, will ---
+      H.begin(); ff(0.2);
+      var door = C.pois.resprays[0].door;
+      var sd = GAME.vehicles.spawnCar('sedan', door.x + 20, door.z + 4, 0);
+      GAME.test.teleport(door.x + 22, door.z + 4); ff(0.3); GAME.test.enterNearestCar(sd); ff(1.3);
+      r.wrongCar = /Not that/.test(H.job.obj || '');
+      out(); GAME.vehicles.removeCar(sd);
+      var sc = GAME.vehicles.spawnCar('sports', door.x + 20, door.z, 0);
+      GAME.test.teleport(door.x + 22, door.z); ff(0.3); GAME.test.enterNearestCar(sc); ff(1.3);
+      sc.pos.x = L.x; sc.pos.z = L.z; sc.speed = 0; ff(0.5);
+      r.unpainted = { step: H.step, obj: H.job && H.job.obj };
+      var col0 = sc.color; P.cash = Math.max(P.cash, 500);
+      sc.pos.x = door.x; sc.pos.z = door.z; sc.speed = 0; ff(1);
+      r.paint = { changed: sc.color !== col0, body: sc.mesh.userData.bodyMesh.geometry !== null };
+      sc.pos.x = L.x; sc.pos.z = L.z; sc.speed = 0; ff(0.5);
+      r.wheelsDone = { step: H.step, stored: GAME.prefs.heist.car && GAME.prefs.heist.car.color === sc.color, gone: sc.gone };
+      out();
+      onTo(3);
+      // --- 4. THE JOB: walking out on Benny is the end of this try, not of the job ---
+      H.begin(); ff(0.2);
+      GAME.test.teleport(L.x + 3, L.z); ff(1);
+      var hc = H.job && H.job.car, kept = GAME.prefs.heist.car;
+      r.ride = !!hc && !!kept && hc.color === kept.color && hc.type === 'sports';
+      if (!hc) throw new Error('no car at the lock-up: ' + JSON.stringify({ busy: H.busy, step: H.step, phase: H.job && H.job.phase }));
+      GAME.test.enterNearestCar(hc); ff(1.3);
+      hc.pos.x = b.at.x + nx * 6; hc.pos.z = b.at.z + nz * 6; hc.speed = 0; ff(0.5);
+      GAME.exitCar(); ff(0.3);
+      GAME.interiors.enter(b); ff(0.8);
+      r.handsUp = rm.bank.tellers.every(function (f) { return f.userData.pose === 'up'; });
+      GAME.interiors.leave(); ff(0.8);
+      r.walkedOut = { busy: H.busy, step: H.step, msg: last(/is off/), handsDown: rm.bank.tellers.every(function (f) { return !f.userData.pose; }) };
+      out();
+      // --- and again: one try for the alarm stopped, one let go; the vault; the bags; out ---
+      H.begin(); ff(0.2);
+      GAME.test.teleport(L.x + 3, L.z); ff(1);
+      hc = H.job && H.job.car;
+      if (!hc) throw new Error('no car at the lock-up, second try');
+      GAME.test.enterNearestCar(hc); ff(1.3);
+      hc.pos.x = b.at.x + nx * 6; hc.pos.z = b.at.z + nz * 6; hc.speed = 0; ff(0.5);
+      GAME.exitCar(); ff(0.3);
+      GAME.interiors.enter(b); ff(0.8);
+      var stopped = 0, missed = 0;
+      for (var t2 = 0; t2 < 40 * 60 && H.job && H.job.phase === 'floor'; t2++) {
+        var rr = H.job.reach;
+        if (rr && !rr.seen) { rr.seen = true; if (!stopped) { P.pos.x = rr.x; P.pos.z = rr.z; stopped++; } else missed++; }
+        if (stopped === 1 && rr && rr.seen && !r.stopMsg) { ff(1 / 60); r.stopMsg = last(/thinks better|puts it down/); }
+        ff(1 / 60);
+      }
+      r.floor = { phase: H.job && H.job.phase, alarm: H.job && H.job.alarm, stopped: stopped, missed: missed };
+      var vt = rm.bank.vault; P.pos.x = vt.x; P.pos.z = vt.z; ff(2);
+      r.bags = { phase: H.job && H.job.phase, door: rm.bank.door.rotation.y < -1 };
+      GAME.interiors.leave(); ff(0.8);
+      r.street = { phase: H.job && H.job.phase, wanted: GAME.police.wanted };
+      GAME.police.clearWanted(); ff(0.3);
+      var c0 = P.cash, tot0 = GAME.herald.total;
+      GAME.herald.resetCooldown();
+      GAME.test.teleport(L.x + 2, L.z); ff(0.5);
+      r.payday = { paid: P.cash - c0, step: H.step, busy: H.busy, paper: GAME.herald.total > tot0 && GAME.herald.printed[GAME.herald.printed.length - 1].kind === 'heist',
+        card: !!GAME.shareOpen, offered: H.offered(), bank: rm.bank.door.rotation.y === 0 && !rm.bank.trolley.visible };
+      if (GAME.share && GAME.share.isOpen) GAME.share.hide();
+      // --- X twice walks away from a part, which waits to be done again ---
+      H.reset(); H.begin(); ff(0.2);
+      GAME.test.pressKey('KeyX', true); ff(1 / 60); GAME.test.pressKey('KeyX', false); ff(0.3);
+      GAME.test.pressKey('KeyX', true); ff(1 / 60); GAME.test.pressKey('KeyX', false); ff(0.3);
+      r.abandoned = { busy: H.busy, step: H.step, msg: last(/walked away/) };
+    } catch (e) {
+      r.error = String((e && e.message) || e);
+    } finally {
+      GAME.hud.message = ms0; GAME.hud.pager = pg0;
+      out();
+      H.reset(); H.enabled = false;
+      GAME.isla.setOpen(keepIsla);
+      GAME.prefs = JSON.parse(keepPrefs); P.cash = keepCash;
+      if (GAME.share && GAME.share.isOpen) GAME.share.hide();
+      GAME.test.teleport(-60, 40); ff(0.5);
+    }
+    return r;
+  });
+  check('heist: the whole run goes through (anchor sanity)', !hz.error, hz.error);
+  if (hz.error) hz = Object.assign({ shut: {}, caseAway: {}, caseDone: {}, benny: {}, earDone: {}, unpainted: {}, paint: {}, wheelsDone: {}, walkedOut: {}, floor: {}, bags: {}, street: {}, payday: {}, abandoned: {} }, hz);
+  check('heist: a Savings & Loan on the strip, with a vault inside', hz.bank.there && hz.bank.room && hz.bank.vault, JSON.stringify(hz.bank));
+  check('heist: not before the bridges open', !hz.shut.offered && !hz.shut.began, JSON.stringify(hz.shut));
+  check('heist: then Lola has THE BIG SCORE on her menu, and the first part to go and do', hz.menu && /Savings & Loan/.test(hz.board) && !!hz.boardNext && hz.caseOn, JSON.stringify({ menu: hz.menu, next: hz.boardNext, on: hz.caseOn }));
+  check('heist: CASE IT — a picture of the wrong way is no use; the front, and the vault inside, are',
+    !hz.caseAway.front && hz.caseFront && hz.caseDone.step === 1 && !hz.caseDone.busy && /DONE/.test(hz.caseDone.msg) && hz.caseDone.page, JSON.stringify({ away: hz.caseAway, front: hz.caseFront, why: hz.frontWhy, done: hz.caseDone }));
+  check('heist: THE EAR — Benny waits by the marina on Isla Verde, gets in, and is taken to the lock-up',
+    hz.benny.isla && hz.benny.nearMarina && hz.benny.aboard && hz.earDone.step === 2 && !hz.earDone.busy, JSON.stringify({ benny: hz.benny, done: hz.earDone }));
+  check('heist: THE WHEELS — a sedan will not do, nor a Vulture GT nobody has painted', hz.wrongCar && hz.unpainted.step === 2 && /paint/.test(hz.unpainted.obj || ''), JSON.stringify({ wrong: hz.wrongCar, unpainted: hz.unpainted }));
+  check('heist: the paint shop sends a car out another colour', hz.paint.changed, JSON.stringify(hz.paint));
+  check('heist: and the fresh-painted GT goes under the tarp at the lock-up', hz.wheelsDone.step === 3 && hz.wheelsDone.stored && hz.wheelsDone.gone, JSON.stringify(hz.wheelsDone));
+  check('heist: THE JOB — the same car waits at the lock-up, and in the bank the hands go up', hz.ride && hz.handsUp, JSON.stringify({ ride: hz.ride, up: hz.handsUp }));
+  check('heist: walking out on Benny ends the try, not the job', !hz.walkedOut.busy && hz.walkedOut.step === 3 && /is off/.test(hz.walkedOut.msg) && hz.walkedOut.handsDown, JSON.stringify(hz.walkedOut));
+  check('heist: keep the floor — reach one in time and they think better of it; miss one and the alarm goes',
+    hz.floor.stopped === 1 && hz.floor.missed >= 1 && hz.floor.alarm === true && /thinks better|puts it down/.test(hz.stopMsg || ''), JSON.stringify({ floor: hz.floor, stop: hz.stopMsg }));
+  check('heist: the vault swings, the bags are yours, and outside the alarm has the street waiting — four stars',
+    hz.bags.door && hz.bags.phase === 'out' && hz.street.phase === 'run' && hz.street.wanted === 4, JSON.stringify({ bags: hz.bags, street: hz.street }));
+  check('heist: lose them, back to the lock-up: $25,000, the front page, a card, and it is done',
+    hz.payday.paid === 25000 && hz.payday.step === 4 && !hz.payday.busy && hz.payday.paper && hz.payday.card && !hz.payday.offered && hz.payday.bank, JSON.stringify(hz.payday));
+  check('heist: X twice walks away from a part, which waits to be done again', !hz.abandoned.busy && hz.abandoned.step === 0 && /walked away/.test(hz.abandoned.msg), JSON.stringify(hz.abandoned));
 
   // ---------- 6: a rider follows the deck when it tilts ----------
   // vehicles.js pitches a chassis over a ramp (negative rotation.x lifts the
@@ -10511,6 +10699,7 @@ function withTimeout(p, ms) {
   var stick = await tpage.evaluate(function () {
     GAME.prefs.guide = 'done';   // her welcome answered, as on the main page
     if (GAME.strangers) GAME.strangers.enabled = false;   // and the strangers stood down, as there
+    if (GAME.heist) GAME.heist.enabled = false;
     GAME.test.start();
     GAME.test.fastForward(1);
     var zone = document.getElementById('tstick-zone');

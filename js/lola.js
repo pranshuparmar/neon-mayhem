@@ -198,8 +198,14 @@ GAME.lola = (function () {
     return { say: 'Jobs on my list: ' + done + ' of ' + (M ? M.DEFS.length : 0) + '. Stunt jumps: ' + (ST ? ST.found + ' of ' + ST.total : '—') +
       (ST && ST.islaTotal && islaOpen() ? ', and ' + ST.islaFound + ' of ' + ST.islaTotal + ' on the island' : '') + '. Lost tapes: ' + (T ? T.found + ' of ' + T.total : '—') +
       (GAME.strangers ? '. Strangers helped: ' + GAME.strangers.done + ' of ' + GAME.strangers.total : '') +
+      (GAME.heist && (GAME.heist.offered() || GAME.heist.step > 0) ? '. The big score: ' + Math.min(GAME.heist.step, 4) + ' of 4 parts' : '') +
       '. You\'re holding $' + P.cash.toLocaleString() + ', you own ' + homes + ' of 3 places' + (g ? ' and ' + g + ' in the garage' : '') +
       '. Call it ' + pct + '% of Costa Rosa. ' + (pct < 25 ? 'Plenty left.' : pct < 75 ? 'Getting somewhere.' : 'Nearly there, kid.') };
+  }
+  // the Savings & Loan: where it stands, and the next part to go and do
+  function bigScore() {
+    var H = GAME.heist, b = H.board();
+    return { say: b.say, list: b.next ? [{ label: '▶ ' + b.next, fn: function () { close(); H.begin(); } }] : [] };
   }
   function controlsHelp() {
     if (onPad()) return { say: 'Left stick moves, right stick looks. RT fires and LT aims on foot; in anything with an engine they are the throttle and the brake. ' +
@@ -218,6 +224,8 @@ GAME.lola = (function () {
       // her guided first day (guide.js), for anyone who turned it down or
       // walked off part way, until it has been seen through once
       GAME.guide && GAME.guide.canStart() ? { label: '🎓 SHOW ME THE ROPES', fn: function () { close(); GAME.guide.begin(); } } : null,
+      // her big score, once the bridges are open (heist.js)
+      GAME.heist && GAME.heist.offered() && !GAME.heist.busy ? { label: '💰 THE BIG SCORE', fn: function () { answer(bigScore()); } } : null,
       law = { label: w ? '🚨 I\'VE GOT THE LAW ON ME' : '🚨 HOW DO I LOSE THE LAW?', fn: function () { answer(theLaw()); } },
       { label: '💰 WHERE\'S THE MONEY?', fn: function () { answer(money()); } },
       { label: '📍 TAKE ME SOMEWHERE', fn: function () { answer(takeMe()); } },

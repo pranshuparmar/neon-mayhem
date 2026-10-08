@@ -190,6 +190,7 @@ GAME.strangers = (function () {
     var p = P(), M = GAME.missions;
     if (job || p.state !== 'alive' || p.interior || p.swimming || GAME.lolaOpen || GAME.shopOpen || GAME.mapOpen) return false;
     if (M && M.active) return false;
+    if (GAME.heist && GAME.heist.busy) return false;
     if (GAME.police.wanted > 0) return false;
     if (GAME.guide && GAME.guide.step) return false;
     if (p.inCar && (!land(p.car) || Math.abs(p.car.speed) > 2.5)) return false;

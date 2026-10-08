@@ -17,7 +17,8 @@ GAME.shops = (function () {
   // which appends these nine in this exact order after 'ISLA ROSA' (slot 33)
   var SIGN_SLOT = {
     hardware0: 34, hardware1: 35, dress0: 36, barber0: 37,
-    showroom0: 38, casino0: 39, home_dock: 40, home_condo: 41, home_villa: 42
+    showroom0: 38, casino0: 39, home_dock: 40, home_condo: 41, home_villa: 42,
+    bank0: 45
   };
 
   // ---------- wardrobe ----------
@@ -629,6 +630,9 @@ GAME.shops = (function () {
       { id: 'hardware0', kind: 'hardware', name: 'ROSA HARDWARE', tag: 'Tools for loud problems', at: clearSpot(337, -64), color: 0xffd24a },
       { id: 'dress0', kind: 'dress', name: 'THREADS', tag: 'The changing room is that way', at: clearSpot(337, 92), color: 0xff8fd0 },
       { id: 'barber0', kind: 'barber', name: 'CORTES CUTS', tag: 'Walk-ins welcome', at: clearSpot(337, -120), color: 0x8fd0ff },
+      // the bank, between the hardware store and the tailor: where the strip
+      // keeps its money (and where Lola would like to: heist.js)
+      { id: 'bank0', kind: 'bank', name: 'SAVINGS & LOAN', tag: 'Costa Rosa\'s money, safe since 1952', at: clearSpot(337, 4), color: 0xe8c86a },
       // the dealership sits on the southern arterial with room for a glass
       // hall and a forecourt — it used to squat at the airport's entry gate
       { id: 'showroom0', kind: 'showroom', name: 'GRAN ROSA MOTORS', tag: 'Special orders, delivered outside', at: clearSpot(90, 378), forecourt: { x: 64, z: 384 }, heading: Math.PI / 2, color: 0x8dffd8 },
@@ -687,6 +691,7 @@ GAME.shops = (function () {
       barber: { w: 14, d: 9, h: 7.5, wall: 0xbcd8f0 },
       showroom: { w: 34, d: 18, h: 9, wall: 0x3c4258 },
       casino: { w: 24, d: 16, h: 9, wall: 0xe8c86a },
+      bank: { w: 22, d: 14, h: 11, wall: 0xe6dcc4 },
       safehouse: { w: 11, d: 9, h: 10, wall: 0xc8bca8 }
     };
     // Property is priced $6k / $18k / $45k, and the buildings have to tell
@@ -1095,8 +1100,8 @@ GAME.shops = (function () {
       if (loc.kind !== 'showroom') {
         // door
         onFace(0.09, 0, gy + 1.5, doorW, 3.0, 0.18, 0x120c1e);
-        // awning in the shop's color
-        onFace(0.55, 0, gy + 3.15, S.w - 1.2, 0.16, 1.1, loc.color);
+        // awning in the shop's color (a bank has a cornice instead)
+        if (loc.kind !== 'bank') onFace(0.55, 0, gy + 3.15, S.w - 1.2, 0.16, 1.1, loc.color);
       }
       // ---- per-trade dressing ----
       if (loc.kind === 'dress') {
@@ -1159,6 +1164,39 @@ GAME.shops = (function () {
         scene.add(open);
         GAME.city.kinetics.push({ m: open, blink: 1.15, duty: 0.78 });
         pools.addGroundQuad(fx - dir.x * 2.2, gy + 0.1, fz - dir.z * 2.2, 12, 9, 0, 0x6a4210);
+      } else if (loc.kind === 'bank') {
+        // Money that wants to be trusted: a stone front with four columns
+        // standing proud of it, a cornice and a frieze over them, steps up
+        // to brass doors, a clock, and lamps either side that never go out
+        for (var cl = 0; cl < 4; cl++) {
+          var ca2 = (cl - 1.5) * ((S.w - 4) / 3);
+          if (Math.abs(ca2) < doorW / 2 + 0.6) ca2 += Math.sign(ca2) * 0.9;
+          onFace(0.75, ca2, gy + 4.1, 1.0, 7.4, 1.0, 0xf2ead6);           // the shaft
+          onFace(0.75, ca2, gy + 0.3, 1.4, 0.6, 1.4, 0xd8ccb0);           // its base
+          onFace(0.75, ca2, gy + 7.95, 1.4, 0.4, 1.4, 0xd8ccb0);          // its capital
+        }
+        onFace(0.6, 0, gy + 8.55, S.w - 0.4, 0.8, 1.4, 0xe8dcc0);         // the entablature
+        onFace(0.62, 0, gy + 8.55, S.w - 3, 0.3, 1.42, 0xb89a4a);         // a gilt frieze
+        onFace(0.2, 0, gy + 3.6, doorW + 1.4, 0.4, 0.3, 0xb89a4a);        // the door head
+        onFace(0.14, -doorW / 4, gy + 1.5, doorW / 2 - 0.1, 2.9, 0.16, 0x8a6a2a);   // brass doors
+        onFace(0.14, doorW / 4, gy + 1.5, doorW / 2 - 0.1, 2.9, 0.16, 0x8a6a2a);
+        onFace(0.24, 0, gy + 1.5, 0.08, 2.9, 0.1, 0x2a1e0e);
+        // the clock over the door, and the steps up to it
+        onFace(0.3, 0, gy + 5.4, 1.5, 1.5, 0.2, 0xf6f0e0);
+        onFace(0.36, 0, gy + 5.55, 0.08, 0.6, 0.08, 0x14101c);
+        onFace(0.36, 0.2, gy + 5.4, 0.45, 0.08, 0.08, 0x14101c);
+        for (var st2 = 0; st2 < 3; st2++) {
+          trims.addBox(fx - dir.x * (0.6 + st2 * 0.6), gy + 0.06 + (2 - st2) * 0.08, fz - dir.z * (0.6 + st2 * 0.6),
+            dir.x !== 0 ? 0.6 : S.w - 2, 0.12, dir.x !== 0 ? S.w - 2 : 0.6, 0, 0xd0c6b0, 0);
+        }
+        [-1, 1].forEach(function (ls) {
+          var lx = fx - dir.x * 2.6 + px2.x * ls * (doorW / 2 + 2.0), lz = fz - dir.z * 2.6 + px2.z * ls * (doorW / 2 + 2.0);
+          trims.addBox(lx, gy + 1.4, lz, 0.18, 2.8, 0.18, 0, 0x1e1a14, 0);
+          var lamp = neonBox(0.5, 0.6, 0.5, 0xfff0c0);
+          lamp.position.set(lx, gy + 3.05, lz);
+          scene.add(lamp);
+        });
+        pools.addGroundQuad(fx - dir.x * 2.6, gy + 0.11, fz - dir.z * 2.6, 13, 8, 0, 0x6a5a2a);
       } else if (loc.kind === 'casino') {
         // THE LUCKY GULL, palace edition: a second tier and a dark crown over
         // the gold hall, a deco sunburst stacked over the doors, the gull's
