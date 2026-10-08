@@ -54,6 +54,27 @@
   #cash { font-size:26px; font-weight:800; font-style:italic; color:#8dffd8; text-shadow:0 0 8px rgba(70,255,190,.8), 2px 2px 0 #06281c; letter-spacing:1px; }
   #wanted-stars { font-size:24px; letter-spacing:3px; color:rgba(255,255,255,.22); text-shadow:none; margin-top:2px; }
   #wanted-stars .lit { color:#ffd24a; text-shadow:0 0 10px rgba(255,190,40,.9); }
+  #weapon-row { display:flex; align-items:center; justify-content:flex-end; gap:6px; margin-top:4px; }
+  #weapon-icon { width:34px; height:34px; line-height:0; filter:drop-shadow(0 0 4px rgba(255,80,170,.7)); }
+  #weapon-icon:empty { display:none; }
+  #weapon-icon svg, .wslot svg { width:100%; height:100%; }
+  /* the weapon wheel (arsenal.js): Vice City's slots round a ring, the world slowed behind it */
+  #weapon-wheel { position:fixed; inset:0; z-index:30; display:none; align-items:center; justify-content:center; pointer-events:auto;
+    background:radial-gradient(circle at 50% 50%, rgba(10,4,20,.25) 0, rgba(10,4,20,.25) 100px, rgba(10,4,20,.55) 200px, rgba(10,4,20,.15) 60%); }
+  #wheel-ring { position:absolute; left:50%; top:50%; width:0; height:0; }
+  .wslot { position:absolute; width:64px; height:64px; margin:-32px 0 0 -32px; border-radius:50%; background:rgba(16,6,30,.86);
+    border:2px solid rgba(255,150,210,.4); display:flex; align-items:center; justify-content:center; box-sizing:border-box; padding:9px; cursor:pointer; }
+  .wslot span { position:absolute; bottom:-16px; left:0; right:0; text-align:center; font:700 11px 'Segoe UI', Arial, sans-serif; color:#ffe8f6; text-shadow:0 1px 2px #000; }
+  .wslot.empty { opacity:.35; }
+  .wslot.cur { border-color:rgba(141,255,216,.7); }
+  .wslot.sel { border-color:#ff4fa3; background:rgba(255,79,163,.3); transform:scale(1.15); box-shadow:0 0 18px rgba(255,79,163,.6); }
+  #wheel-name { position:relative; font:900 18px 'Segoe UI', Arial, sans-serif; letter-spacing:3px; color:#ffe8f6; text-shadow:0 0 10px rgba(255,79,163,.9); }
+  /* down the sniper's scope */
+  #scope { position:fixed; inset:0; z-index:9; display:none; pointer-events:none;
+    background:radial-gradient(circle at 50% 50%, transparent 0, transparent min(36vh,36vw), #000 calc(min(36vh,36vw) + 2px)); }
+  #scope .scope-x, #scope .scope-y { position:absolute; background:rgba(0,0,0,.85); }
+  #scope .scope-x { left:calc(50% - min(36vh,36vw)); right:calc(50% - min(36vh,36vw)); top:50%; height:1px; }
+  #scope .scope-y { top:calc(50% - min(36vh,36vw)); bottom:calc(50% - min(36vh,36vw)); left:50%; width:1px; }
   #weapon-line { margin-top:4px; font-size:15px; font-weight:700; color:#ffb3e2; text-shadow:0 0 8px rgba(255,80,170,.8); }
   #vehicle-line { margin-top:2px; font-size:13px; font-weight:800; letter-spacing:1px; display:none;
     text-shadow:0 0 8px rgba(0,0,0,.7); }
@@ -476,7 +497,7 @@
     <div id="wanted-stars"></div>
     <div class="bar"><div id="health-fill"></div></div>
     <div class="bar"><div id="armor-fill"></div></div>
-    <div id="weapon-line"></div>
+    <div id="weapon-row"><div id="weapon-icon"></div><div id="weapon-line"></div></div>
     <div id="vehicle-line"></div>
   </div>
   <div class="panel" id="radio-popup"></div>
@@ -551,6 +572,8 @@
 <div id="shutter"></div>
 <div id="derby-tv"></div>
 <div id="lola-screen"><div id="lola-card"><div id="lola-head"><div id="lola-face"></div><div id="lola-words"><div id="lola-from">📟 LOLA</div><div id="lola-say"></div></div></div><div id="lola-opts"></div><div id="lola-hint"></div></div></div>
+<div id="weapon-wheel"><div id="wheel-ring"></div><div id="wheel-name"></div></div>
+<div id="scope"><div class="scope-x"></div><div class="scope-y"></div></div>
 <div id="cine"><div class="cine-bar cine-top"></div><div class="cine-bar cine-bot"><span id="cine-skip"></span></div><div id="scene-sub"><div id="scene-face"></div><div id="scene-words"><div id="scene-name"></div><div id="scene-text"></div></div></div></div>
 <div id="photo-toast"><img id="photo-toast-img" alt=""><div id="photo-toast-text"></div></div>
 <div id="photo-view">
@@ -688,6 +711,7 @@ window.addEventListener('load', function () {
 <script src="js/peds.js"></script>
 <script src="js/player.js"></script>
 <script src="js/combat.js"></script>
+<script src="js/arsenal.js"></script>
 <script src="js/aircraft.js"></script>
 <script src="js/weather.js"></script>
 <script src="js/ambience.js"></script>

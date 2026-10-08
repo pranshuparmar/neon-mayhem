@@ -13,7 +13,7 @@ Every action, on all three: keyboard and mouse, a controller (standard layout �
 | Aim (lock-on) | RMB (hold) · `Tab` (toggle) | LT | AIM (toggle, with a gun drawn) |
 | Fire · punch | LMB | RT | FIRE |
 | Switch lock target | `Q` / `E` · wheel · a flick of the camera | LB / RB · a flick of the camera | a flick of the camera |
-| Weapon | `1`–`5` | D-pad ↓ (next) | WPN (next, once you own two) |
+| Weapon · the weapon wheel | `1`–`9`, mouse wheel · hold `Z` (tap: next) | D-pad ↓ (tap: next, hold: wheel) | WPN (tap: next, hold: wheel) |
 | Get in · jack a car · climb into a boat | `F` | Y | ENTER (in reach) |
 
 **Cars, bikes and boats** (the jet ski too)

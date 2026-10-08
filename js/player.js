@@ -1488,6 +1488,10 @@ function updateCamera(dt) {
   if (Cs) { mdx *= Cs.sens; mdy *= Cs.sens * (Cs.invertY ? -1 : 1); }
 
   var aiming = GAME.combat.aiming && !P.inCar;
+  // the weapon wheel takes the mouse (and the right stick) while it is open,
+  // and the sniper's scope is a camera of its own (arsenal.js)
+  if (GAME.arsenal && GAME.arsenal.wheelOpen) { GAME.arsenal.wheelMove(mdx, mdy); mdx = 0; mdy = 0; }
+  if (GAME.arsenal && GAME.arsenal.scopeCam(mdx, mdy)) return;
 
   if (P.inCar && P.car) {
     // any mouse action holds the free look; two idle seconds and the camera

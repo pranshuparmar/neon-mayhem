@@ -534,6 +534,7 @@
     GAME.updatePlayer(dt);
     GAME.aircraft.updateRockets(dt);
     GAME.combat.update(dt);
+    GAME.arsenal.update(dt);
     GAME.combat.updatePickups(dt);
     GAME.police.update(dt);
     GAME.sealife.update(dt);

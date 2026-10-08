@@ -222,11 +222,24 @@ GAME.shops = (function () {
       if (GAME.jumpArsenal && have) return { id: id, name: name + '  ·  ammo +' + ammo, ds: 'On the house — you found every jump in the city.', price: 0 };
       return { id: id, name: name + (have ? '  ·  ammo +' + ammo : ''), ds: ds, price: price };
     }
+    // one hand-to-hand weapon at a time: buying another trades it in
+    function blade(id, name, price, ds) {
+      var have = P.weapons[id] && P.weapons[id].have;
+      return { id: id, name: name, ds: have ? 'In your hand already.' : ds, price: price, off: !!have };
+    }
     return [
       gun('pistol', 'PISTOL', 400, 40, 'Reliable. Forty rounds in the box.'),
       gun('smg', 'SMG', 2500, 120, 'Spray-friendly, drive-by approved.'),
       gun('shotgun', 'SHOTGUN', 1500, 24, 'Ends conversations at close range.'),
       gun('rifle', 'RIFLE', 5000, 30, 'The observatory special, over the counter.'),
+      gun('sniper', 'SNIPER RIFLE', 9000, 10, 'A scope you can count a man\'s change through.'),
+      gun('rocket', 'ROCKET LAUNCHER', 18000, 4, 'For the car that will not stop.'),
+      gun('grenade', 'GRENADES', 1200, 5, 'Pull, count, throw. In that order.'),
+      gun('molotov', 'MOLOTOVS', 700, 5, 'Bottles, rags, and a bad attitude.'),
+      blade('bat', 'BASEBALL BAT', 150, 'Little league, big league.'),
+      blade('knife', 'KNIFE', 250, 'Quiet. Close.'),
+      blade('katana', 'KATANA', 1800, 'Somebody\'s grandfather\'s. Sharp as the day.'),
+      blade('chainsaw', 'CHAINSAW', 3000, 'For the yard. Mostly.'),
       { id: 'armor', name: 'BODY ARMOR', ds: 'Takes the hits so you don’t.', price: 800, off: P.armor >= 100 },
       { id: 'medkit', name: 'FIRST-AID KIT', ds: 'Patches you back to full.', price: 150, off: P.health >= 100 }
     ];
@@ -365,7 +378,7 @@ GAME.shops = (function () {
     if (id === 'armor') { P.armor = 100; note('Strapped in.'); }
     else if (id === 'medkit') { P.health = 100; note('Good as new.'); }
     else {
-      var packs = { pistol: 40, smg: 120, shotgun: 24, rifle: 30 };
+      var packs = { pistol: 40, smg: 120, shotgun: 24, rifle: 30, sniper: 10, rocket: 4, grenade: 5, molotov: 5 };
       GAME.combat.giveWeapon(id, packs[id]);
       note('Bagged, no questions asked.');
     }

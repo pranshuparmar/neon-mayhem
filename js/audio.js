@@ -613,7 +613,51 @@ GAME.audio = (function () {
       if (type === 'pistol') { noiseBurst(0.12, 2500, 0.5, null, null, b); tone(160, 0.08, 0.4, 'square', 60, null, b); }
       else if (type === 'smg') { noiseBurst(0.07, 3200, 0.35, null, null, b); tone(220, 0.05, 0.3, 'square', 90, null, b); }
       else if (type === 'shotgun') { noiseBurst(0.3, 1200, 0.8, null, null, b); tone(90, 0.2, 0.6, 'square', 40, null, b); }
+      // the sniper's crack carries, and rolls back off the buildings
+      else if (type === 'sniper') { noiseBurst(0.08, 5200, 0.7, 'highpass', null, b); noiseBurst(0.6, 700, 0.45, null, ctx.currentTime + 0.05, b); tone(140, 0.12, 0.5, 'square', 50, null, b); }
+      // a rocket leaving the tube: a thump, then the motor's hiss
+      else if (type === 'rocket') { tone(70, 0.25, 0.7, 'sine', 35, null, b); noiseBurst(0.9, 2400, 0.35, 'bandpass', null, b); }
       else { tone(120, 0.07, 0.3, 'square', 70, null, b); }
+    },
+    // A swing through the air: a short filtered rush, longer for a blade.
+    // The chainsaw is its two-stroke snarl instead, a burst per tick held.
+    swing: function (kind) {
+      if (!ctx) return;
+      var t = ctx.currentTime;
+      if (kind === 'chainsaw') {
+        tone(92 + Math.random() * 10, 0.11, 0.16, 'sawtooth', 0, t);
+        tone(184 + Math.random() * 20, 0.11, 0.07, 'square', 0, t);
+        noiseBurst(0.1, 1800, 0.1, 'bandpass', t);
+        return;
+      }
+      var len = kind === 'katana' ? 0.22 : kind === 'bat' ? 0.18 : 0.1;
+      noiseBurst(len, kind === 'bat' ? 900 : 2600, 0.32, 'bandpass', t);
+      if (kind === 'katana') tone(2400, 0.25, 0.04, 'sine', 3200, t + 0.05);
+    },
+    // and landing it: wood on somebody, or a blade
+    thud: function (kind) {
+      if (!ctx) return;
+      if (kind === 'bat') { tone(110, 0.12, 0.45, 'sine', 55); noiseBurst(0.07, 700, 0.4); tone(620, 0.05, 0.08, 'triangle', 300); }
+      else if (kind !== 'chainsaw') noiseBurst(0.08, 1600, 0.35, 'bandpass');
+    },
+    // something thrown leaving your hand
+    whoosh: function (len) { if (ctx) noiseBurst(len || 0.3, 1400, 0.25, 'bandpass'); },
+    // a grenade bouncing on the street
+    tick: function (x, z) { if (ctx) tone(1700, 0.04, 0.12, 'square', 900, null, spatialBus(x, z, 0.3)); },
+    // a bottle breaking, and the whump of what was in it going up
+    glass: function (x, z) {
+      if (!ctx) return;
+      var b = spatialBus(x, z, 0.9), t = ctx.currentTime;
+      noiseBurst(0.18, 5200, 0.5, 'highpass', t, b);
+      for (var i = 0; i < 4; i++) tone(2400 + Math.random() * 2600, 0.12, 0.05, 'sine', 0, t + i * 0.03, b);
+      noiseBurst(0.6, 320, 0.5, null, t + 0.05, b);
+    },
+    // fire: a crackle now and then while it burns
+    crackle: function (x, z) {
+      if (!ctx) return;
+      var b = spatialBus(x, z, 0.5), t = ctx.currentTime;
+      for (var i = 0; i < 3; i++) noiseBurst(0.03, 3000, 0.12, 'bandpass', t + Math.random() * 0.25, b);
+      noiseBurst(0.4, 500, 0.08, null, t, b);
     },
     ricochet: function () { if (ctx) tone(2400, 0.09, 0.12, 'sine', 700); },
     punch: function () { if (ctx) { noiseBurst(0.06, 500, 0.4); tone(90, 0.07, 0.4, 'sine', 45); } },

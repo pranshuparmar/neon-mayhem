@@ -290,6 +290,8 @@
 //  17. GANGS          — Lola's people and Rico's crew on their own turf, in
 //      their colours; his men draw on sight after the warehouses, the two
 //      sides fight each other and not their own, and turf follows the story.
+//  18. ARSENAL        — melee, throwables, a scoped rifle and a rocket, one
+//      blade and one throwable at a time, SVG icons, and the weapon wheel.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -12408,6 +12410,125 @@ function withTimeout(p, ms) {
   check('gangs: the two sides go at each other, never at their own', gang.clash && gang.notOwn, JSON.stringify(gang));
   check('gangs: what Rico loses Lola\'s people move into, and the price on you ends with him',
     gang.harborAfter === 'lola' && gang.doradoAfter === 'lola' && gang.peaceAfter, JSON.stringify(gang));
+
+  // ---------- 18: the arsenal ----------
+  // Bat, knife, katana and chainsaw (one at a time, as in Vice City),
+  // grenades and Molotovs (one kind at a time), a scoped sniper rifle and a
+  // rocket launcher; an SVG icon each, drawn in code; and the weapon wheel,
+  // held open on Z with the world slowed, a tap of it stepping to the next.
+  var arms = await page.evaluate(function () {
+    var C = GAME.combat, A = GAME.arsenal, P = GAME.player, r = {};
+    var weapons0 = JSON.parse(JSON.stringify(P.weapons, function (k, v) { return v === Infinity ? 'INF' : v; }));
+    var cur0 = P.currentWeapon;
+    if (P.inCar) GAME.exitCar();
+    GAME.godMode = true;
+    GAME.input.lockGraceT = 0;
+    var spawned = [];
+    function clean() { GAME.police.clearWanted(); }
+    try {
+      GAME.test.teleport(-60, 40); GAME.test.fastForward(0.5);
+      // every weapon has an icon, and it is SVG
+      var ids = Object.keys(C.WEAPONS);
+      r.icons = ids.filter(function (w) {
+        var svg = A.icon(w), d = new DOMParser().parseFromString(svg, 'image/svg+xml');
+        return !svg || d.getElementsByTagName('parsererror').length || d.documentElement.nodeName !== 'svg';
+      });
+      r.count = ids.length;
+      // one hand-to-hand weapon, and one kind of throwable, at a time
+      C.giveWeapon('bat'); C.giveWeapon('katana');
+      r.oneBlade = !P.weapons.bat.have && P.weapons.katana.have;
+      C.giveWeapon('grenade', 3); C.giveWeapon('molotov', 2);
+      r.oneThrow = !P.weapons.grenade.have && P.weapons.molotov.have;
+      r.hudIcon = /<svg/.test(document.getElementById('weapon-icon').innerHTML);
+      // the katana, at arm's length
+      var ped = GAME.test.spawnPed(0.01, 1.6); spawned.push(ped);
+      GAME.test.fastForward(0.05);
+      P.heading = Math.atan2(ped.pos.x - P.pos.x, ped.pos.z - P.pos.z);
+      C.selectWeapon('katana'); C.melee('katana');
+      r.katana = ped.dead;
+      clean();
+      // a grenade at a car: it lands, waits, and goes off
+      var car = GAME.test.spawnCar('sedan', 12, 0); spawned.push(car);
+      GAME.test.fastForward(0.3);
+      var hp0 = car.hp;
+      C.giveWeapon('grenade', 2);
+      var g = A.throwIt('grenade', 0, car);
+      r.thrown = A.shots === 1;
+      GAME.test.fastForward(1.0);
+      r.notYet = A.shots === 1 && !car.dead && car.hp === hp0;
+      GAME.test.fastForward(2.0); clean();
+      r.grenade = A.shots === 0 && (car.dead || car.hp < hp0);
+      // a Molotov: the ground burns, and somebody stood in it is hurt
+      var ped2 = GAME.test.spawnPed(0.01, 14); spawned.push(ped2);
+      ped2.jobPed = true; ped2.state = 'wait'; ped2.speed = 0;
+      GAME.test.fastForward(0.05);
+      var hpP = ped2.hp;
+      A.throwIt('molotov', 0, ped2);
+      GAME.test.fastForward(0.9);
+      r.fire = A.fires === 1;
+      GAME.test.fastForward(1.0); clean();
+      r.burns = ped2.dead || ped2.hp < hpP;
+      GAME.test.fastForward(6); clean();
+      r.fireOut = A.fires === 0;
+      // a rocket into a car
+      var car2 = GAME.test.spawnCar('sedan', -22, 0); spawned.push(car2);
+      GAME.test.fastForward(0.3);
+      var hp2 = car2.hp;
+      A.fireRocket(Math.atan2(car2.pos.x - P.pos.x, car2.pos.z - P.pos.z), car2);
+      GAME.test.fastForward(1.2); clean();
+      r.rocket = car2.dead || car2.hp < hp2;
+      // the sniper rifle: aimed on foot it is a scope, and let go it is not
+      C.giveWeapon('sniper', 5);
+      var fov0 = GAME.cameraObj.fov;
+      GAME.input.rmb = true; GAME.test.fastForward(0.2);
+      r.scoped = A.scoped && GAME.cameraObj.fov < 20 && document.getElementById('scope').style.display === 'block';
+      GAME.input.rmb = false; GAME.test.fastForward(0.2);
+      r.unscoped = !A.scoped && GAME.cameraObj.fov === fov0 && document.getElementById('scope').style.display === 'none';
+      // the wheel: a tap steps, a hold opens it with the world slowed, and
+      // letting go takes what it points at
+      C.giveWeapon('pistol', 20);
+      var w0 = P.currentWeapon;
+      GAME.test.pressKey('KeyZ', true); GAME.test.fastForward(1 / 60); GAME.test.pressKey('KeyZ', false); GAME.test.fastForward(1 / 60);
+      r.tap = P.currentWeapon !== w0 && !A.wheelOpen;
+      GAME.test.pressKey('KeyZ', true); GAME.test.fastForward(0.4);
+      r.open = A.wheelOpen && GAME.timeScale < 1 && document.getElementById('weapon-wheel').style.display === 'flex';
+      A.wheelMove(0, -200);   // straight up: fists
+      GAME.test.pressKey('KeyZ', false); GAME.test.fastForward(1 / 60);
+      r.picked = !A.wheelOpen && P.currentWeapon === 'fist' && GAME.timeScale === 1;
+      // the city has them lying about too
+      r.pickups = ['bat', 'knife', 'katana', 'chainsaw', 'grenade', 'molotov', 'sniper', 'rocket'].filter(function (t) {
+        return !GAME.world.pickups.some(function (p) { return p.type === t; });
+      });
+      // the noises they make, muted or not, without a fault
+      var A2 = GAME.audio;
+      ['bat', 'knife', 'katana', 'chainsaw'].forEach(function (k) { A2.swing(k); A2.thud(k); });
+      A2.whoosh(0.2); A2.tick(0, 0); A2.glass(0, 0); A2.crackle(0, 0); A2.gunshot('sniper', 0, 0); A2.gunshot('rocket', 0, 0);
+      r.sounds = true;
+    } finally {
+      spawned.forEach(function (o) { if (o.kind === 'ped') GAME.peds.removePed(o); else if (!o.gone) GAME.vehicles.removeCar(o); });
+      A.clear();
+      P.weapons = JSON.parse(JSON.stringify(weapons0), function (k, v) { return v === 'INF' ? Infinity : v; });
+      P.currentWeapon = cur0; C.refreshWeaponHud();
+      GAME.input.rmb = false;
+      GAME.godMode = false;
+      GAME.timeScale = 1;
+      GAME.police.clearWanted();
+      P.health = 100;
+      GAME.test.fastForward(0.3);
+    }
+    return r;
+  });
+  check('arsenal: every weapon has an SVG icon drawn in code', arms.count >= 13 && arms.icons.length === 0, JSON.stringify(arms));
+  check('arsenal: one hand-to-hand weapon and one kind of throwable at a time', arms.oneBlade && arms.oneThrow && arms.hudIcon, JSON.stringify(arms));
+  check('arsenal: a katana at arm\'s length is the end of it', arms.katana, JSON.stringify(arms));
+  check('arsenal: a grenade flies, waits on its fuse, and goes off', arms.thrown && arms.notYet && arms.grenade, JSON.stringify(arms));
+  check('arsenal: a Molotov sets the ground burning, it hurts, and it burns out', arms.fire && arms.burns && arms.fireOut, JSON.stringify(arms));
+  check('arsenal: a rocket into a car', arms.rocket, JSON.stringify(arms));
+  check('arsenal: the sniper rifle aimed is a scope, and let go it is not', arms.scoped && arms.unscoped, JSON.stringify(arms));
+  check('arsenal: a tap of the wheel key steps to the next weapon', arms.tap, JSON.stringify(arms));
+  check('arsenal: held, the wheel opens with the world slowed, and letting go takes its pick', arms.open && arms.picked, JSON.stringify(arms));
+  check('arsenal: every new weapon lies about the city somewhere', arms.pickups.length === 0, JSON.stringify(arms.pickups));
+  check('arsenal: and every one of their sounds plays without a fault', arms.sounds);
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the

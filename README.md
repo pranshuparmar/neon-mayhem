@@ -45,6 +45,7 @@ Want the details? **[Read the full tour →](docs/FEATURES.md)**
 
 ## What's new
 
+- 🔪 **The arsenal** — bat, knife, katana, chainsaw, grenades, Molotovs, a scoped sniper rifle and a rocket launcher, and a weapon wheel to pick them from.
 - 🟣 **Gangs and turf** — Rico's crew in plum and black against Lola's people in pink, each on their own streets, drawing on sight once Rico has a price on you, and turf that changes hands as the story goes.
 - 🎭 **Story jobs in acts** — a won race brings sore losers or the law, a rampage the crew behind it, the collector's bag goes back to the lock-up, and HIGH TIDE ends with Rico's stand on the marina.
 - 🎬 **Talking heads** — Lola's jobs open on a cut to her lock-up, Vice City style: letterbox, the two of you face to face, subtitles with a face drawn in code and a babble voice for everyone. Rico gets his own cut to the marina before the end.

@@ -19,7 +19,8 @@ GAME.hud = (function () {
   var dmgFlash = null;
   var PICKUP_BLIP = {
     pistol: '#eef0ff', smg: '#ffe14f', shotgun: '#ff8a3d',
-    health: '#ff4d6a', armor: '#4a6cff', rifle: '#8dffd8'
+    health: '#ff4d6a', armor: '#4a6cff', rifle: '#8dffd8',
+    bat: '#ffd24a', knife: '#ffd24a', katana: '#ffd24a', chainsaw: '#ffd24a', grenade: '#ff8a3d', molotov: '#ff8a3d', sniper: '#8dffd8', rocket: '#ff6fb8'
   };
 
   function $(id) { return document.getElementById(id); }
@@ -884,7 +885,7 @@ GAME.hud = (function () {
     var wasd = K('KeyW') + K('KeyA') + K('KeyS') + K('KeyD');
     var txt = {
       car: '<b>' + wasd + '</b> drive · <b>' + K('Space') + '</b> handbrake · <b>' + K('KeyQ') + '/' + K('KeyE') + '</b> drive-by · <b>' + K('KeyF') + '</b> exit · <b>' + K('KeyG') + '</b> horn · <b>' + K('Comma') + '/' + K('Period') + '</b> radio · <b>' + K('KeyP') + '</b> map · <b>' + K('KeyH') + '</b> hide',
-      foot: '<b>' + wasd + '</b> move · <b>' + K('ShiftLeft') + '</b> sprint · <b>' + K('Space') + '</b> jump · <b>RMB</b> aim · <b>LMB</b> fire · <b>1-5</b> weapons · <b>' + K('KeyF') + '</b> enter car · <b>' + K('KeyP') + '</b> map · <b>' + K('KeyH') + '</b> hide',
+      foot: '<b>' + wasd + '</b> move · <b>' + K('ShiftLeft') + '</b> sprint · <b>' + K('Space') + '</b> jump · <b>RMB</b> aim · <b>LMB</b> fire · <b>1-9</b> · <b>' + K('KeyZ') + '</b> (hold) weapons · <b>' + K('KeyF') + '</b> enter car · <b>' + K('KeyP') + '</b> map · <b>' + K('KeyH') + '</b> hide',
       heli: '<b>' + K('Space') + '</b> up · <b>' + K('ShiftLeft') + '</b> down · <b>' + K('KeyW') + '/' + K('KeyS') + '</b> forward · <b>' + K('KeyA') + '/' + K('KeyD') + '</b> yaw · <b>' + K('KeyF') + '</b> exit / bail out · <b>' + K('KeyP') + '</b> map',
       plane: '<b>' + K('KeyW') + '/' + K('KeyS') + '</b> throttle · <b>' + K('Space') + '</b> climb · <b>' + K('ShiftLeft') + '</b> dive · <b>' + K('KeyA') + '/' + K('KeyD') + '</b> turn · <b>' + K('KeyQ') + '/' + K('KeyE') + '</b> barrel roll · <b>' + K('KeyF') + '</b> bail out',
       chute: '<b>' + wasd + '</b> steer your descent · glide down to land',
@@ -1539,9 +1540,12 @@ GAME.hud = (function () {
       else if (n === 0 && wantedShown > 0) GAME.haptics.wantedClear();
       wantedShown = n;
     },
-    setWeapon: function (name, ammo) {
+    setWeapon: function (name, ammo, iconSvg) {
       if (!el['weapon-line']) return; // may fire before the HUD is wired up
       el['weapon-line'].textContent = name + (ammo === '' ? '' : '  ·  ' + ammo);
+      // and what it looks like, beside it (arsenal.js draws them)
+      var wi = $('weapon-icon');
+      if (wi && iconSvg !== undefined && wi.getAttribute('data-w') !== name) { wi.innerHTML = iconSvg; wi.setAttribute('data-w', name); }
     },
     message: function (text, dur) { pushMessage(String(text), dur || 2.5); },
     // Letterbox for a moment that plays itself (the glass lift): black bars

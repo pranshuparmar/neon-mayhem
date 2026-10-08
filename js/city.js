@@ -3012,6 +3012,12 @@ GAME.city = (function () {
       city.parkedSpots.push({ x: mo.x, z: mo.z, y: -0.35, heading: Math.PI / 2, vtype: mo.vtype || 'boat' });
     });
 
+    // the rest of the arsenal (arsenal.js) on corners the loop above never
+    // takes — it only ever pairs rows and columns of the same parity — so
+    // nothing already lying about moves to make room
+    [[1, 2, 'bat'], [2, 5, 'knife'], [4, 1, 'grenade'], [5, 2, 'molotov'], [6, 3, 'katana'], [3, 6, 'chainsaw'], [1, 6, 'sniper'], [6, 1, 'rocket']].forEach(function (s) {
+      if (s[0] < R.length - 1 && s[1] < R.length - 1) city.pickupSpots.push({ x: R[s[0]] + 8.4, z: R[s[1]] - 8.4, type: s[2] });
+    });
     // starter pickups within sight of the spawn point (356, 40)
     city.pickupSpots.push({ x: 358, z: 34, type: 'pistol' });
     city.pickupSpots.push({ x: 358, z: 48, type: 'health' });
