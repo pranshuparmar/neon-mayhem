@@ -1395,16 +1395,21 @@ function withTimeout(p, ms) {
       return { state: P.state, t: +t.toFixed(2) };
     });
   };
+  // Back on your feet after a bust. The screen has to have been up a moment
+  // before R counts, and a bust slows the clock: left to the real frame loop,
+  // a slow machine (two ticks a frame at most) used to run out of tries with
+  // the player still in the cells — and every group after it ran busted.
+  // So the time on the screen is fast-forwarded, R is down for it, and only
+  // the fade back in (a real-clock timer) is waited for.
   var comeBack = async function () {
     for (var w = 0; w < 25; w++) {
       var up = await page.evaluate(function () {
-        GAME.test.pressKey('KeyR', true);
+        if (GAME.player.state === 'alive') return true;
+        GAME.test.pressKey('KeyR', true); GAME.test.fastForward(0.7); GAME.test.pressKey('KeyR', false);
         return GAME.player.state === 'alive';
       });
-      await page.waitForTimeout(300);
-      await page.evaluate(function () { GAME.test.pressKey('KeyR', false); });
       if (up) break;
-      await page.waitForTimeout(300);
+      await page.waitForTimeout(400);
     }
     return page.evaluate(function () {
       GAME.police.clearWanted();
@@ -8594,9 +8599,12 @@ function withTimeout(p, ms) {
         var van = S.event.van;
         r.armour = +(van.hp / van.spec.hp).toFixed(1);
         ff(2);
+        // (only the bags this van drops: a thief's takings from before can
+        // be lying about too, and be $250 of them)
+        var lying = GAME.world.pickups.slice();
         GAME.vehicles.damageCar(van, van.hp * 0.8, 'gun', true);
         ff(0.5);
-        r.vanHit = { bags: GAME.world.pickups.filter(function (q) { return q.amount === 250; }).length, wanted: GAME.police.wanted, paper: kinds().indexOf('van') >= 0 };
+        r.vanHit = { bags: GAME.world.pickups.filter(function (q) { return q.amount === 250 && lying.indexOf(q) < 0; }).length, wanted: GAME.police.wanted, paper: kinds().indexOf('van') >= 0 };
       }
       settle();
       // --- at the lights: somebody pulls up and revs ---
@@ -8708,8 +8716,11 @@ function withTimeout(p, ms) {
       var sx = road === 'x' ? cx : q.x - q.dir[0] * 40, sz = road === 'z' ? cz : q.z - q.dir[1] * 40;
       GAME.test.teleport(sx + 15, sz + 15); ff(0.2);
       var car = GAME.vehicles.spawnCar('sedan', sx, sz, Math.atan2(q.dir[0], q.dir[1]), { occupied: 'ai', ai: { mode: 'traffic', desired: 8, laneX: 0, laneZ: 0 } });
-      ff(3);
-      var lat = road === 'x' ? car.pos.x - cx : car.pos.z - cz, line = road === 'x' ? q.x - cx : q.z - cz;
+      // (until it has settled into a lane: one held up a moment by somebody
+      // crossing is still on the crown of the road at three seconds)
+      var lat = 0;
+      for (var w = 0; w < 32 && Math.abs(lat) < 1.5; w++) { ff(0.25); lat = road === 'x' ? car.pos.x - cx : car.pos.z - cz; }
+      var line = road === 'x' ? q.x - cx : q.z - cz;
       GAME.vehicles.removeCar(car);
       return { road: road, carSide: +lat.toFixed(1), lineSide: +line.toFixed(1), same: lat * line > 0 };
     });

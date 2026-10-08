@@ -243,8 +243,11 @@ GAME.sealife = (function () {
     var s = car.cruise, f = GAME.focus();
     var home = U.dist2(car.pos.x, car.pos.z, f.x, f.z) > 220 * 220;
     var base = home ? Math.atan2(f.x - car.pos.x, f.z - car.pos.z) : car.heading;
-    for (var t = 0; t < 14; t++) {
-      var a = base + U.randRange(Math.random, -1.5, 1.5), r = U.randRange(Math.random, 60, 200);
+    // (ahead first; and if ahead is all shore — a launch standing down off
+    // the beach it chased you onto is facing it — any way at all)
+    for (var t = 0; t < 22; t++) {
+      var a = t < 14 ? base + U.randRange(Math.random, -1.5, 1.5) : U.randRange(Math.random, -Math.PI, Math.PI);
+      var r = U.randRange(Math.random, 60, 200);
       var x = car.pos.x + Math.sin(a) * r, z = car.pos.z + Math.cos(a) * r;
       if (!roomy(x, z, 26) || !clearOfFolk(x, z, 25) || !clearRun(car.pos.x, car.pos.z, x, z)) continue;
       s.wp = { x: x, z: z };

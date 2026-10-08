@@ -1004,6 +1004,10 @@ GAME.peds = (function () {
   // ceiling is full, or the target is not something to fight.
   function startFight(ped, foe, secs) {
     if (ped.dead || ped.gone || ped.isCop || ped.jobPed || ped.state === 'inside') return false;
+    // Somebody running from the law — a thief with the takings, a man who
+    // owes — keeps running: a car's nudge or a hothead on the pavement does
+    // not stop them to have it out (streetlife.js, strangers.js)
+    if (ped.outlaw && ped.state === 'flee') return false;
     if (foe && foe.kind === 'ped' && (!foe.ped || foe.ped.dead || foe.ped.gone || foe.ped === ped)) return false;
     // An existing brawler is already counted; a fresh one has to fit. But
     // SWINGING BACK is not a new fight, it is the other half of one that is
