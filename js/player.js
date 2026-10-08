@@ -351,6 +351,13 @@ GAME.enterCar = function (car) {
   // boarding is a same-level act everywhere it can be asked for — a rooftop
   // helicopter is not takeable from the pavement under it
   if (Math.abs(car.pos.y - P.pos.y) > 3) return false;
+  // A takedown's target, or the car that came for you, is locked while there
+  // is somebody in it: F at the window rattled a handle that opened, and the
+  // job was over before it started (missions.js has what happens instead).
+  if (car.locked && car.occupied === 'ai') {
+    if (GAME.missions.rattled) GAME.missions.rattled(car);
+    return false;
+  }
   if (car.occupied === 'ai') {
     // jack: the driver bails — and not all of them run. The short-tempered
     // turn on you and try to take their ride back with their fists.

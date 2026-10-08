@@ -597,6 +597,9 @@ GAME.vehicles = (function () {
       bodyPitch: NaN, susp: null, suspSpeed: NaN,
       raceEdge: 0, cpIndex: 0, path: null, pathT: 0,
       lastDriver: null, riderMesh: null, fromSpot: null,
+      // a job's car (missions.js): a takedown's target, locked while he is in
+      // it, and the car of Rico's men that comes after the ledger
+      perp: false, locked: false, heavy: false,
       aiSteer: 0, aiTX: NaN, aiTZ: NaN, aiAir: false, airLights: null,
       copsOut: NaN, shootT: NaN, aimSkill: NaN, deployT: 0, fireT: 0, bailT: 0,
       heliSpeed: 0, rotorSpin: 0, mgT: 0, rkT: 0, pitch: 0, roll: 0, sinkV: 0,
@@ -1865,8 +1868,28 @@ GAME.vehicles = (function () {
     if (car.honkCd > 0) car.honkCd -= dt;
 
     // wedged against something: back out
+    // (a man on the run — a takedown's target, missions.js — does not sit
+    // there thinking about it)
     if (Math.abs(car.speed) < 0.8 && distN > 8) car.unstickT += dt; else car.unstickT = 0;
-    if (car.unstickT > 1.6) { car.reverseT = 1.1; car.unstickT = 0; }
+    // (clear of where he was boxed in, and it is forgotten)
+    if (ai.wedged && U.dist2(car.pos.x, car.pos.z, ai.wedgeX, ai.wedgeZ) > 25 * 25) ai.wedged = 0;
+    if (car.unstickT > (ai.bolt ? 0.6 : 1.6)) {
+      car.reverseT = 1.1; car.unstickT = 0;
+      // boxed in across the whole road — the second lane no better than the
+      // first — he stops trying the same gap: he turns round and goes back
+      // the way he came
+      if (ai.bolt) {
+        if (!ai.wedged) { ai.wedgeX = car.pos.x; ai.wedgeZ = car.pos.z; }
+        ai.wedged = (ai.wedged || 0) + 1;
+        var back = ai.prev || city.nearestNode(car.pos.x - Math.sin(car.heading) * 40, car.pos.z - Math.cos(car.heading) * 40);
+        if (ai.wedged >= 2 && back && back !== ai.node) {
+          ai.wedged = 0;
+          ai.prev = ai.node; ai.node = back;
+          setLane(ai, back.x - ai.prev.x, back.z - ai.prev.z);
+          ai.passT = 0; ai.passCar = null;
+        }
+      }
+    }
     if (car.reverseT > 0) {
       car.reverseT -= dt;
       return setControls(out, -0.8, dh > 0 ? -1 : 1, false);
@@ -1924,7 +1947,9 @@ GAME.vehicles = (function () {
     }
     var P = GAME.player;
     var byPlayer = !!blockCar && blockCar === P.car && P.inCar;
-    if (!P.inCar && Math.abs(P.pos.y - car.pos.y) < 3) {
+    // ...and you standing in the road in front of him is your problem: he
+    // does not brake for the man who came to stop him
+    if (!P.inCar && !ai.bolt && Math.abs(P.pos.y - car.pos.y) < 3) {
       var pdx = P.pos.x - car.pos.x, pdz = P.pos.z - car.pos.z;
       var pfd = pdx * fx + pdz * fz;
       if (pfd > 0 && pfd < lookA + 2 && Math.abs(pdx * fz - pdz * fx) < 2.4) { blocked = true; byPlayer = true; if (pfd < 6) hard = true; }
@@ -1954,7 +1979,8 @@ GAME.vehicles = (function () {
         (ai.reckless && blockCar.speed < desired * 0.7))))) {
       ai.blockT = (ai.blockT || 0) + dt;
       if ((byPlayer || ai.reckless) && ai.blockT > (ai.reckless ? 0.3 : 1.2)) honk(car);
-      if (blockCar && ai.blockT > (ai.reckless ? 0.4 : 1.4) && otherLaneClear(car, fx, fz)) {
+      // (on the run, he goes round at once, oncoming lane or not)
+      if (blockCar && ai.blockT > (ai.bolt ? 0.1 : ai.reckless ? 0.4 : 1.4) && (ai.bolt || otherLaneClear(car, fx, fz))) {
         ai.passT = 7; ai.passCar = blockCar; ai.blockT = 0;
       }
     } else ai.blockT = 0;

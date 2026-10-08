@@ -1147,10 +1147,13 @@ GAME.hud = (function () {
       var pc = cars[c];
       // only actively-pursuing cruisers show as blips (not idle/parked ones)
       if (pc.isPolice && !pc.dead && pc.ai && (pc.ai.mode === 'chase' || pc.ai.mode === 'roadblock')) blip(pc.pos.x, pc.pos.z, '#5aa0ff', 3);
+      // the car a job has sent after you (missions.js: Rico's men)
+      else if (pc.heavy && !pc.dead) blip(pc.pos.x, pc.pos.z, '#ff3b3b', 3);
     }
     var peds = GAME.world.peds;
     for (var pd = 0; pd < peds.length; pd++) {
       if (peds[pd].isCop && !peds[pd].dead) blip(peds[pd].pos.x, peds[pd].pos.z, '#5aa0ff', 2);
+      else if (peds[pd].missionFoe && !peds[pd].dead) blip(peds[pd].pos.x, peds[pd].pos.z, '#ff3b3b', 2);
     }
     g.restore();
     // player arrow: fixed, always pointing up (the radar rotates beneath it)

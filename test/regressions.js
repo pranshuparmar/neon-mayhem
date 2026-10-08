@@ -142,6 +142,13 @@
 //       and two at a jetty in the east-coast cove, each afloat; the cove's
 //       speedboat is boarded from the planks and taken out. And the map's
 //       depot sits in the Shops & property row, and its solo.
+//   5w. UNDER A BRIDGE — a boat crossing under a span keeps the camera under
+//       the girder, level or looked steeply up.
+//   5x. LOOSE ENDS — the target's car is locked (F rattles it, and he goes);
+//       boxed in across the road he gets out of it; hurt, he shoots out of
+//       the window; bailed, he is on foot with a gun and the job waits on
+//       him; down, the ledger is on him; taken, Rico's men come for it in a
+//       locked car, close in and get out armed; at Lola's lock-up it passes.
 //   4y. AROUND THE GAME — messages stack; the district name keeps out of a
 //       mission's title; every overlay uses the game's face; the title says
 //       LOADING until it can answer; pause takes keys, ignores a click that
@@ -3027,6 +3034,11 @@ function withTimeout(p, ms) {
         r.ran = a.fleeing && t.ai && t.ai.desired >= 18;
         GAME.vehicles.damageCar(t, t.hp * 0.85, 'bullet', true);
         GAME.test.fastForward(0.5);
+        // knocked about till he gives it up, he is out with a gun, and the
+        // job is not done until he is
+        r.foot = a.phase === 'foot' && !!a.foot && !!a.foot.carrying && !(GAME.bests && GAME.bests.hit0 !== undefined);
+        if (a.foot) GAME.peds.kill(a.foot, 'gun', true);
+        GAME.test.fastForward(0.5);
       }
       // Passed is the job's own record, not "nothing is running": the chase
       // goes wherever the target ran, and a car left stopped in another job's
@@ -3103,7 +3115,8 @@ function withTimeout(p, ms) {
   check('takedown: pulling up in the ring starts one, with an armoured target out in the traffic',
     con.started === 'hit0' && con.target && con.far > 100 && con.marked, JSON.stringify({ started: con.started, target: con.target, far: con.far, marked: con.marked }));
   check('takedown: the target runs once it has seen you', con.ran);
-  check('takedown: and wrecking it passes the job', con.passed);
+  check('takedown: knocked about till he bails, he is out with a gun and the job waits on him', con.foot);
+  check('takedown: and putting him down passes the job', con.passed);
   check('isla jumps: ten of them, all on the island, and the mainland still counts its own',
     con.islaRamps === 10 && con.islaOnIsland && con.mainTotal === 25, JSON.stringify({ isla: con.islaRamps, on: con.islaOnIsland, main: con.mainTotal }));
   check('isla jumps: one launches and counts on the island tally, not the mainland one',
@@ -9363,7 +9376,8 @@ function withTimeout(p, ms) {
   check('business: left, it holds three days, and Lola says so once', bz.full.till === bz.full.cap && bz.full.cap === 1800 && bz.full.pages === 1, JSON.stringify(bz.full));
   check('business: a place of yours is green on the radar', bz.blip === '#5dff9e', String(bz.blip));
   check('business: a hold-up at yours takes the till; put the thief down and it is all in the bag',
-    bz.robOn && bz.rob.shop === 'barber0' && bz.rob.stolen === 1800 && bz.rob.till === 0 && /your place/.test(bz.rob.msg) && bz.bag === 1800 && bz.backInHand === 1800,
+    // (back in hand is the bag and whatever loose change he dropped beside it)
+    bz.robOn && bz.rob.shop === 'barber0' && bz.rob.stolen === 1800 && bz.rob.till === 0 && /your place/.test(bz.rob.msg) && bz.bag === 1800 && bz.backInHand >= 1800 && bz.backInHand < 1900,
     JSON.stringify({ rob: bz.rob, bag: bz.bag, back: bz.backInHand }));
   check('business: the bar in the Lucky Gull is for sale too', bz.bar === 45000, String(bz.bar));
   check('business: and Lola counts them, and says where the money is', /business/i.test(bz.money || '') && /Businesses: 1 of 5/.test(bz.how || ''), JSON.stringify({ money: bz.money, how: bz.how }));
@@ -9501,6 +9515,151 @@ function withTimeout(p, ms) {
     bc.level.under >= 2 && bc.level.worst < 0, JSON.stringify({ deck: bc.deck, level: bc.level }));
   check('bridge camera: and looked steeply up, it is still held under it',
     bc.up.under >= 2 && bc.up.worst < 0, JSON.stringify({ deck: bc.deck, up: bc.up }));
+
+  // ---------- 5x: LOOSE ENDS — a takedown with some fight in it ----------
+  // F at the target's window pulled him out and that was the job: no chase,
+  // no pushback, nobody firing. Now his car is locked and he drives like a
+  // man on the run; hurt, he shoots back; out of it, he has a gun; and the
+  // ledger he had on him brings Rico's men after it, all the way to the
+  // lock-up.
+  var le = await page.evaluate(function () {
+    var r = {}, M = GAME.missions, P = GAME.player, ff0 = function (s) { GAME.test.fastForward(s); };
+    // (kept alive through it without god mode, which also stops the shooting)
+    var ff = function (s) { for (var u = 0; u < s - 1e-6; u += 0.1) { P.health = 100; P.armor = 100; ff0(Math.min(0.1, s - u)); } P.health = 100; };
+    var msgs = [], ms0 = GAME.hud.message;
+    GAME.hud.message = function (t) { msgs.push(String(t)); return ms0.apply(GAME.hud, arguments); };
+    var shots = [], ns0 = GAME.combat.npcShoot;
+    GAME.combat.npcShoot = function (x, y, z, acc, dmg, src) {
+      shots.push(src && src.kind === 'car' ? (src.heavy ? 'heavy' : src.perp ? 'perp' : 'car') : src && src.missionFoe ? 'foe' : 'other');
+      return ns0.apply(GAME.combat, arguments);
+    };
+    var lvl0 = GAME.chaos.level, best0 = GAME.bests ? GAME.bests.hit1 : undefined, spawned = [], open0 = GAME.isla.isOpen();
+    try {
+      if (P.inCar) GAME.exitCar();
+      GAME.police.clearWanted();
+      if (GAME.bests) delete GAME.bests.hit1;
+      var d = M.DEFS.filter(function (x) { return x.id === 'hit1'; })[0];
+      GAME.test.teleport(d.start.x - 12, d.start.z); ff(0.3);
+      var mine = GAME.vehicles.spawnCar('sports', d.start.x - 8, d.start.z, Math.PI / 2, {});
+      spawned.push(mine);
+      GAME.test.enterNearestCar(mine); ff(1.2);
+      mine.pos.set(d.start.x, mine.pos.y, d.start.z); mine.speed = 0;
+      ff(0.5);
+      r.started = M.active && M.active.def.id;
+      ff(4);
+      var a = M.active, t = a && a.perp;
+      if (!t) return r;
+      r.running = { locked: t.locked, bolt: !!(t.ai && t.ai.bolt), desired: t.ai && t.ai.desired };
+      // --- F at his window ---
+      GAME.exitCar(); ff(0.3);
+      t.speed = 0; t.vx = t.vz = 0;
+      var side = t.heading - Math.PI / 2;
+      GAME.test.teleport(t.pos.x + Math.sin(side) * 2.2, t.pos.z + Math.cos(side) * 2.2);
+      P.heading = Math.atan2(t.pos.x - P.pos.x, t.pos.z - P.pos.z);
+      GAME.test.pressKey('KeyF', true); ff(0.05); GAME.test.pressKey('KeyF', false); ff(0.6);
+      r.rattled = { inCar: P.inCar, his: t.occupied === 'ai', active: !!M.active, msg: msgs.filter(function (m) { return /Locked/.test(m); })[0] || '' };
+      // --- boxed in: a van across the road in front of him, you in it, once
+      // he is going forwards again ---
+      for (var gw = 0; gw < 40 && t.speed < 6; gw++) ff(0.1);
+      var fx = Math.sin(t.heading), fz = Math.cos(t.heading);
+      var van = GAME.vehicles.spawnCar('van', t.pos.x + fx * 14, t.pos.z + fz * 14, t.heading + Math.PI / 2, {});
+      spawned.push(van);
+      GAME.test.teleport(van.pos.x + 3, van.pos.z + 3); ff(0.1);
+      GAME.test.enterNearestCar(van); ff(1.2);
+      van.pos.set(t.pos.x + fx * 14, van.pos.y, t.pos.z + fz * 14); van.heading = t.heading + Math.PI / 2; van.speed = 0;
+      // (round it, back the way he came, or off down a side street before he
+      // reaches it: anything but sat against it)
+      var touched = false, clear = 0, i;
+      for (i = 0; i < 150 && clear < 30; i++) {
+        ff(0.1);
+        var dv = Math.hypot(t.pos.x - van.pos.x, t.pos.z - van.pos.z);
+        if (dv < 9) touched = true;
+        clear = Math.max(clear, dv);
+      }
+      r.boxed = { touched: touched, clear: Math.round(clear), secs: i / 10 };
+      // --- hurt, he shoots back out of the window ---
+      GAME.vehicles.damageCar(t, t.hp - a.maxHp * 0.6, 'bullet', true);
+      var s0 = shots.length;
+      for (var k = 0; k < 40; k++) { van.pos.set(t.pos.x - Math.sin(t.heading) * 15, van.pos.y, t.pos.z - Math.cos(t.heading) * 15); van.heading = t.heading; ff(0.1); }
+      r.hurt = { said: msgs.some(function (m) { return /shooting back/.test(m); }), shots: shots.slice(s0).filter(function (x) { return x === 'perp'; }).length };
+      // --- knocked about till he gives up: on foot, with a gun, and not done ---
+      GAME.vehicles.damageCar(t, t.hp - a.maxHp * 0.15, 'bullet', true);
+      ff(0.3);
+      var ped = a.foot;
+      r.foot = { phase: a.phase, armed: !!(ped && ped.carrying && ped.missionArmed), state: ped && ped.state, passed: !!(GAME.bests && GAME.bests.hit1 !== undefined), marked: !!ped && JSON.stringify(M.getObjectivePoint()) === JSON.stringify([ped.pos.x, ped.pos.z]) };
+      GAME.exitCar(); ff(0.3);
+      if (ped) GAME.test.teleport(ped.pos.x + 14, ped.pos.z);
+      var s1 = shots.length;
+      ff(5);
+      r.foot.fights = ped && ped.state;
+      r.foot.shots = shots.slice(s1).filter(function (x) { return x === 'foe'; }).length;
+      // --- down: the ledger, and then Rico's men ---
+      if (ped) GAME.peds.kill(ped, 'gun', true);
+      ff(0.3);
+      r.ledger = { phase: a.phase, there: !!(a.ledger && a.ledger.mesh), passed: !!(GAME.bests && GAME.bests.hit1 !== undefined) };
+      if (a.ledger) { GAME.test.teleport(a.ledger.x + 0.8, a.ledger.z); ff(0.4); }
+      r.taken = { phase: a.phase, held: !!(a.ledger && a.ledger.held), time: Math.round(a.timeLeft), obj: M.objectiveText() };
+      ff(5);
+      var hv = a.heavies;
+      r.heavies = { came: !!hv };
+      if (hv) {
+        var d0 = Math.hypot(hv.car.pos.x - P.pos.x, hv.car.pos.z - P.pos.z), closest = d0;
+        r.heavies.locked = hv.car.locked; r.heavies.d0 = Math.round(d0);
+        for (var q = 0; q < 250 && !hv.out && closest > 30; q++) { ff(0.1); closest = Math.min(closest, Math.hypot(hv.car.pos.x - P.pos.x, hv.car.pos.z - P.pos.z)); }
+        r.heavies.closest = Math.round(closest);
+        // on foot beside them, they get out to do it by hand
+        if (!hv.out) {
+          var hc = hv.car;
+          hc.speed = 0; hc.vx = hc.vz = 0;
+          GAME.test.teleport(hc.pos.x + 10, hc.pos.z); ff(0.5);
+        }
+        r.heavies.out = hv.out; r.heavies.men = hv.men.length;
+        r.heavies.armed = hv.men.length > 0 && hv.men.every(function (m) { return m.carrying && m.missionArmed && m.missionFoe; });
+      }
+      // --- the lock-up ---
+      GAME.test.teleport(a.drop.x, a.drop.z); ff(0.5);
+      r.done = { passed: !!(GAME.bests && GAME.bests.hit1 !== undefined), active: !!M.active,
+        released: hv ? !hv.car.mission && !hv.car.locked : null, ledgerGone: !a.ledger.mesh,
+        unarmed: hv ? hv.men.every(function (m) { return m.dead || !m.missionArmed; }) : null };
+    } finally {
+      GAME.hud.message = ms0; GAME.combat.npcShoot = ns0;
+      if (M.active) { M.failActive('test cleanup'); ff0(0.3); }
+      if (P.inCar) GAME.exitCar();
+      spawned.forEach(function (c) { if (!c.gone) GAME.vehicles.removeCar(c); });
+      GAME.police.clearWanted();
+      GAME.chaos.set(lvl0);
+      if (GAME.bests) { if (best0 === undefined) delete GAME.bests.hit1; else GAME.bests.hit1 = best0; }
+      // (a pass puts its card up, and the card pauses the game: every group
+      // after this one runs against the clock)
+      if (GAME.share && GAME.share.isOpen) GAME.share.hide();
+      if (GAME.isla.isOpen() !== open0) GAME.isla.setOpen(open0);
+      P.health = 100;
+      GAME.test.teleport(-60, 40); ff0(0.5);
+    }
+    return r;
+  });
+  check('loose ends: the bookkeeper is running from the off, flat out, and his car is locked',
+    le.started === 'hit1' && le.running && le.running.locked && le.running.bolt && le.running.desired >= 20, JSON.stringify({ started: le.started, running: le.running }));
+  check('loose ends: F at his window is a locked door — the car stays his and the job goes on',
+    le.rattled && !le.rattled.inCar && le.rattled.his && le.rattled.active && /Locked/.test(le.rattled.msg), JSON.stringify(le.rattled));
+  check('loose ends: boxed in by a van across the road, he gets himself out of it',
+    le.boxed && le.boxed.clear >= 30, JSON.stringify(le.boxed));
+  check('loose ends: hurt, he shoots back out of the window',
+    le.hurt && le.hurt.said && le.hurt.shots >= 1, JSON.stringify(le.hurt));
+  check('loose ends: knocked about till he bails, he is out with a gun, marked, and it is not over',
+    le.foot && le.foot.phase === 'foot' && le.foot.armed && le.foot.state === 'attack' && !le.foot.passed && le.foot.marked, JSON.stringify(le.foot));
+  check('loose ends: and on foot he has it out with you, shooting',
+    le.foot && le.foot.fights === 'attack' && le.foot.shots >= 1, JSON.stringify(le.foot));
+  check('loose ends: down, the ledger is on him — still not over',
+    le.ledger && le.ledger.phase === 'ledger' && le.ledger.there && !le.ledger.passed, JSON.stringify(le.ledger));
+  check('loose ends: taken, it goes to Lola\'s lock-up, with time to do it',
+    le.taken && le.taken.phase === 'deliver' && le.taken.held && le.taken.time >= 80 && /lock-up/.test(le.taken.obj), JSON.stringify(le.taken));
+  check('loose ends: Rico\'s men come for it in a locked car, and close in',
+    le.heavies && le.heavies.came && le.heavies.locked && le.heavies.closest < Math.min(60, le.heavies.d0 - 40), JSON.stringify(le.heavies));
+  check('loose ends: on foot beside them, they get out with guns',
+    le.heavies && le.heavies.out && le.heavies.men === 2 && le.heavies.armed, JSON.stringify(le.heavies));
+  check('loose ends: at the lock-up it passes, and the street goes back to normal',
+    le.done && le.done.passed && !le.done.active && le.done.released && le.done.ledgerGone && le.done.unarmed, JSON.stringify(le.done));
 
   // ---------- 6: a rider follows the deck when it tilts ----------
   // vehicles.js pitches a chassis over a ramp (negative rotation.x lifts the
