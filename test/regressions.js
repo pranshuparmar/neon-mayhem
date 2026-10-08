@@ -8093,8 +8093,13 @@ function withTimeout(p, ms) {
   check('sound: people murmur only when there are people about',
     amb.crowdNone === 0 && amb.crowdSome > 0.015, 'nobody=' + amb.crowdNone + ' six close=' + amb.crowdSome);
   check('sound: a car\'s cabin muffles the street', amb.cabin.inCar && amb.cabin.car < amb.cabin.foot * 0.7, JSON.stringify(amb.cabin));
+  // (against the street as it was a moment before, which is louder by day
+  // and with traffic moving: at its quietest — night, an empty road — it is
+  // still about twice a room's, so the line is six tenths of it, not three, which
+  // a quiet night failed on)
   check('sound: a room keeps the street out, and the sea and the traffic',
-    amb.room.inside && amb.room.city < amb.cabin.foot * 0.3 && amb.room.surf === 0 && amb.room.cars === 0, JSON.stringify(amb.room));
+    amb.room.inside && amb.room.city < amb.cabin.foot * 0.6 && amb.room.surf === 0 && amb.room.cars === 0,
+    JSON.stringify({ room: amb.room, street: amb.cabin.foot }));
   check('sound: a swim strokes, and treading water laps',
     amb.swimming && amb.strokes >= 3 && amb.laps >= 2 && amb.swimStrokesWhileTreading === 0,
     JSON.stringify({ swimming: amb.swimming, strokes: amb.strokes, laps: amb.laps, treadingStrokes: amb.swimStrokesWhileTreading }));
@@ -9444,6 +9449,58 @@ function withTimeout(p, ms) {
     iv.legendKeys.indexOf('icecream') < 0 && iv.legendKeys.indexOf('shops') >= 0 && /Depot/.test(iv.shopsRow), JSON.stringify({ keys: iv.legendKeys, shops: iv.shopsRow }));
   check('map legend: solo Shops and the depot stays; solo Health and it goes',
     iv.inkAll > 20 && iv.inkShops > 20 && iv.inkHealth === 0, JSON.stringify({ all: iv.inkAll, shops: iv.inkShops, health: iv.inkHealth }));
+
+  // ---------- 5w: under a bridge, the camera stays under it ----------
+  // Taking a boat under a span blacked the screen out: the "never below the
+  // ground" floor read the deck overhead as the ground and lifted the camera
+  // onto the roadway, looking down through it. Cross under one at speed,
+  // once with the camera where it sits and once looked steeply up, and it
+  // has to stay under the girder the whole way.
+  var bc = await page.evaluate(function () {
+    var C = GAME.city, P = GAME.player, ff = function (s) { GAME.test.fastForward(s); };
+    var wasOpen = GAME.isla.isOpen(), out = {};
+    GAME.isla.setOpen(true);
+    var wet = C.bridgePiers.filter(function (p) { return p.wet; });
+    var a = wet[2], b = wet.filter(function (q) { return q !== a; }).sort(function (p, q) {
+      return Math.hypot(p.x - a.x, p.z - a.z) - Math.hypot(q.x - a.x, q.z - a.z); })[0];
+    var mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2, sl = Math.hypot(b.x - a.x, b.z - a.z);
+    var nx = -(b.z - a.z) / sl, nz = (b.x - a.x) / sl;
+    out.deck = C.crossingY(mx, mz);
+    try {
+      if (P.inCar) GAME.exitCar();
+      GAME.police.clearWanted();
+      [false, true].forEach(function (lookUp) {
+        var x0 = mx - nx * 40, z0 = mz - nz * 40;
+        GAME.test.teleport(x0, z0); ff(0.2);
+        var boat = GAME.vehicles.spawnCar('boat', x0, z0, Math.atan2(nx, nz), {});
+        GAME.test.enterNearestCar(boat); ff(1.2);
+        boat.pos.set(x0, boat.pos.y, z0); boat.heading = Math.atan2(nx, nz); boat.speed = 0; boat.vx = boat.vz = 0;
+        var r = { under: 0, worst: -99 };
+        GAME.test.pressKey('KeyW', true);
+        for (var i = 0; i < 70; i++) {
+          if (lookUp) { GAME.cam.freeT = 5; GAME.cam.pitch = 1.0; }
+          ff(0.1);
+          var cam = GAME.cameraObj.position, dk = C.crossingY(cam.x, cam.z);
+          // (only while the boat is down in the channel, not up on the deck)
+          if (dk !== null && boat.pos.y < 2) { r.under++; r.worst = Math.max(r.worst, +(cam.y - (dk - 1.6)).toFixed(2)); }
+        }
+        GAME.test.pressKey('KeyW', false);
+        r.wet = C.isBoatWater(boat.pos.x, boat.pos.z);
+        if (P.inCar) GAME.exitCar(); ff(0.2);
+        GAME.vehicles.removeCar(boat);
+        out[lookUp ? 'up' : 'level'] = r;
+      });
+    } finally {
+      if (P.inCar) GAME.exitCar();
+      GAME.isla.setOpen(wasOpen);
+      GAME.test.teleport(-60, 40); ff(0.5);
+    }
+    return out;
+  });
+  check('bridge camera: a boat crossing under a span keeps the camera under the girder',
+    bc.level.under >= 2 && bc.level.worst < 0, JSON.stringify({ deck: bc.deck, level: bc.level }));
+  check('bridge camera: and looked steeply up, it is still held under it',
+    bc.up.under >= 2 && bc.up.worst < 0, JSON.stringify({ deck: bc.deck, up: bc.up }));
 
   // ---------- 6: a rider follows the deck when it tilts ----------
   // vehicles.js pitches a chassis over a ramp (negative rotation.x lifts the

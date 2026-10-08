@@ -1469,6 +1469,7 @@ function updateBikeRider(dt) {
 
 var shakePrev = 0;
 var CAM_STANDOFF = 0.35;   // how far the camera keeps off a wall it is pulled in by
+var BRIDGE_GIRDER = 1.6;   // the box girder under a bridge deck (isla.js buildSpans)
 var camBoxes = [];   // the boxes between the camera and the player, refilled each frame
 function updateCamera(dt) {
   var P = GAME.player, inp = GAME.input, cam = GAME.cam;
@@ -1561,6 +1562,21 @@ function updateCamera(dt) {
   cx = fx + dirX * bestT; cz = fz + dirZ * bestT;
   cy = fy + (cy - fy) * (0.4 + 0.6 * bestT) + tight * 1.9;
 
+  // Under a bridge, stay under it. Nothing above kept the camera off a deck
+  // overhead (they are not walls), so a high look from a boat in the channel
+  // went up through the girder and the roadway and looked down at it from
+  // on top — a black screen for the length of the span. Wherever along the
+  // line back to the camera a deck passes over you, the line is lowered to
+  // run under its girder.
+  if (GAME.city.crossings.length) {
+    for (var k = 1; k <= 4; k++) {
+      var tk = k / 4, dk = GAME.city.crossingY(fx + (cx - fx) * tk, fz + (cz - fz) * tk);
+      // (a deck at your own level is the one you are driving on)
+      if (dk === null || dk - BRIDGE_GIRDER <= fy) continue;
+      cy = Math.min(cy, fy + (dk - BRIDGE_GIRDER - 0.4 - fy) / tk);
+    }
+  }
+
   if (GAME.cameraShake > 0.01) {
     // A rise means a fresh knock rather than the tail of the last one. The
     // shake is the game's existing "this happened to YOU" signal — every
@@ -1584,13 +1600,21 @@ function updateCamera(dt) {
   // indoors, under the ceiling rather than up through it
   var ceil = GAME.interiors && GAME.interiors.ceiling(cam.x, cam.z);
   if (ceil !== null && ceil !== undefined && cam.y > ceil) cam.y = ceil;
+  // ...and under a bridge, under its girder however the camera was easing in
+  // (the line above is lowered at once; the camera follows it a beat behind)
+  var deckC = GAME.city.crossings.length ? GAME.city.crossingY(cam.x, cam.z) : null;
+  if (deckC !== null && deckC - BRIDGE_GIRDER > fy) cam.y = Math.min(cam.y, deckC - BRIDGE_GIRDER - 0.4);
   // ...and upstairs, above the floor you are standing on, not under it
   var cfl = GAME.interiors && GAME.interiors.camFloor && GAME.interiors.camFloor(cam.x, cam.z);
   if (cfl !== null && cfl !== undefined && cam.y < cfl) cam.y = cfl;
   // (never below the drawn ground either: the beach slopes down to the
   // waterline underneath, but its sand is drawn level, and a camera held off
-  // the slope sat under it — swimming off the beach you could not see yourself)
-  GAME.cameraObj.position.set(cam.x, Math.max(cam.y, Math.max(0.2, GAME.city.groundY(cam.x, cam.z)) + 0.5), cam.z);
+  // the slope sat under it — swimming off the beach you could not see yourself.
+  // The ground where the camera is: asked with no height, a bridge deck
+  // overhead IS the ground, and the camera was lifted out from under the span
+  // onto the roadway. A deck counts only once the camera is up level with it
+  // — the height lookup's own allowance is a car's, for driving up onto one.)
+  GAME.cameraObj.position.set(cam.x, Math.max(cam.y, Math.max(0.2, GAME.city.groundY(cam.x, cam.z, cam.y - 2.4)) + 0.5), cam.z);
   var lookY = fy + (aiming ? Math.tan(-cam.pitch + 0.2) * 10 * 0 : 0);
   // risen over a wall at your back, look out ahead of you, not down at the crown
   var lookAhead = (aiming ? 4 : 0) + tight * 3;
