@@ -1211,7 +1211,11 @@ GAME.city = (function () {
   // rest of the city is drawn exactly as it was.
   function stripInfill(batches) {
     var irng = mulberry32(47011);
-    var pastel = [0xe3cbbc, 0xe6d6b8, 0xd9d3c6, 0xe2c6cc, 0xc5d6cd, 0xe0b89c, 0xd6b4ca, 0xb4c8dc];
+    // (the strip's pastels and four more of the same family, each clear of
+    // every one of the eight by the facade rule's margin: a plot in the
+    // middle of the row has all eight within a street of it)
+    var pastel = [0xe3cbbc, 0xe6d6b8, 0xd9d3c6, 0xe2c6cc, 0xc5d6cd, 0xe0b89c, 0xd6b4ca, 0xb4c8dc,
+                  0xe8d8ec, 0xc4e8f0, 0xe4f8c4, 0xacc8ac];
     for (var i = 0; i < reserved.length; i++) {
       var r = reserved[i];
       if (!r.infill) continue;

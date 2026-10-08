@@ -8911,7 +8911,10 @@ function withTimeout(p, ms) {
       var dani = near('dani');
       K.ask('dani'); ff(0.2);
       var h = K.job.husband;
-      var dc = car('sedan', h.pos.x - 30, h.pos.z);
+      // (behind him on his own road: a point thirty metres off in a fixed
+      // direction can be inside a block, and the teleport beside the car
+      // there stands you on the roof, too far above it to get in)
+      var dc = car('sedan', h.pos.x - Math.sin(h.heading) * 30, h.pos.z - Math.cos(h.heading) * 30);
       for (var t = 0; t < 200 && K.busy; t++) {
         ff(1);
         if (!K.job) break;
@@ -8924,9 +8927,9 @@ function withTimeout(p, ms) {
       GAME.prefs.strangers.dani = false;
       near('dani'); K.ask('dani'); ff(0.2);
       h = K.job.husband;
-      dc = car('sedan', h.pos.x, h.pos.z + 40); ff(0.5);
+      dc = car('sedan', h.pos.x - Math.sin(h.heading) * 30, h.pos.z - Math.cos(h.heading) * 30); ff(0.5);
       for (var t1 = 0; t1 < 8 * 30 && K.busy; t1++) { h = K.job.husband; put(dc, h.pos.x - Math.sin(h.heading) * 6, h.pos.z - Math.cos(h.heading) * 6); ff(1 / 30); }
-      r.daniSeen = { busy: K.busy, msg: last(/FAVOUR FAILED/) };
+      r.daniSeen = { busy: K.busy, msg: last(/FAVOUR FAILED/), inCar: P.inCar };
       off();
       GAME.prefs.strangers.dani = true;
       // --- TITO: knock the thief off, ride it back ---
