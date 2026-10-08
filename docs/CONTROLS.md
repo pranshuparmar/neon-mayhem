@@ -61,6 +61,7 @@ A plane rolls down the runway on throttle and climbs once it's fast; airborne, t
 | Abandon a mission, a favour or a part of the big score · clock off | `X` twice · pause → ABANDON | START → ABANDON | ❚❚ → ABANDON (JOB → END for a shift) |
 | Carry on after WASTED / BUSTED | `R` or `Enter` | A | tap |
 | Skip the glass lift's ride | `Space`, `F` or `Enter` | A or Y | tap |
+| A scene: next line · skip it | `Space` or `Enter`, click · `Esc` | A · B or START | tap · SKIP |
 | Skip ahead in a race you bet on | `Space` or `Enter` | A | JUMP |
 | Mute · CRT · day/night | `M` · `T` · `N` | pause → SOUND · CRT · TIME | pause → SOUND · CRT · TIME |
 | Hide the hint bar | `H` | pause → HINT BAR | (no bar on touch) |

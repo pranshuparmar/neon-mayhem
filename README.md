@@ -45,6 +45,7 @@ Want the details? **[Read the full tour →](docs/FEATURES.md)**
 
 ## What's new
 
+- 🎬 **Talking heads** — Lola's jobs open on a cut to her lock-up, Vice City style: letterbox, the two of you face to face, subtitles with a face drawn in code and a babble voice for everyone. Rico gets his own cut to the marina before the end.
 - 🏪 **Businesses that pay** — buy the barber, THREADS, a hardware store, the bar in the Lucky Gull, or VERDE CABS on Isla Verde (an open garage with a Zebra Cab for its owner, earning more with every fare you drive); the till fills every day for you to come and empty — and a hold-up there runs with it.
 - 💰 **The big score** — once the bridges open, Lola wants the Savings & Loan: case it with your camera, fetch Benny "the Ear" from the marina, get a getaway car resprayed, then keep the floor while he works the vault.
 - 🗞️ **A city with its own business** — getaway chases, hold-ups, an armoured van and racers at the lights; a dozen strangers with a favour each, on both islands; and the morning paper when you make the news.

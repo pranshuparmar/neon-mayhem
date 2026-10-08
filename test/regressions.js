@@ -279,6 +279,11 @@
 //      instanced and indexed, entities keep one shape, a shop's preview
 //      renderer goes when the shop closes, and nothing is spawned out at sea
 //      only to be thrown away the next tick.
+//  15. TALKING HEADS  — a job not done yet opens on a scene that holds the
+//      world still, types its lines under the speaker's face, moves on by
+//      key or by itself and skips on Esc; then the job starts. A retry and a
+//      job already passed go straight in. Every face is valid SVG, the pager
+//      shows its sender's, and a voice makes nothing while muted.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -398,6 +403,11 @@ function withTimeout(p, ms) {
     if (GAME.strangers) GAME.strangers.enabled = false;
     // and Lola keeps her big score to herself until a group asks (heist.js)
     if (GAME.heist) GAME.heist.enabled = false;
+    // And the talking-head scenes off (scenes.js): a job's first start cuts
+    // away to Lola's lock-up and holds the world still while she talks, and
+    // every group below starts jobs and measures them from the first tick.
+    // The scenes group switches them on for itself.
+    if (GAME.scenes) GAME.scenes.enabled = false;
     GAME.test.fastForward(1);
     var a = GAME.audio;
     var engine0 = a.engineState, skid0 = a.skid, siren0 = a.siren, vol0 = a.radio.setVolume;
@@ -1475,6 +1485,7 @@ function withTimeout(p, ms) {
     GAME.prefs.guide = 'done';   // her welcome answered, as on the main page
     if (GAME.strangers) GAME.strangers.enabled = false;   // and the strangers stood down, as there
     if (GAME.heist) GAME.heist.enabled = false;
+    if (GAME.scenes) GAME.scenes.enabled = false;   // and the scenes off
     GAME.test.start();
     GAME.test.fastForward(0.5);
     var layer = document.getElementById('touch-layer');
@@ -3116,8 +3127,12 @@ function withTimeout(p, ms) {
     return r;
   });
   check('story: the pager is a card on screen, and it goes again', con.pagerOn && con.pagerOff);
+  // (her word on it is the last of HERS: Rico has his say after it, about his collector)
+  var lolaPages = con.pages.filter(function (p) { return /^LOLA: /.test(p); });
   check('story: Lola pages a line when a job starts and another when it is done the first time',
-    con.pages.length >= 2 && /^LOLA: /.test(con.pages[0]) && /^LOLA: /.test(con.pages[con.pages.length - 1]), JSON.stringify(con.pages));
+    lolaPages.length >= 2 && /^LOLA: /.test(con.pages[0]) && con.pages.indexOf(lolaPages[lolaPages.length - 1]) > 0, JSON.stringify(con.pages));
+  check('story: and Rico pages back, after her, the first time a job costs him',
+    /^RICO: /.test(con.pages[con.pages.length - 1]) && con.pages.length >= 3, JSON.stringify(con.pages));
   check('takedown: there are takedown jobs on both islands', con.defs >= 3, con.defs);
   check('takedown: pulling up in the ring starts one, with an armoured target out in the traffic',
     con.started === 'hit0' && con.target && con.far > 100 && con.marked, JSON.stringify({ started: con.started, target: con.target, far: con.far, marked: con.marked }));
@@ -11247,6 +11262,7 @@ function withTimeout(p, ms) {
     GAME.prefs.guide = 'done';   // her welcome answered, as on the main page
     if (GAME.strangers) GAME.strangers.enabled = false;   // and the strangers stood down, as there
     if (GAME.heist) GAME.heist.enabled = false;
+    if (GAME.scenes) GAME.scenes.enabled = false;   // and the scenes off
     GAME.test.start();
     GAME.test.fastForward(1);
     var zone = document.getElementById('tstick-zone');
@@ -11975,6 +11991,208 @@ function withTimeout(p, ms) {
   check('memory: and no ped or car is made there only to be thrown away',
     mem2.sea.pedsWasted === 0 && mem2.sea.carsWasted === 0 && mem2.land.pedsWasted === 0 && mem2.land.carsWasted === 0,
     'sea ' + JSON.stringify(mem2.sea) + ' land ' + JSON.stringify(mem2.land));
+
+  // ---------- 15: talking heads ----------
+  // A job you have not done yet opens on a scene (scenes.js): the cut to
+  // Lola's lock-up, the two of them face to face, subtitles with a face and a
+  // voice. The world holds still while it plays; a key moves it on, Esc cuts
+  // it short, and the job starts when it is over. A retry goes straight back
+  // in, as GTA's did. The faces are SVG made in code, and the voices are
+  // Web Audio blips that make nothing at all while muted.
+  var faces = await page.evaluate(function () {
+    var out = { ids: GAME.cast.ids(), bad: [], noMouth: [] };
+    out.ids.forEach(function (id) {
+      var svg = GAME.cast.portrait(id);
+      var doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+      var root = doc.documentElement;
+      if (doc.getElementsByTagName('parsererror').length || root.nodeName !== 'svg' || root.getAttribute('viewBox') !== '0 0 100 100') out.bad.push(id);
+      if (!root.querySelector('.mo') || !root.querySelector('.mc')) out.noMouth.push(id);
+    });
+    // two of the same face never share gradient ids
+    var a = GAME.cast.portrait('lola'), b = GAME.cast.portrait('lola');
+    out.distinctIds = a.match(/id="([^"]+)"/)[1] !== b.match(/id="([^"]+)"/)[1];
+    return out;
+  });
+  check('scenes: every one of the cast has a face', faces.ids.length >= 5 &&
+    ['lola', 'rico', 'you', 'benny'].every(function (id) { return faces.ids.indexOf(id) >= 0; }), JSON.stringify(faces.ids));
+  check('scenes: and every face is valid SVG', faces.bad.length === 0, JSON.stringify(faces.bad));
+  check('scenes: with a mouth to open and shut', faces.noMouth.length === 0, JSON.stringify(faces.noMouth));
+  check('scenes: two copies of a face never share gradient ids', faces.distinctIds);
+
+  var pagerFace = await page.evaluate(function () {
+    for (var w = 0; w < 40 && GAME.hud.pagerText; w++) GAME.test.fastForward(0.5);
+    GAME.test.fastForward(1);
+    GAME.hud.pager('RICO', 'scene test page', 2);
+    var r = { rico: /<svg/.test(GAME.hud.pagerFace), from: GAME.hud.pagerFrom };
+    for (var w2 = 0; w2 < 20 && GAME.hud.pagerText; w2++) GAME.test.fastForward(0.5);
+    GAME.test.fastForward(1);
+    GAME.hud.pager('THE BANK', 'nobody we know', 2);
+    for (var w4 = 0; w4 < 20 && GAME.hud.pagerText !== 'nobody we know'; w4++) GAME.test.fastForward(0.25);
+    r.nobody = GAME.hud.pagerFace === '' && GAME.hud.pagerText === 'nobody we know';
+    r.text = GAME.hud.pagerText;
+    for (var w3 = 0; w3 < 20 && GAME.hud.pagerText; w3++) GAME.test.fastForward(0.5);
+    return r;
+  });
+  check('scenes: the pager shows the sender\'s face', pagerFace.rico, JSON.stringify(pagerFace));
+  check('scenes: and none for somebody with no face', pagerFace.nobody, JSON.stringify(pagerFace));
+
+  var voice = await page.evaluate(function () {
+    var A = GAME.audio, r = {};
+    A.init();
+    if (A.muted) A.toggleMute();
+    var v = GAME.cast.voice('lola'), n0 = A.voiceNodes;
+    var made = A.babble(v, 'a');
+    r.made = made; r.nodes = A.voiceNodes - n0;
+    r.distinct = GAME.cast.voice('lola').base !== GAME.cast.voice('rico').base && GAME.cast.voice('rico').wave !== GAME.cast.voice('lola').wave;
+    A.toggleMute();
+    var n1 = A.voiceNodes;
+    // (past the blip spacing, so only the mute can be what stops it)
+    var t0 = performance.now();
+    while (performance.now() - t0 < 60) { }
+    r.mutedMade = A.babble(v, 'e');
+    r.mutedNodes = A.voiceNodes - n1;
+    A.toggleMute();
+    return r;
+  });
+  check('scenes: a syllable of babble makes its nodes', voice.made === 3 && voice.nodes === 3, JSON.stringify(voice));
+  check('scenes: and makes nothing while muted', voice.mutedMade === 0 && voice.mutedNodes === 0, JSON.stringify(voice));
+  check('scenes: Lola and Rico do not sound alike', voice.distinct);
+
+  var sc = await page.evaluate(function () {
+    var P = GAME.player, S = GAME.scenes, M = GAME.missions, r = {};
+    GAME.police.clearWanted();
+    if (P.inCar) GAME.exitCar();
+    if (M.active) M.failActive('test');
+    if (GAME.share && GAME.share.hide) GAME.share.hide();
+    var bests = GAME.bests || (GAME.bests = {});
+    var keep0 = bests.rampage0, keep2 = bests.rampage2;
+    delete bests.rampage0; delete bests.rampage2;
+    for (var w = 0; w < 40 && GAME.hud.pagerText; w++) GAME.test.fastForward(0.5);
+    var def = M.DEFS.filter(function (d) { return d.id === 'rampage0'; })[0];
+    function walkIn(d) {
+      GAME.test.teleport(d.start.x + 20, d.start.z);
+      GAME.test.fastForward(0.5);
+      GAME.test.teleport(d.start.x, d.start.z);
+      for (var i = 0; i < 120 && !S.active && !M.active; i++) GAME.test.fastForward(1 / 60);
+    }
+    // switched off (as for every group above): the job starts on the pager
+    S.enabled = false;
+    walkIn(def);
+    r.offStarts = !!M.active && !S.active;
+    if (M.active) M.failActive('test');
+    GAME.test.fastForward(0.2);
+    // (and the line it paged gone, so what is on the pager below is new)
+    for (var w1 = 0; w1 < 40 && GAME.hud.pagerText; w1++) GAME.test.fastForward(0.5);
+    // on
+    S.enabled = true;
+    var played0 = S.played;
+    walkIn(def);
+    r.playing = S.active && !M.active && S.played === played0 + 1;
+    GAME.test.fastForward(0.6);   // (the bars come in, then the cut)
+    r.cast = S.on.slice();
+    r.sceneOpen = !!GAME.sceneOpen;
+    r.cine = document.body.classList.contains('cine');
+    // the world holds still
+    var t0 = GAME.time;
+    GAME.test.fastForward(1.2);
+    r.frozen = GAME.time === t0;
+    r.line0 = S.line && S.line.who;
+    r.typing = S.line && S.line.shown.length > 0 && S.line.shown.length < S.line.text.length;
+    r.subOn = document.getElementById('scene-sub').classList.contains('on') && /<svg/.test(document.getElementById('scene-face').innerHTML);
+    // a key finishes the line, the next moves it on
+    GAME.onKeyDown('Space');
+    r.finished = S.line && S.line.shown === S.line.text;
+    GAME.test.fastForward(0.2);
+    GAME.onKeyDown('Space');
+    r.line1 = S.line && S.line.who;
+    // and on its own, to the end: then the job
+    for (var k = 0; k < 60 * 30 && S.active; k++) GAME.test.fastForward(1 / 30);
+    r.ended = !S.active && !GAME.sceneOpen && !document.body.classList.contains('cine');
+    r.started = !!(M.active && M.active.def.id === 'rampage0');
+    r.timeMoves = GAME.time > t0;
+    // she said it there, so the pager does not say it again
+    r.noPagerBrief = !/selling on my strip/.test(GAME.hud.pagerText || '');
+    // fail it, and take the retry: straight back in, no scene
+    var played1 = S.played;
+    if (M.active) M.failActive('test');
+    GAME.test.fastForward(0.2);
+    GAME.test.pressKey('KeyY', true);
+    GAME.test.fastForward(1 / 60);
+    GAME.test.pressKey('KeyY', false);
+    for (var j = 0; j < 120 && !M.active; j++) GAME.test.fastForward(1 / 60);
+    r.retried = !!(M.active && M.active.def.id === 'rampage0');
+    r.retryNoScene = S.played === played1 && !S.active;
+    if (M.active) M.failActive('test');
+    GAME.test.fastForward(0.3);
+    // Esc cuts it short, and the job still starts
+    var def2 = M.DEFS.filter(function (d) { return d.id === 'rampage2'; })[0];
+    GAME.test.teleport(def.start.x + 30, def.start.z);
+    GAME.test.fastForward(0.5);
+    walkIn(def2);
+    r.second = S.active;
+    GAME.test.fastForward(0.8);
+    GAME.onKeyDown('Escape');
+    r.skipped = !S.active;
+    GAME.test.fastForward(0.2);
+    r.skipStarts = !!(M.active && M.active.def.id === 'rampage2');
+    r.notPaused = !GAME.paused;
+    if (M.active) M.failActive('test');
+    GAME.test.fastForward(0.2);
+    // a job you have passed goes straight in
+    bests.rampage2 = 1000;
+    var played2 = S.played;
+    GAME.test.teleport(def.start.x + 30, def.start.z);
+    GAME.test.fastForward(0.5);
+    walkIn(def2);
+    r.passedNoScene = S.played === played2 && !!M.active;
+    if (M.active) M.failActive('test');
+    GAME.test.fastForward(0.2);
+    S.enabled = false;
+    if (keep0 === undefined) delete bests.rampage0; else bests.rampage0 = keep0;
+    if (keep2 === undefined) delete bests.rampage2; else bests.rampage2 = keep2;
+    if (GAME.share && GAME.share.hide) GAME.share.hide();
+    GAME.test.teleport(def.start.x + 40, def.start.z);
+    GAME.test.fastForward(0.5);
+    return r;
+  });
+  check('scenes: switched off, the job starts as it always did', sc.offStarts, JSON.stringify(sc));
+  check('scenes: a job not done yet opens on a scene, not the job', sc.playing, JSON.stringify(sc));
+  check('scenes: Lola and you in it, letterboxed', sc.cast.join() === 'lola,you' && sc.cine && sc.sceneOpen, JSON.stringify(sc));
+  check('scenes: the world holds still while it plays', sc.frozen, JSON.stringify(sc));
+  check('scenes: the line types out under her face', sc.line0 === 'lola' && sc.typing && sc.subOn, JSON.stringify(sc));
+  check('scenes: a key finishes a line, and the next moves it on', sc.finished && sc.line1 === 'you', JSON.stringify(sc));
+  check('scenes: it plays out by itself and then the job starts', sc.ended && sc.started && sc.timeMoves, JSON.stringify(sc));
+  check('scenes: and the pager does not repeat what she just said', sc.noPagerBrief, JSON.stringify(sc));
+  check('scenes: a retry goes straight back in, with no scene', sc.retried && sc.retryNoScene, JSON.stringify(sc));
+  check('scenes: Esc skips it, and the job still starts', sc.second && sc.skipped && sc.skipStarts && sc.notPaused, JSON.stringify(sc));
+  check('scenes: a job you have passed goes straight in', sc.passedNoScene, JSON.stringify(sc));
+
+  // Rico's cut to the marina, and the stand-ins put away after
+  var rico = await page.evaluate(function () {
+    var S = GAME.scenes, r = {}, wasOpen = GAME.isla.isOpen();
+    GAME.isla.setOpen(true);
+    S.enabled = true;
+    var kids = GAME.scene.children.length;
+    r.played = S.play({ id: 'test', shots: [
+      { set: 'marina', cast: ['rico', 'manny'], lines: [['rico', 'Tell the boys.']] },
+      { set: 'lockup', cast: ['lola', 'you'], lines: [['lola', 'This ends today.']] }] });
+    GAME.test.fastForward(0.8);
+    r.first = S.on.join();
+    r.staged = !!S.stage('marina') && !!S.stage('lockup');
+    for (var i = 0; i < 400 && S.line && S.line.shot === 0; i++) GAME.test.fastForward(0.05);
+    r.second = S.on.join();
+    r.playerHidden = !GAME.player.mesh.visible;
+    GAME.onKeyDown('Escape');
+    r.tidy = GAME.scene.children.length === kids && GAME.player.mesh.visible;
+    r.fov = GAME.cameraObj.fov;
+    S.enabled = false;
+    GAME.isla.setOpen(wasOpen);
+    GAME.test.fastForward(0.3);
+    return r;
+  });
+  check('scenes: Rico is on the marina with his man', rico.played && rico.first === 'rico,manny' && rico.staged, JSON.stringify(rico));
+  check('scenes: a cut takes it back to Lola\'s, with you standing in', rico.second === 'lola,you' && rico.playerHidden, JSON.stringify(rico));
+  check('scenes: and over, nobody is left standing and you are back', rico.tidy && rico.fov > 40, JSON.stringify(rico));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the
