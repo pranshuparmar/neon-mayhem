@@ -8,7 +8,7 @@
 // play on), a job (BEACH RUN, the delivery a hundred metres up the strip
 // from where a new game starts — three drops instead of four, on a kinder
 // clock, because failing your first job is a bad first five minutes), and
-// what the money is for (CORTES CUTS, up the same strip: a new look with the
+// what the money is for (CORTES CUTS, a short drive up into Las Colinas: a new look with the
 // pay). Then the wider picture: the other rings, what opens the bridges to
 // Isla Verde, and that she is a button away. Until then the island is only
 // mentioned as shut.
@@ -140,7 +140,7 @@ GAME.guide = (function () {
     // she is about to say how a shop works herself: her general first-shop
     // tip would say it again on the way in
     var pr = prefs(); pr.lolaSeen = pr.lolaSeen || {}; pr.lolaSeen.shop = true;
-    say('That\'s your first pay. Now — no offence, kid — you look like you got off the bus this morning. CORTES CUTS does a good cut, up on the strip: I\'ve marked it. Walk in off the mat at the door.', 9);
+    say('That\'s your first pay. Now — no offence, kid — you look like you got off the bus this morning. CORTES CUTS does a good cut, up in Las Colinas by the hospital: I\'ve marked it. Walk in off the mat at the door.', 9);
   }
   // the island, while it is still shut: mentioned, and no more than that
   function islandTease(lead) {

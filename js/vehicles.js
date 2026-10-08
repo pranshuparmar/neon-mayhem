@@ -132,7 +132,11 @@ GAME.fx = (function () {
 var VEHICLES = {
   sports: { label: 'Vulture GT', maxSpeed: 40, accel: 17, grip: 3.6, turn: 2.7, hp: 210, l: 4.3, w: 1.95, cabinH: 0.5, bodyH: 0.5, colors: [0xff2f7a, 0x38e8ff, 0xffe14f, 0xffffff, 0xb040ff] },
   sedan: { label: 'Cadenza', maxSpeed: 29, accel: 10, grip: 5.2, turn: 2.1, hp: 245, l: 4.5, w: 1.9, cabinH: 0.62, bodyH: 0.55, colors: [0x9fb4c8, 0xc0a0d8, 0x88c8a8, 0xd8d0c0, 0x8090b0] },
-  taxi: { label: 'Taxi', maxSpeed: 30, accel: 10.5, grip: 5.2, turn: 2.2, hp: 245, l: 4.5, w: 1.9, cabinH: 0.62, bodyH: 0.55, colors: [0xf0c020] },
+  taxi: { label: 'Taxi', maxSpeed: 30, accel: 10.5, grip: 5.2, turn: 2.2, hp: 245, l: 4.5, w: 1.9, cabinH: 0.62, bodyH: 0.55, colors: [0xf0c020], cab: true },
+  // VERDE CABS' own (shops.js), in zebra stripes: a little quicker, surer and
+  // tougher than the fleet's, never in traffic — it is in the middle bay of
+  // the firm's garage once the firm is yours, and it takes fares like any cab
+  zebra: { label: 'Zebra Cab', maxSpeed: 35, accel: 13, grip: 5.6, turn: 2.4, hp: 300, l: 4.5, w: 1.9, cabinH: 0.62, bodyH: 0.55, colors: [0xf4f2ea], cab: true },
   van: { label: 'Cargo Van', maxSpeed: 23, accel: 7, grip: 6, turn: 1.7, hp: 360, l: 5.1, w: 2.1, cabinH: 1.0, bodyH: 0.9, colors: [0x9a8a78, 0x7888a0, 0xa87868] },
   police: { label: 'Cruiser', maxSpeed: 35, accel: 13.5, grip: 5.0, turn: 2.4, hp: 280, l: 4.6, w: 1.95, cabinH: 0.6, bodyH: 0.55, colors: [0xe8ecf2] },
   ambulance: { label: 'Ambulance', maxSpeed: 27, accel: 8.5, grip: 5.6, turn: 1.8, hp: 335, l: 5.3, w: 2.15, cabinH: 1.15, bodyH: 1.0, colors: [0xf2f2f6] },
@@ -489,6 +493,19 @@ function buildCarMesh(type, colorHex) {
     if (type === 'pickup') {
       b.addBox(0, 0.42 + s.bodyH / 2 + 0.22, -1.05, s.w, 0.45, s.l * 0.44, 0, 0x2a2a34, 0);   // bed walls
     }
+    if (type === 'zebra') {
+      // The stripes: black bands down both flanks, uneven the way a zebra's
+      // are, and across the bonnet and the boot — each a couple of
+      // centimetres proud of the paint so no face shares a plane with it
+      var top = 0.42 + s.bodyH / 2;
+      [[-1.9, 0.22], [-1.45, 0.3], [-0.95, 0.18], [-0.45, 0.32], [0.05, 0.2], [0.55, 0.3], [1.05, 0.2], [1.55, 0.28], [1.95, 0.16]].forEach(function (st) {
+        b.addBox(hw + 0.015, 0.42, st[0], 0.03, s.bodyH - 0.04, st[1], 0, 0x111114, 0);
+        b.addBox(-hw - 0.015, 0.42, st[0] + 0.12, 0.03, s.bodyH - 0.04, st[1], 0, 0x111114, 0);
+      });
+      [[1.55, 0.26], [1.95, 0.18], [-1.6, 0.24], [-2.0, 0.16]].forEach(function (st) {
+        b.addBox(0, top + 0.012, st[0], s.w - 0.06, 0.024, st[1], 0, 0x111114, 0);
+      });
+    }
     var cabL = s.l * (type === 'van' ? 0.85 : type === 'icecream' ? 0.34 : type === 'limo' ? 0.72 : 0.5);
     var cabZ = type === 'sports' ? -0.35 : type === 'van' ? -0.1
       : type === 'icecream' ? s.l * 0.28 : type === 'pickup' ? 0.35 : -0.15;
@@ -520,7 +537,7 @@ function buildCarMesh(type, colorHex) {
     glow.addBox(-hw * 0.55, 0.5, hl + 0.02, 0.38, 0.16, 0.06, 0, 0xfff2c0, 0);
     glow.addBox(hw * 0.55, 0.5, -hl - 0.02, 0.38, 0.14, 0.06, 0, 0xff3040, 0);
     glow.addBox(-hw * 0.55, 0.5, -hl - 0.02, 0.38, 0.14, 0.06, 0, 0xff3040, 0);
-    if (type === 'taxi') glow.addBox(0, 1.35, -0.1, 0.7, 0.24, 0.34, 0, 0xffd040, 0);
+    if (s.cab) glow.addBox(0, 1.35, -0.1, 0.7, 0.24, 0.34, 0, 0xffd040, 0);
   }), sharedVertexBasic());
   g.add(glowMesh);
 
@@ -2089,6 +2106,8 @@ GAME.vehicles = (function () {
       // pad kept the tower's find hidden the whole time.
       var pcar = (P.inCar && P.car) || (P.entering && P.entering.car) || null;
       if (sp.vtype && !sp.live && pcar && pcar.fromSpot === sp) continue;
+      // (a spot can wait on something: the Zebra Cab's bay, on the firm being yours)
+      if (sp.need && !sp.live && !sp.need()) continue;
       var minD = special ? 0 : 40 * 40;
       // a spot can ask to exist at longer range: the helipad finds sit on
       // towers and summits you can see from half the map, and an empty pad
@@ -2124,6 +2143,16 @@ GAME.vehicles = (function () {
         removeCar(sp.live);
       }
     }
+  }
+
+  // Stock a spot now, whoever is looking (a purchase delivered: shops.js)
+  function fillSpot(sp) {
+    if (sp.live && !sp.live.gone && !sp.live.dead) return sp.live;
+    var car = spawnCar(sp.vtype || 'sedan', sp.x, sp.z, sp.heading, { parkedSpot: sp, ai: { mode: 'parked' } });
+    if (sp.y !== undefined) car.pos.y = sp.y;
+    car.fromSpot = sp;
+    sp.live = car;
+    return car;
   }
 
   // Emitters that fire every tick — a wreck smoulders, a fire burns — hand
@@ -2318,7 +2347,7 @@ GAME.vehicles = (function () {
 
   return {
     TYPES: VEHICLES,
-    spawnCar: spawnCar,
+    spawnCar: spawnCar, fillSpot: fillSpot,
     repaint: repaint,
     removeCar: removeCar,
     ejectDriver: ejectDriver,

@@ -1519,6 +1519,8 @@ GAME.missions = (function () {
     var per = (kind === 'ambulance' ? 180 : 130) + active.level * 15;
     var fare = per * n;
     GAME.addCash(fare); active.earned += fare;
+    // (a cab firm of yours counts them: business.js)
+    if (kind !== 'ambulance' && GAME.business) GAME.business.fare(n);
     GAME.audio.sting('win');
     GAME.haptics.win();
     // Patients walk in through the hospital doors and are gone; they used to
@@ -2231,7 +2233,7 @@ GAME.missions = (function () {
       // taxi / ambulance jobs start from within the vehicle
       var jobKind = null;
       if (P.inCar && P.car) {
-        if (P.car.type === 'taxi') jobKind = 'taxifare';
+        if (P.car.spec.cab) jobKind = 'taxifare';     // a fleet cab or the Zebra Cab
         else if (P.car.type === 'ambulance') jobKind = 'ambulance';
         else if (P.car.type === 'icecream') jobKind = 'icecream';
         else if (P.car.type === 'police') jobKind = 'vigilante';

@@ -394,12 +394,23 @@ GAME.city = (function () {
     { minX: -195, maxX: -105, minZ: -138, maxZ: -85 }, // police station
     { minX: 155, maxX: 215, minZ: -110, maxZ: -50 },   // respray garages
     { minX: -26, maxX: 26, minZ: -226, maxZ: -174 },   // the helipad tower
-    // shop slots in the strip's western building row: the storefronts build
-    // into these gaps and read as part of the street, not beach clutter
-    { minX: 318, maxX: 346, minZ: -78, maxZ: -50 },    // hardware
-    { minX: 318, maxX: 346, minZ: 78, maxZ: 106 },     // tailor
-    { minX: 318, maxX: 346, minZ: -134, maxZ: -106 },  // barber
+    // Three plots in the strip's western row once held the hardware store,
+    // the tailor and the barber, and with the bank and the condo that was
+    // five storefronts down one block of beach. They have moved out into
+    // the city (below). The plots stay reserved, with ordinary strip
+    // buildings put up in them on a stream of their own (stripInfill): let
+    // go, the blocks around them would be drawn from a different point in
+    // the city's one random stream, and every building after them — signs,
+    // palms, all the way down the map — would land somewhere else.
+    { minX: 318, maxX: 346, minZ: -78, maxZ: -50, infill: true },
+    { minX: 318, maxX: 346, minZ: 78, maxZ: 106, infill: true },
+    { minX: 318, maxX: 346, minZ: -134, maxZ: -106, infill: true },
     { minX: 318, maxX: 346, minZ: 194, maxZ: 222 },    // strip condo
+    // ...and where they went, one to a district (shops.js). Each is a lot the
+    // blocks had left empty, so reserving it moves nothing else.
+    { minX: -285, maxX: -255, minZ: 204, maxZ: 236 },  // ROSA HARDWARE, Puerto Viejo's harbour road
+    { minX: -96, maxX: -64, minZ: 15, maxZ: 45 },      // THREADS, Centro Alto
+    { minX: 64, maxX: 96, minZ: 155, maxZ: 185 },      // CORTES CUTS, Las Colinas
     { minX: 316, maxX: 346, minZ: -16, maxZ: 24 },     // the Savings & Loan (shops.js)
     { minX: -146, maxX: -124, minZ: 194, maxZ: 218 },  // Lola's lock-up by the harbour (heist.js)
     { minX: -448, maxX: -408, minZ: -200, maxZ: -160 },
@@ -654,7 +665,9 @@ GAME.city = (function () {
     // civic lettering for the landmark dressing (43, 44)
     'EMERGENCY', 'DEPARTURES',
     // the bank on the strip (45: shops.js SIGN_SLOT)
-    'SAVINGS & LOAN'];
+    'SAVINGS & LOAN',
+    // the cab firm on Isla Verde (46)
+    'VERDE CABS'];
   var SIGN_COLORS = ['#ff4fa3', '#38e8ff', '#ffe14f', '#7dff6a', '#ff8a3d', '#c86bff', '#ff5d5d', '#59ffc8'];
   function signAtlas() {
     var cv = document.createElement('canvas');
@@ -810,6 +823,7 @@ GAME.city = (function () {
     // hundred identical boxes, drawn as copies of one (see BoxSet)
     postSet = new BoxSet();
     buildBlocks(batches, atlas);
+    stripInfill(batches);
     buildPOIs(batches, atlas);
     buildBeach(scene, batches);
     buildSky(scene);
@@ -1189,6 +1203,26 @@ GAME.city = (function () {
         addSign(batches.signs, slot, sx, h * 0.75, z, face > 0 ? Math.PI / 2 : -Math.PI / 2, Math.min(20, dep * 0.9), 4.5);
         city.palmSpots.push({ x: x + U.randRange(rng, -w, w) * 0.7, z: z + dep / 2 + 3, s: U.randRange(rng, 0.8, 1.15) });
       }
+    }
+  }
+
+  // The strip plots the shops left (see `reserved`): a strip building in
+  // each, dressed as its neighbours are, from its own random stream so the
+  // rest of the city is drawn exactly as it was.
+  function stripInfill(batches) {
+    var irng = mulberry32(47011);
+    var pastel = [0xe3cbbc, 0xe6d6b8, 0xd9d3c6, 0xe2c6cc, 0xc5d6cd, 0xe0b89c, 0xd6b4ca, 0xb4c8dc];
+    for (var i = 0; i < reserved.length; i++) {
+      var r = reserved[i];
+      if (!r.infill) continue;
+      var w = U.randRange(irng, 20, 25), dep = U.randRange(irng, 20, 25), h = U.randRange(irng, 14, 28);
+      var x = r.minX + 2 + w / 2, z = (r.minZ + r.maxZ) / 2;
+      var col = facadeShade('strip', pastel, x, z, irng);
+      batches.blkStrip.addBox(x, h / 2, z, w, h, dep, 0, col, 24, true);
+      addSolid(x, z, w, dep, h);
+      batches.blkStrip.addBox(x, h + 1.5, z, w * 0.6, 3, dep * 0.6, 0, col, 0);
+      batches.blkStrip.addBox(x, h + 3.7, z, w * 0.3, 1.6, dep * 0.3, 0, 0xfff0f8, 0);
+      addSign(batches.signs, U.randInt(irng, 0, 17), x + w / 2 + 0.3, h * 0.75, z, Math.PI / 2, Math.min(20, dep * 0.9), 4.5);
     }
   }
 

@@ -149,6 +149,13 @@
 //       the window; bailed, he is on foot with a gun and the job waits on
 //       him; down, the ledger is on him; taken, Rico's men come for it in a
 //       locked car, close in and get out armed; at Lola's lock-up it passes.
+//   5y. THE CITY, SPREAD OUT — the hardware store, the tailor and the barber
+//       each in a district of their own and none on the strip, each a real
+//       building off the road; the plots they left on the strip are built
+//       on. VERDE CABS on Isla Verde: an open garage walked into off the
+//       street, a cab either side to take, for sale at its desk; bought, the
+//       Zebra Cab is in the middle bay and takes fares, each one putting more
+//       on the firm's board, and its till fills at the bigger rate.
 //   4y. AROUND THE GAME — messages stack; the district name keeps out of a
 //       mission's title; every overlay uses the game's face; the title says
 //       LOADING until it can answer; pause takes keys, ignores a click that
@@ -8626,8 +8633,12 @@ function withTimeout(p, ms) {
       GAME.settings.maxTraffic = keepTraffic0;
       settle();
       // --- a hold-up: the thief runs with the bag ---
+      // (on the road seventy metres from THREADS: a hold-up is at a shop
+      // forty-five to a hundred and twenty metres off)
+      var robDoor = GAME.shops.locations().filter(function (l) { return l.id === 'dress0'; })[0].at;
+      var robAt = GAME.city.nearestRoadPoint(robDoor.x + 70, robDoor.z);
       H.resetCooldown();
-      GAME.test.teleport(300, -60); ff(0.5);
+      GAME.test.teleport(robAt.x, robAt.z); ff(0.5);
       r.robOn = S.start('robbery');
       var ev = S.event;
       if (ev) {
@@ -8647,7 +8658,7 @@ function withTimeout(p, ms) {
       settle();
       // --- the same thief, stopped by somebody else: no hero, no paper ---
       H.resetCooldown();
-      GAME.test.teleport(300, -60); ff(0.5);
+      GAME.test.teleport(robAt.x, robAt.z); ff(0.5);
       if (S.start('robbery')) {
         var th2 = S.event.thief, n2 = H.total;
         ff(1);
@@ -9338,7 +9349,8 @@ function withTimeout(p, ms) {
       r.blip = (SH.blips().filter(function (b) { return Math.abs(b.x - at.x) < 0.1 && Math.abs(b.z - at.z) < 0.1; })[0] || {}).color;
       // --- a hold-up there: he runs with the till; put him down and it is on the pavement ---
       GAME.chaos.set(3);
-      GAME.test.teleport(300, -60); ff(0.5);
+      var robAt = GAME.city.nearestRoadPoint(at.x + 70, at.z);
+      GAME.test.teleport(robAt.x, robAt.z); ff(0.5);
       var full = B.till('barber0');
       r.robOn = S.start('robbery');
       var ev = S.event;
@@ -9380,7 +9392,7 @@ function withTimeout(p, ms) {
     bz.robOn && bz.rob.shop === 'barber0' && bz.rob.stolen === 1800 && bz.rob.till === 0 && /your place/.test(bz.rob.msg) && bz.bag === 1800 && bz.backInHand >= 1800 && bz.backInHand < 1900,
     JSON.stringify({ rob: bz.rob, bag: bz.bag, back: bz.backInHand }));
   check('business: the bar in the Lucky Gull is for sale too', bz.bar === 45000, String(bz.bar));
-  check('business: and Lola counts them, and says where the money is', /business/i.test(bz.money || '') && /Businesses: 1 of 5/.test(bz.how || ''), JSON.stringify({ money: bz.money, how: bz.how }));
+  check('business: and Lola counts them, and says where the money is', /business/i.test(bz.money || '') && /Businesses: 1 of 6/.test(bz.how || ''), JSON.stringify({ money: bz.money, how: bz.how }));
 
   // ---------- 5v: boats on Isla Verde, and the depot on the legend ----------
   // The island had one speedboat, at the marina, and the map left its anchor
@@ -9660,6 +9672,120 @@ function withTimeout(p, ms) {
     le.heavies && le.heavies.out && le.heavies.men === 2 && le.heavies.armed, JSON.stringify(le.heavies));
   check('loose ends: at the lock-up it passes, and the street goes back to normal',
     le.done && le.done.passed && !le.done.active && le.done.released && le.done.ledgerGone && le.done.unarmed, JSON.stringify(le.done));
+
+  // ---------- 5y: the city, spread out; and a cab firm ----------
+  // Five storefronts stood down one block of the strip — the hardware store,
+  // the tailor, the barber, the bank and a condo — and nothing else in the
+  // city had one. The three trades are out in the districts now. And Isla
+  // Verde has a cab firm to buy, which earns more the more fares you drive.
+  var cy = await page.evaluate(function () {
+    var r = {}, C = GAME.city, SH = GAME.shops, B = GAME.business, M = GAME.missions, P = GAME.player, V = GAME.vehicles;
+    var ff = function (s) { GAME.test.fastForward(s); };
+    var keepPrefs = JSON.stringify(GAME.prefs), keepCash = P.cash, wasOpen = GAME.isla.isOpen();
+    try {
+      if (P.inCar) GAME.exitCar();
+      GAME.police.clearWanted();
+      var by = {}; SH.locations().forEach(function (l) { by[l.id] = l; });
+      r.trades = ['hardware0', 'dress0', 'barber0'].map(function (id) {
+        var l = by[id], rp = C.nearestRoadPoint(l.at.x, l.at.z);
+        // a building behind the mat: a solid within a few metres, further from the road than the mat
+        var dx = l.at.x - rp.x, dz = l.at.z - rp.z, dl = Math.hypot(dx, dz) || 1;
+        var bx = l.at.x + dx / dl * 7, bz = l.at.z + dz / dl * 7;
+        var built = C.hash.query(bx, bz, 2).some(function (b) { return bx > b.minX && bx < b.maxX && bz > b.minZ && bz < b.maxZ && b.h > 5; });
+        return { id: id, district: C.districtName(l.at.x, l.at.z), offRoad: Math.round(dl), built: built };
+      });
+      r.onStrip = SH.locations().filter(function (l) { return !l.isla && C.districtName(l.at.x, l.at.z) === 'Ocean Strip' && l.kind !== 'bribe'; }).map(function (l) { return l.id; });
+      // the plots they left are buildings now
+      r.oldPlots = [[332, -64], [332, 92], [332, -120]].map(function (p) {
+        return C.hash.query(p[0], p[1], 3).some(function (b) { return b.tag === 'building' && p[0] > b.minX && p[0] < b.maxX && p[1] > b.minZ && p[1] < b.maxZ; });
+      });
+      // --- VERDE CABS: a garage open to the street ---
+      GAME.isla.setOpen(true);
+      var cab = by.cabs0;
+      r.cabs = cab ? { isla: !!cab.isla && GAME.isla.contains(cab.at.x, cab.at.z), district: C.districtName(cab.at.x, cab.at.z), bays: (cab.bays || []).map(function (b) { return b.vtype; }) } : null;
+      if (!cab) return r;
+      B.reset(); P.cash = 100000;
+      var mid = cab.bays[1], rp = C.nearestRoadPoint(mid.x, mid.z), ox = mid.x - rp.x, oz = mid.z - rp.z, ol = Math.hypot(ox, oz);
+      ox /= ol; oz /= ol;
+      GAME.test.teleport(rp.x - ox * 10, rp.z - oz * 10); ff(1.5);
+      r.cabs.parked = cab.bays.map(function (b) { return b.live && !b.live.gone ? b.live.type : null; });
+      // walk in off the pavement to the dispatch desk: no door, no room
+      GAME.test.teleport(rp.x + ox * 8, rp.z + oz * 8); ff(0.3);
+      var walk = 0;
+      GAME.test.pressKey('KeyW', true);
+      for (walk = 0; walk < 100 && !SH.current; walk++) { P.heading = Math.atan2(cab.at.x - P.pos.x, cab.at.z - P.pos.z); GAME.cam.yaw = P.heading; ff(0.1); }
+      GAME.test.pressKey('KeyW', false);
+      r.walkIn = { desk: SH.current && SH.current.id, room: !!P.interior, secs: walk / 10 };
+      if (!SH.current) SH.open('cabs0');
+      var row = function (id) { return SH.items(cab).filter(function (q) { return q.id === id; })[0] || null; };
+      var buyRow = row('biz_buy');
+      r.forSale = buyRow && { price: buyRow.price, says: /every fare you drive/.test(buyRow.ds) };
+      var c0 = P.cash;
+      SH.buy('biz_buy');
+      r.bought = { owns: B.owns('cabs0'), paid: c0 - P.cash, rate: B.rate('cabs0') };
+      SH.close();
+      // the Zebra Cab in the middle bay, to take out, and fares in it
+      var z = mid.live;
+      r.zebra = { there: !!z && z.type === 'zebra' };
+      if (z) {
+        GAME.test.teleport(z.pos.x + 2.5, z.pos.z); ff(0.3);
+        GAME.test.enterNearestCar(z); ff(1.2);
+        r.zebra.aboard = P.inCar && P.car === z;
+        GAME.test.pressKey('KeyW', true); ff(2.5); GAME.test.pressKey('KeyW', false); ff(1);
+        r.zebra.out = Math.round(Math.hypot(z.pos.x - mid.x, z.pos.z - mid.z));
+        z.speed = 0; ff(0.3);
+        GAME.test.pressKey('KeyJ', true); ff(1 / 60); GAME.test.pressKey('KeyJ', false); ff(0.5);
+        var a = M.active;
+        r.shift = !!(a && a.def.id === 'taxifare');
+        if (r.shift) {
+          a.phase = 'dropoff'; a.aboard = 1;
+          a.dropoff = [z.pos.x, z.pos.z]; z.speed = 0;
+          ff(0.5);
+          r.fared = { fares: B.fares, rate: B.rate('cabs0') };
+          M.failActive('test cleanup'); ff(0.3);
+        }
+        if (P.inCar) GAME.exitCar();
+        V.removeCar(z);
+      }
+      // a day at the bigger rate (on top of the few seconds that ran while
+      // the fare was driven)
+      var t0 = B.till('cabs0');
+      B.accrue(GAME.DAY_SECONDS);
+      r.day = B.till('cabs0') - t0;
+      r.blip = (SH.blips().filter(function (b) { return Math.abs(b.x - cab.at.x) < 0.1 && Math.abs(b.z - cab.at.z) < 0.1; })[0] || {}).color;
+    } finally {
+      if (SH.current) SH.close();
+      if (M.active) { M.failActive('test cleanup'); ff(0.3); }
+      if (GAME.share && GAME.share.isOpen) GAME.share.hide();
+      if (P.inCar) GAME.exitCar();
+      GAME.prefs = JSON.parse(keepPrefs); P.cash = keepCash;
+      GAME.isla.setOpen(wasOpen);
+      GAME.test.teleport(-60, 40); ff(0.5);
+    }
+    return r;
+  });
+  check('city: the hardware store, the tailor and the barber are each in a district of their own',
+    cy.trades.length === 3 && cy.trades.every(function (t) { return t.district !== 'Ocean Strip'; }) &&
+    cy.trades.map(function (t) { return t.district; }).filter(function (d, i, all) { return all.indexOf(d) === i; }).length === 3, JSON.stringify(cy.trades));
+  check('city: and each is a building, its door off the road',
+    cy.trades.every(function (t) { return t.built && t.offRoad >= 9; }), JSON.stringify(cy.trades));
+  check('city: the strip keeps the bank, the condo and the casino, and no more',
+    cy.onStrip.length === 3 && ['bank0', 'home_condo', 'casino0'].every(function (id) { return cy.onStrip.indexOf(id) >= 0; }), JSON.stringify(cy.onStrip));
+  check('city: the plots they left on the strip are built on', cy.oldPlots.every(Boolean), JSON.stringify(cy.oldPlots));
+  check('cabs: VERDE CABS is on Isla Verde, in Puerto Dorado: three bays, a cab either side, the middle kept for the Zebra Cab',
+    cy.cabs && cy.cabs.isla && cy.cabs.district === 'Puerto Dorado' && JSON.stringify(cy.cabs.bays) === '["taxi","zebra","taxi"]' &&
+    JSON.stringify(cy.cabs.parked) === '["taxi",null,"taxi"]', JSON.stringify(cy.cabs));
+  check('cabs: an open garage — you walk in off the street to the dispatch desk, no door, no room',
+    cy.walkIn && cy.walkIn.desk === 'cabs0' && !cy.walkIn.room, JSON.stringify(cy.walkIn));
+  check('cabs: it is for sale at the desk for $40,000, and says what fares do for it',
+    cy.forSale && cy.forSale.price === 40000 && cy.forSale.says && cy.bought.owns && cy.bought.paid === 40000 && cy.bought.rate === 1200,
+    JSON.stringify({ sale: cy.forSale, bought: cy.bought }));
+  check('cabs: bought, the Zebra Cab is in the middle bay, and drives out',
+    cy.zebra && cy.zebra.there && cy.zebra.aboard && cy.zebra.out > 15, JSON.stringify(cy.zebra));
+  check('cabs: and it takes fares — one driven to its stop puts another on the board',
+    cy.shift && cy.fared && cy.fared.fares === 1 && cy.fared.rate === 1240, JSON.stringify({ shift: cy.shift, fared: cy.fared }));
+  check('cabs: and a day fills the till at that rate; it is green on the radar',
+    Math.abs(cy.day - 1240) <= 1 && cy.blip === '#5dff9e', JSON.stringify({ day: cy.day, blip: cy.blip }));
 
   // ---------- 6: a rider follows the deck when it tilts ----------
   // vehicles.js pitches a chassis over a ramp (negative rotation.x lifts the

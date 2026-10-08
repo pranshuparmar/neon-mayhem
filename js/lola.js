@@ -155,7 +155,7 @@ GAME.lola = (function () {
     if (ST && ST.found < ST.total) lines.push((ST.total - ST.found) + ' stunt jumps still pay their first-time money.');
     if (T && T.found < T.total) lines.push((T.total - T.found) + ' lost tapes are out there, each worth something.');
     var B = GAME.business;
-    if (B && B.count < B.total) lines.push('Or let money come to you: buy a business — the barber, THREADS, a hardware store, the bar in the Lucky Gull — and its till fills every day.');
+    if (B && B.count < B.total) lines.push('Or let money come to you: buy a business — the barber, THREADS, a hardware store, the bar in the Lucky Gull, VERDE CABS over the channel — and its till fills every day.');
     else if (B && B.count) lines.push('Your businesses are taking money for you — go and empty the tills.');
     lines.push('And there\'s the Lucky Gull, if you feel lucky.');
     return { say: lines.join(' ') };
