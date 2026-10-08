@@ -551,6 +551,8 @@
     GAME.guide.update(dt);
     GAME.exporter.update(dt);
     if (GAME.exporter.hint) GAME.hud.setPoiHint(GAME.exporter.hint);
+    GAME.rc.update(dt);
+    if (GAME.rc.hint) GAME.hud.setPoiHint(GAME.rc.hint);
     GAME.tapes.update(dt);
     if (GAME.isla) GAME.isla.tick(dt);
     GAME.shops.update(dt);

@@ -851,6 +851,7 @@ GAME.peds = (function () {
         var car2 = world.cars[c2];
         var sp2 = Math.abs(car2.speed);
         if (sp2 < 4) continue;
+        if (car2.spec.rc) continue;   // a toy runs into your ankles, not over you
         if (ped.knockT > 0 && ped.knockedBy === car2) continue;   // already on the bonnet
         if (Math.abs(car2.pos.y - ped.pos.y) > 3) continue;   // it's up on a roof
         // The bodywork, not a circle around it. This was `dist2 < 5.2` — a

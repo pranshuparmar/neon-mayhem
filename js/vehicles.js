@@ -174,6 +174,9 @@ var VEHICLES = {
   // truck that unloads soldiers, and a tank — slow, near enough
   // indestructible, crushing whatever it drives into, a turret that follows
   // your aim and a cannon on LMB. Take one off them and it is yours.
+  // a toy: the RC BANDIT RACE's buggy (rc.js), a fifth the size of the real
+  // thing, driven from the controller at the stadium gate
+  rc: { label: 'RC Bandit', maxSpeed: 15, accel: 20, grip: 6.5, turn: 3.6, hp: 45, l: 0.72, w: 0.42, cabinH: 0, bodyH: 0.12, colors: [0x38e8ff], rc: true },
   tank: { label: 'Mastodon', maxSpeed: 17, accel: 7, grip: 7.5, turn: 1.45, hp: 4200, l: 6.6, w: 3.3, cabinH: 0, bodyH: 1.0, colors: [0x4a5a36], tank: true, army: true },
   armytruck: { label: 'Quartermaster', maxSpeed: 26, accel: 8, grip: 5.8, turn: 1.6, hp: 650, l: 6.4, w: 2.5, cabinH: 0.9, bodyH: 0.9, colors: [0x55603e], army: true },
   policeboat: { label: 'Harbour Patrol', maxSpeed: 32, accel: 12.5, grip: 1.8, turn: 1.6, hp: 340, l: 6.6, w: 2.2, cabinH: 0, bodyH: 0.7, colors: [0xf2f4f8], boat: true, police: true }
@@ -483,6 +486,12 @@ function buildCarMesh(type, colorHex, parts) {
   if (s.boat) return buildBoatMesh(colorHex, !!s.police);
   if (s.monster) return buildMonsterMesh(colorHex);
   if (s.tank) return buildTankMesh(colorHex);
+  if (s.rc) {
+    // the Dune Hopper's own body, shrunk to a toy
+    var toy = buildCarMesh('buggy', colorHex);
+    toy.scale.setScalar(0.21);
+    return toy;
+  }
   if (s.plane) return buildPlaneMesh(s.colors);
   if (s.heli) return buildHeliMesh(colorHex, s.gunship);
   if (s.bike) return buildBikeMesh(colorHex, s.trim);

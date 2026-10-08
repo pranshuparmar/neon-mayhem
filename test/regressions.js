@@ -306,6 +306,8 @@
 //      station, talk and ads in captions and a voice; MUSIC: OFF takes them.
 //  25. EXPORT         — wanted cars into the ring at the harbour crane, paid
 //      and ticked off once each; wrecks turned away; a full list's bonus.
+//  26. RC RACE        — the toy buggy race on the stadium pitch: start, quit
+//      back to the gate, and a win that pays.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -12989,6 +12991,61 @@ function withTimeout(p, ms) {
   check('export: a crane on the harbour, and a car off the board ships for cash', ex.site && ex.shipped, JSON.stringify(ex));
   check('export: a wreck is turned away, and nobody wants the same car twice', ex.wreck && ex.once, JSON.stringify(ex));
   check('export: a full list pays the buyer\'s bonus', ex.bonus, JSON.stringify(ex));
+
+  // ---------- 26: RC BANDIT RACE ----------
+  // A ring at the stadium gate: step in and you are driving a toy buggy on
+  // the pitch against three more, after a countdown; put the controller down
+  // and it is over, with you back at the gate; get home first and it pays.
+  var rcr = await page.evaluate(function () {
+    var R = GAME.rc, P = GAME.player, r = {};
+    var saved = JSON.stringify(GAME.prefs.rc || {});
+    GAME.prefs.rc = {};
+    try {
+      if (P.inCar) { GAME.exitCar(); GAME.test.fastForward(1.5); }
+      GAME.police.clearWanted();
+      var s = R.site;
+      r.site = !!s && s.cps.length >= 12;
+      GAME.test.teleport(s.ring.x + 6, s.ring.z); GAME.test.fastForward(0.3);
+      r.hint = /RC BANDIT/.test(R.hint);
+      // not with the law on you
+      GAME.police.setWanted(1);
+      GAME.test.teleport(s.ring.x, s.ring.z); GAME.test.fastForward(0.3);
+      r.notHot = !R.running;
+      GAME.police.clearWanted();
+      GAME.test.teleport(s.ring.x + 6, s.ring.z); GAME.test.fastForward(0.3);
+      GAME.test.teleport(s.ring.x, s.ring.z); GAME.test.fastForward(0.3);
+      r.started = !!R.running && R.running.rivals === 3 && P.inCar && P.car.spec.rc && R.running.state === 'count';
+      GAME.test.fastForward(3.5);
+      r.go = R.running && R.running.state === 'run';
+      // the controller down: over, and back at the gate
+      GAME.exitCar(); GAME.test.fastForward(0.2);
+      r.quit = !R.running && !P.inCar && Math.hypot(P.pos.x - s.ring.x, P.pos.z - s.ring.z) < 6 &&
+        !GAME.world.cars.some(function (c) { return c.spec.rc && !c.gone; });
+      // again, and home first: paid
+      GAME.test.teleport(s.ring.x + 6, s.ring.z); GAME.test.fastForward(0.3);
+      GAME.test.teleport(s.ring.x, s.ring.z); GAME.test.fastForward(0.3);
+      GAME.test.fastForward(3.5);
+      var cash = P.cash, last = s.cps[s.cps.length - 1];
+      GAME.world.cars.forEach(function (c) { if (c.spec.rc && c.occupied === 'ai') c.cpIndex = 0; });
+      // (round the course by the cones, a hop at a time)
+      for (var k = 0; k < s.cps.length && R.running; k++) {
+        var cp = s.cps[R.running.cp];
+        P.car.pos.set(cp.x, P.car.pos.y, cp.z); P.car.speed = 0;
+        GAME.world.cars.forEach(function (c) { if (c.spec.rc && c.occupied === 'ai') c.cpIndex = 0; });
+        GAME.test.fastForward(1 / 30);
+      }
+      r.won = !R.running && P.cash - cash === 800 && GAME.prefs.rc.won === true && !P.inCar;
+    } finally {
+      if (R.running) R.end();
+      GAME.prefs.rc = JSON.parse(saved);
+      GAME.test.teleport(-60, 40); GAME.test.fastForward(0.5);
+    }
+    return r;
+  });
+  check('rc: a ring at the stadium gate, and a course on the pitch', rcr.site && rcr.hint, JSON.stringify(rcr));
+  check('rc: step in and it is you in a toy against three, after a countdown', rcr.notHot && rcr.started && rcr.go, JSON.stringify(rcr));
+  check('rc: put the controller down and it is over, back at the gate', rcr.quit, JSON.stringify(rcr));
+  check('rc: home first, and it pays', rcr.won, JSON.stringify(rcr));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the

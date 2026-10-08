@@ -1511,8 +1511,10 @@ function updateCamera(dt) {
     }
     var heli = P.car.spec.heli, plane = P.car.spec.plane;
     var sp = heli ? Math.abs(P.car.heliSpeed || 0) : Math.abs(P.car.speed);
-    var base = plane ? 16 : heli ? 13 : 7.2;
-    cam.dist = U.damp(cam.dist, base + sp * (plane ? 0.06 : 0.13), 3, dt);
+    // (the RC buggy: down at its own level, close behind — rc.js)
+    var toy = !!P.car.spec.rc;
+    var base = plane ? 16 : heli ? 13 : toy ? 2.4 : 7.2;
+    cam.dist = U.damp(cam.dist, base + sp * (plane ? 0.06 : toy ? 0.04 : 0.13), 3, dt);
   } else {
     cam.yaw -= mdx * 0.0032;
     cam.pitch = U.clamp(cam.pitch + mdy * 0.002, -0.15, 1.2);
@@ -1520,7 +1522,7 @@ function updateCamera(dt) {
   }
 
   var focus = P.inCar && P.car ? P.car.pos : P.pos;
-  var fy = focus.y + (P.inCar ? 1.7 : 1.55);
+  var fy = focus.y + (P.inCar ? (P.car && P.car.spec.rc ? 0.45 : 1.7) : 1.55);
   var fx = focus.x, fz = focus.z;
   if (aiming) {
     // over-the-shoulder offset — as far as the wall beside you allows: with a
