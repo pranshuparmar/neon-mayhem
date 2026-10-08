@@ -200,7 +200,7 @@ GAME.missions = (function () {
     // The job is done when HE is.
     { id: 'hit0', type: 'takedown', name: 'THE COLLECTOR', reward: 1200, time: 150, car: 'limo', armor: 2.15, flee: 19, shoots: true, early: false, foot: 70, start: { x: 250, z: 350 } },
     { id: 'hit1', type: 'takedown', name: 'LOOSE ENDS', reward: 1000, time: 110, car: 'sports', armor: 1.15, flee: 24, shoots: 'hurt', early: true, foot: 45, ledger: true, start: { x: -50, z: -150 } },
-    { id: 'hit2', type: 'takedown', name: 'HIGH TIDE', reward: 2000, time: 160, car: 'pickup', armor: 2.85, flee: 21, shoots: true, early: false, foot: 100, isla: 'marina', start: null }
+    { id: 'hit2', type: 'takedown', name: 'HIGH TIDE', reward: 2000, time: 160, car: 'pickup', armor: 2.85, flee: 21, shoots: true, early: false, foot: 100, isla: 'marina', start: null, flees: true }
   ];
 
   // Lola Reyes runs the strip, and she is who the rings on your map are
@@ -323,6 +323,53 @@ GAME.missions = (function () {
         ['lola', 'This ends today, kid. Both islands.']] }] }
   };
   for (var sk in SCENES) SCENES[sk].id = sk;
+  // What comes after each job's own part (see "the acts after the job"
+  // below). The races bring sore losers or the law, the deliveries a sting
+  // in the tail, the rampages the people behind the mess, and the island's
+  // last two the men at the top. HIGH TIDE ends on the marina.
+  var THUG = { shirt: 0x2a2a34, pants: 0x1a1a22, skin: 0xc89878, hair: 'crew', hairCol: 0x141210 };
+  function marinaQuay() {
+    var M = GAME.isla && GAME.isla.pois ? GAME.isla.pois().marina : null;
+    return M ? { x: M.x + 10, z: M.z - 4 } : { x: active.def.start.x, z: active.def.start.z };
+  }
+  var ACTS = {
+    race1: [{ kind: 'heavies', time: 150, say: 'The harbour boys don\'t lose quietly — a black sedan is coming for you.',
+      lola: 'Salazar\'s racers want their pride back. Don\'t give it to them.', obj: 'Wreck the sore losers', late: 'They lost you — and they\'ll tell it differently.' }],
+    race2: [{ kind: 'heat', stars: 2, say: 'Somebody downtown called it in.',
+      lola: 'Cops at the finish — some suit lost his shirt on you. Lose them.', obj: 'Lose the cops' }],
+    courier0: [{ kind: 'heat', stars: 2, say: 'The last stop was being watched — the plates were hot.', obj: 'Lose the cops' }],
+    courier1: [{ kind: 'heavies', time: 150, say: 'One of those envelopes was Rico\'s. His men want it back.',
+      lola: 'You opened one, didn\'t you? No? Then Rico\'s men are just rude. Deal with them.', obj: 'Rico\'s men want their envelope' }],
+    courier2: [{ kind: 'deliver', time: 150, say: 'The bars paid up.', lola: 'Bring me the takings at the lock-up, kid. All of them.',
+      obj: 'The takings to Lola\'s lock-up', late: 'Out of time — Lola counts that as stealing.' }],
+    rampage0: [{ kind: 'heavies', time: 150, say: 'The seller had friends, and they\'re on their way.', obj: 'His friends — put them down' }],
+    rampage1: [{ kind: 'crew', at: 'start', men: 3, boss: 'foreman', bossLook: { shirt: 0xd8c070, pants: 0x3a3a44, skin: 0xb98260, hair: 'mullet', hairCol: 0x2a1a10 }, bossHp: 110,
+      time: 180, say: 'Salazar\'s foreman is still in the warehouse office.', lola: 'The foreman stayed. Make him wish he hadn\'t.',
+      obj: 'The foreman and his crew', lost: 'The foreman slipped out the back.' }],
+    rampage2: [{ kind: 'heat', stars: 3, say: 'Uptown has the police on speed dial.', obj: 'Lose the cops' }],
+    boat1: [{ kind: 'heat', stars: 2, say: 'The coastguard is back — and this time they saw you.', obj: 'Lose the harbour patrol' }],
+    hit0: [{ kind: 'grab', at: 'here', color: 0x2a2a30, say: 'He dropped the collection bag.', obj: 'Take back the bag', got: 'Lola\'s money — every envelope he picked up.' },
+      { kind: 'deliver', time: 150, heavies: true, heavyT: 10, lola: 'That\'s my money. The lock-up, kid, before Rico sends somebody for it.',
+        obj: 'The bag to Lola\'s lock-up', late: 'Out of time — the money never made it.' }],
+    race3: [{ kind: 'heavies', time: 150, rico: 'Told you. My boys were waiting at the top.', obj: 'Rico\'s boys, at the top of the hill' }],
+    courier3: [{ kind: 'heat', stars: 2, say: 'The port police want to see inside the van.', obj: 'Lose the port police' }],
+    rampage3: [{ kind: 'crew', at: 'start', men: 4, boss: 'lieutenant', bossLook: { shirt: 0x8a1a2a, pants: 0x1a1a22, skin: 0x9a6a48, hair: 'pompadour', hairCol: 0x0e0c0c }, bossHp: 140,
+      time: 200, rico: 'You want Dorado, kid? My lieutenant says come and take it.', obj: 'Rico\'s lieutenant and his men', lost: 'The lieutenant got away.' }],
+    hit2: [
+      { kind: 'scene', script: function () {
+        return active.ricoDead
+          ? { id: 'hightide-manny', shots: [{ set: null, lines: [['manny', 'The boss is gone! Everybody — the marina, now!']] }] }
+          : { id: 'hightide-run', shots: [{ set: null, lines: [['rico', 'Manny! Start the boat!'], ['manny', 'The marina, boss — go, go!'], ['you', 'Not on this tide.']] }] };
+      } },
+      { kind: 'crew', at: marinaQuay, boss: function () { return active.ricoDead ? null : 'rico'; }, second: 'manny', men: 3, bossHp: 180,
+        time: 200, say: 'Rico\'s making his stand on the marina.', obj: 'Rico and his crew, on the marina', lost: 'Rico got out on the tide.' },
+      { kind: 'scene', script: { id: 'hightide-end', shots: [{ set: 'lockup', cast: ['lola', 'you'], lines: [
+        ['lola', 'So that\'s Rico Salazar. Gone on his own marina.'],
+        ['you', 'He should have taken the boat earlier.'],
+        ['lola', 'Both islands are ours, kid. Go and enjoy the view — you earned it.']] }] } }
+    ]
+  };
+  DEFS.forEach(function (d) { if (ACTS[d.id]) d.then = ACTS[d.id]; });
   // Rico has his say too, by pager, the first time a job of yours costs him
   var RICO = {
     rampage1: 'Those were MY warehouses for one night. Enjoy them while you can, kid.',
@@ -778,6 +825,14 @@ GAME.missions = (function () {
   }
   function onFoot(ped) {
     var d = active.def;
+    // Rico does not stand and fight in the street: he is out of the pickup
+    // and away to the marina, where his boat and his men are (ACTS.hit2)
+    if (d.flees && actsOn) {
+      active.downAt = { x: ped.pos.x, z: ped.pos.z };
+      GAME.peds.removePed(ped);
+      finish(true);
+      return;
+    }
     active.phase = 'foot'; active.foot = ped;
     armUp(ped, d.foot || 50);
     active.timeLeft = Math.max(active.timeLeft, 45);
@@ -802,6 +857,7 @@ GAME.missions = (function () {
     if (p.dead || p.occupied !== 'ai') {
       var who = outOf(p);
       if (who) { onFoot(who); return; }
+      if (d.flees && actsOn) active.ricoDead = true;
       targetDown(p.pos.x, p.pos.z);
       return;
     }
@@ -863,6 +919,7 @@ GAME.missions = (function () {
   }
   // The target is down. That is the job — unless he had something on him.
   function targetDown(x, z) {
+    active.downAt = { x: x, z: z };
     if (!active.def.ledger) { finish(true); return; }
     active.phase = 'ledger';
     active.foot = null;
@@ -1066,6 +1123,266 @@ GAME.missions = (function () {
       }
     }
     if (active.ledger && active.ledger.mesh) { GAME.scene.remove(active.ledger.mesh); disposeTree(active.ledger.mesh); active.ledger.mesh = null; }
+  }
+
+  // ---------- the acts after the job (story missions) ----------
+  // A story job used to be one of five templates with a pager line on it:
+  // win the race, and that was the job. Now its win can be the first act of
+  // several. `then` on a def lists what comes after, played in order, built
+  // from the same pieces LOOSE ENDS was:
+  //   grab     something to pick up where the last act ended (a bag, a case)
+  //   deliver  get it, or yourself, to a place — Lola's lock-up by default —
+  //            with Rico's men on you if `heavies` says so
+  //   heavies  a carload of Rico's men comes for you, and it is over when
+  //            they are
+  //   heat     the law, at so many stars, and it is over when you lose them
+  //   crew     the finale: a boss and his men at a place of their own, armed
+  //            and waiting; it is over when nobody there is standing
+  //   scene    a cut away mid-job (scenes.js), or the same lines on the pager
+  // Each act sets its own clock (`time`), and says something going in
+  // (`say` on the message line, `lola` / `rico` on the pager). A run that
+  // fails anywhere fails as the job, and a retry starts it from the top, as
+  // Vice City's did.
+  var CREW_WAKE_R = 48, CREW_SPAWN_R = 150, CREW_LOST_R = 700;
+  // (the regression suite plays the jobs as they were, one part each, the
+  // way it stands the scenes down; its acts group switches this back on)
+  var actsOn = true;
+  function hasActs(d) { return actsOn && !!(d.then && d.then.length); }
+  // the job's own part is won: put away what it had out, and go on
+  function beginActs() {
+    var d = active.def, P = GAME.player, f = GAME.focus();
+    active.wonT = active.t;
+    active.field = 1 + active.racers.length;
+    active.lastAt = active.downAt || { x: f.x, z: f.z };
+    // (the race's field goes home, the rampage hands back its gun and cools
+    // off, a takedown lets the street have its cars back)
+    for (var i = 0; i < active.racers.length; i++) GAME.vehicles.removeCar(active.racers[i]);
+    active.racers = [];
+    if (d.type === 'rampage') {
+      reclaimGrant();
+      if (GAME.police.wanted > RAMPAGE_HEAT_LEFT) GAME.police.setWanted(RAMPAGE_HEAT_LEFT);
+    }
+    if (d.type === 'takedown') { releaseTakedown(); active.perp = null; active.foot = null; active.heavies = null; }
+    if (crate) crate.visible = false;
+    active.acts = d.then; active.actIndex = -1; active.stage = null;
+    GAME.audio.sting('win');
+    GAME.haptics.checkpoint();
+    nextAct();
+    return true;
+  }
+  function nextAct() {
+    if (!active) return;
+    var prev = active.stage;
+    if (prev) endAct(prev);
+    active.actIndex++;
+    var a = active.acts[active.actIndex];
+    if (!a) { active.stage = { kind: 'done' }; finish(true); return; }
+    var s = active.stage = { kind: a.kind, a: a, t: 0 };
+    active.courierRoute = null; active.routeT = 0;
+    if (a.time) active.timeLeft = a.time;
+    if (a.say) GAME.hud.message(a.say, 3.5);
+    if (a.lola) lola(a.lola, 7);
+    if (a.rico) rico(a.rico, 7);
+    if (a.kind === 'grab') {
+      var at = a.at ? place(a.at) : active.lastAt;
+      s.item = dropItem(at.x, at.z, a.color || 0x5a3a22);
+    } else if (a.kind === 'deliver') {
+      s.to = a.to && a.to !== 'lockup' ? place(a.to) : lockupDrop();
+      if (a.heavies) { active.heavies = null; active.heavyT = a.heavyT || 4; }
+    } else if (a.kind === 'heavies') {
+      active.heavies = null; active.heavyT = a.heavyT || 2;
+    } else if (a.kind === 'heat') {
+      GAME.police.setWanted(Math.max(GAME.police.wanted, a.stars || 2));
+    } else if (a.kind === 'crew') {
+      s.at = place(a.at);
+      s.men = [];
+    } else if (a.kind === 'scene') {
+      // nothing ticks under a scene, so it is done when it says so
+      var go = function () { if (active && active.stage === s) nextAct(); };
+      var script = typeof a.script === 'function' ? a.script() : a.script;
+      if (!(GAME.scenes && GAME.scenes.play(script, go))) {
+        sceneOnPager(script);
+        go();
+        return;
+      }
+    }
+    updateCp();
+    GAME.hud.missionObjective(objectiveText());
+  }
+  // with the scenes off, what was said goes out on the pager instead
+  function sceneOnPager(script) {
+    var shots = Array.isArray(script) ? [{ lines: script }] : (script && script.shots) || [];
+    shots.forEach(function (sh) {
+      sh.lines.forEach(function (ln) { if (ln[0] !== 'you') GAME.hud.pager(GAME.cast ? GAME.cast.name(ln[0]) : ln[0], ln[1], 5); });
+    });
+  }
+  // a place an act names: 'lockup', 'start' (the job's own ring), 'marina',
+  // a function of the island's landmarks, or a point
+  function place(p) {
+    if (p === 'lockup') return lockupDrop();
+    // (round the corner from the ring, not on it: you finished the job's own
+    // part standing there, and the people it brought are down the street)
+    if (p === 'start') return spotNear(active.def.start.x, active.def.start.z, 60, 95);
+    if (p === 'here') return active.lastAt;
+    if (typeof p === 'function') return p();
+    return p;
+  }
+  function spotNear(x, z, r0, r1) {
+    var C = GAME.city, isla = !!(GAME.isla && GAME.isla.contains(x, z));
+    for (var t = 0; t < 40; t++) {
+      var a = Math.random() * Math.PI * 2, r = U.randRange(Math.random, r0, r1);
+      var rp = C.nearestRoadPoint(x + Math.cos(a) * r, z + Math.sin(a) * r);
+      if (C.isInWater(rp.x, rp.z) || C.inAirport(rp.x, rp.z)) continue;
+      if (!!(GAME.isla && GAME.isla.contains(rp.x, rp.z)) !== isla) continue;
+      if (U.dist2(rp.x, rp.z, x, z) < r0 * r0 * 0.6) continue;
+      return { x: rp.x, z: rp.z };
+    }
+    return { x: x, z: z };
+  }
+  function endAct(s) {
+    if (s.item && s.item.mesh) { GAME.scene.remove(s.item.mesh); disposeTree(s.item.mesh); s.item.mesh = null; }
+    if (s.kind === 'deliver' || s.kind === 'heavies') releaseHeavies();
+    if (s.men) s.men.forEach(function (m) { if (m && !m.dead && !m.gone) { m.missionArmed = false; m.missionFoe = false; m.jobPed = false; } });
+  }
+  function releaseHeavies() {
+    var hv = active.heavies;
+    if (!hv) return;
+    hv.men.forEach(function (m) { if (m && !m.dead) { m.missionArmed = false; m.missionFoe = false; } });
+    var hc = hv.car;
+    if (hc && !hc.gone) {
+      hc.heavy = false; hc.locked = false; hc.mission = false;
+      if (hc.occupied === 'ai' && !hc.dead) hc.ai = { mode: 'traffic', desired: 11, laneX: 0, laneZ: 0 };
+    }
+    active.heavies = null;
+  }
+  function dropItem(x, z, color) {
+    var g = new THREE.Group();
+    var body = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.4, 0.2), new THREE.MeshLambertMaterial({ color: color }));
+    var handle = new THREE.Mesh(sharedBoxGeo(0.2, 0.06, 0.06), sharedLambert(0x1a1410));
+    handle.position.y = 0.24;
+    g.add(body); g.add(handle);
+    g.position.set(x, GAME.city.groundY(x, z) + 0.45, z);
+    GAME.scene.add(g);
+    return { x: x, z: z, mesh: g };
+  }
+  // the heavies are done with when nobody from that car is still in it
+  function heaviesBeaten() {
+    var hv = active.heavies;
+    if (!hv) return false;
+    if (!hv.out) return !!hv.car.gone;
+    return hv.men.every(function (m) { return m.dead || m.gone; });
+  }
+  function crewSpawn(s) {
+    var a = s.a, at = s.at, n = a.men || 3;
+    var who = [], boss = typeof a.boss === 'function' ? a.boss() : a.boss;
+    if (boss) who.push({ look: a.bossLook || lookOf(boss) || THUG, hp: a.bossHp || 120, boss: true });
+    if (a.second) who.push({ look: lookOf(a.second), hp: 80 });
+    for (var i = 0; i < n; i++) who.push({ look: THUG, hp: 50 });
+    who.forEach(function (w, k) {
+      var ang = k / who.length * Math.PI * 2, r = k === 0 ? 1.5 : 4 + (k % 2) * 3;
+      var x = at.x + Math.cos(ang) * r, z = at.z + Math.sin(ang) * r;
+      if (GAME.city.isInWater(x, z)) { x = at.x; z = at.z; }
+      var ped = GAME.peds.spawnPed(x, z, { look: w.look });
+      if (!ped) return;
+      ped.jobPed = true; ped.state = 'wait'; ped.speed = 0; ped.hp = w.hp; ped.boss = !!w.boss;
+      ped.heading = Math.random() * Math.PI * 2;
+      s.men.push(ped);
+    });
+    s.spawned = true;
+  }
+  // a member of the cast, as a ped: how cast.js says they stand
+  function lookOf(id) {
+    var f = GAME.cast && GAME.cast.fig(id);
+    return f ? { shirt: f.shirt, pants: f.pants, skin: f.skin, hair: f.hair, hairCol: f.hairCol } : null;
+  }
+  function updateAct(dt, P) {
+    var s = active.stage, a = s.a, f = GAME.focus();
+    s.t += dt;
+    if (s.kind === 'done' || s.kind === 'scene') return;
+    if (a.time) {
+      active.timeLeft -= dt;
+      GAME.hud.missionTimer(active.timeLeft, true);
+      if (active.timeLeft <= 0) { finish(false, a.late || 'Out of time.'); return; }
+    } else GAME.hud.missionTimer(null);
+    if (s.kind === 'grab') {
+      var it = s.item;
+      it.mesh.rotation.y += dt * 2.2;
+      it.mesh.position.y = GAME.city.groundY(it.x, it.z) + 0.45 + Math.sin(GAME.time * 3) * 0.08;
+      var reach = P.inCar ? LEDGER_REACH_CAR : LEDGER_REACH;
+      if (U.dist2(f.x, f.z, it.x, it.z) < reach * reach && P.state === 'alive') {
+        GAME.audio.pickup();
+        if (a.got) GAME.hud.message(a.got, 3);
+        nextAct();
+        return;
+      }
+    } else if (s.kind === 'deliver') {
+      if (a.heavies) updateHeavies(dt, P);
+      if (a.car && !(P.inCar && P.car && !P.car.dead)) { s.needCar = true; }
+      else s.needCar = false;
+      if (U.dist2(f.x, f.z, s.to.x, s.to.z) < DROP_R * DROP_R && P.state === 'alive' && !s.needCar) { nextAct(); return; }
+    } else if (s.kind === 'heavies') {
+      updateHeavies(dt, P);
+      if (heaviesBeaten()) { nextAct(); return; }
+    } else if (s.kind === 'heat') {
+      if (GAME.police.wanted === 0) { nextAct(); return; }
+    } else if (s.kind === 'crew') {
+      var d2 = Math.sqrt(U.dist2(f.x, f.z, s.at.x, s.at.z));
+      if (!s.spawned && d2 < CREW_SPAWN_R) crewSpawn(s);
+      if (s.spawned) {
+        var left = 0;
+        for (var i = 0; i < s.men.length; i++) {
+          var m = s.men[i];
+          if (m.dead || m.gone) continue;
+          left++;
+          var md = Math.sqrt(U.dist2(f.x, f.z, m.pos.x, m.pos.z));
+          if (!m.missionArmed && (md < CREW_WAKE_R || s.woke)) { armUp(m, m.hp); s.woke = true; }
+          else if (m.missionArmed) keepFighting(m, md, P);
+        }
+        if (!s.woke && s.men.some(function (m) { return m.dead || m.hp < 50 && m.boss; })) s.woke = true;
+        s.left = left;
+        if (!left) { nextAct(); return; }
+      }
+      if (d2 > CREW_LOST_R && s.woke) { finish(false, a.lost || 'They got away.'); return; }
+    }
+    active.routeT = (active.routeT || 0) - dt;
+    if (active.routeT <= 0) {
+      active.routeT = 1;
+      var cp = currentCp();
+      active.courierRoute = cp ? roadRoute(f.x, f.z, cp[0], cp[1]) : null;
+    }
+    updateCp();
+    if (GAME.frame % 12 === 0) GAME.hud.missionObjective(objectiveText());
+  }
+  function actCp() {
+    var s = active.stage;
+    if (s.kind === 'grab') return [s.item.x, s.item.z];
+    if (s.kind === 'deliver') return [s.to.x, s.to.z];
+    if (s.kind === 'heavies') {
+      var hv = active.heavies;
+      if (!hv) return null;
+      if (!hv.out) return hv.car.gone ? null : [hv.car.pos.x, hv.car.pos.z];
+      for (var i = 0; i < hv.men.length; i++) if (!hv.men[i].dead && !hv.men[i].gone) return [hv.men[i].pos.x, hv.men[i].pos.z];
+      return null;
+    }
+    if (s.kind === 'crew') {
+      if (s.woke) for (var k = 0; k < s.men.length; k++) if (!s.men[k].dead && !s.men[k].gone) return [s.men[k].pos.x, s.men[k].pos.z];
+      return [s.at.x, s.at.z];
+    }
+    return null;
+  }
+  function actText() {
+    var s = active.stage, a = s.a || {}, f = GAME.focus(), cp = actCp();
+    var m = cp ? '  ·  ' + Math.round(Math.sqrt(U.dist2(f.x, f.z, cp[0], cp[1]))) + ' m' : '';
+    if (s.kind === 'grab') return (a.obj || 'Pick it up') + m;
+    if (s.kind === 'deliver') {
+      if (s.needCar) return 'Get a car';
+      var hv = active.heavies, chased = hv && (!hv.out ? !hv.car.dead : hv.men.some(function (x) { return !x.dead && !x.gone; }));
+      return (a.obj || 'To Lola\'s lock-up') + m + (chased ? '  ·  Rico\'s men on you' : '');
+    }
+    if (s.kind === 'heavies') return (a.obj || 'Deal with Rico\'s men') + m;
+    if (s.kind === 'heat') return (a.obj || 'Lose the heat') + '  ·  ' + GAME.police.wanted + '★';
+    if (s.kind === 'crew') return (a.obj || 'Take them down') + (s.spawned ? '  ·  ' + (s.left === undefined ? s.men.length : s.left) + ' left' : '') + m;
+    return '';
   }
 
   function startVigilante() {
@@ -1882,6 +2199,7 @@ GAME.missions = (function () {
   function objectiveText() {
     if (!active) return '';
     var d = active.def;
+    if (active.stage) return actText();
     if (d.type === 'race') {
       var field = 1 + active.racers.filter(inRace).length;
       return ordinal(racePosition()) + ' / ' + field + '   ·   Checkpoint ' + (active.cpIndex + 1) + ' / ' + d.cps.length;
@@ -1929,6 +2247,7 @@ GAME.missions = (function () {
 
   function currentCp() {
     var d = active.def;
+    if (active.stage) return actCp();
     if (d.type === 'race') return d.cps[active.cpIndex] || null;
     if (d.type === 'courier') return active.stops[active.cpIndex] || null;
     if (d.type === 'taxifare' || d.type === 'ambulance') {
@@ -1947,7 +2266,7 @@ GAME.missions = (function () {
   // where a ring stands: the road, or for a job on the water, the sea
   function markerFloor(d, x, z) { return d.boat ? GAME.city.seaLevel : GAME.city.groundY(x, z); }
   function updateCp() {
-    if (!active || active.def.type === 'rampage') { if (cpMarker) cpMarker.visible = false; return; }
+    if (!active || (active.def.type === 'rampage' && !active.stage)) { if (cpMarker) cpMarker.visible = false; return; }
     var cp = currentCp();
     if (cp) {
       cpMarker.visible = true;
@@ -1962,11 +2281,13 @@ GAME.missions = (function () {
 
   function finish(win, reason) {
     var d = active.def;
+    // the job's own part won, with more of the story still to play
+    if (win && hasActs(d) && !active.stage) { beginActs(); return; }
     if (GAME.guide) GAME.guide.finished(d, win, reason === ABANDONED);
     if (d.id === 'icecream') clearIceServed();   // the wasted/failed path skips endJob
     var reward = active.reward || d.reward || 0;
     if (win) {
-      var value = d.type === 'rampage' ? Math.floor(active.score) : Math.round(active.t * 10) / 10;
+      var value = d.type === 'rampage' ? Math.floor(active.score) : Math.round((active.wonT !== undefined ? active.wonT : active.t) * 10) / 10;
       var bests = GAME.bests || (GAME.bests = {});
       var prev = bests[bestKey(d)];
       var isBest = d.type === 'rampage' ? (!prev || value > prev) : (!prev || value < prev);
@@ -1981,7 +2302,7 @@ GAME.missions = (function () {
       var head = d.job ? 'JOB DONE! +$' : 'MISSION PASSED! +$';
       // races report the finishing place and time alongside the payout
       if (d.type === 'race') {
-        var field = 1 + active.racers.length;
+        var field = active.field || 1 + active.racers.length;
         head = 'RACE WON — 1st / ' + field + '  ·  ' + value.toFixed(1) + 's  ·  +$';
       }
       // A rampage won is paid for with the heat it raised: twenty bodies
@@ -2002,7 +2323,7 @@ GAME.missions = (function () {
       // a finished run is worth showing off — the card carries the numbers
       var cardStats = [{ label: 'Reward', value: '$' + reward }];
       if (d.type === 'race') {
-        cardStats.unshift({ label: 'Place', value: '1st / ' + (1 + active.racers.length) });
+        cardStats.unshift({ label: 'Place', value: '1st / ' + (active.field || 1 + active.racers.length) });
         cardStats.push({ label: 'Time', value: value.toFixed(1) + 's' });
       } else if (d.type === 'rampage') {
         cardStats.push({ label: 'Mayhem', value: '$' + value });
@@ -2120,15 +2441,10 @@ GAME.missions = (function () {
         }
       }
       // reclaim the rampage loadout so the marker can't be farmed for ammo
-      if (active.grantWeapon) {
-        var inv = GAME.player.weapons[active.grantWeapon];
-        if (inv) {
-          inv.ammo = Math.max(0, inv.ammo - (active.grantAmmo || 0));
-          if (!active.grantHad && inv.ammo <= 0) inv.have = false;
-          if (GAME.player.currentWeapon === active.grantWeapon && !inv.have) GAME.player.currentWeapon = 'fist';
-        }
-        GAME.combat.refreshWeaponHud();
-      }
+      reclaimGrant();
+      // and whatever an act after the job had out (a bag, a crew, a car of
+      // Rico's men) goes back to being the street's
+      if (active.stage && active.stage.a) endAct(active.stage);
     }
     // whichever marker that was waits until you have left it (see START_SPEED)
     // (a gentler copy of a job — guide.js — still means its own ring)
@@ -2141,6 +2457,18 @@ GAME.missions = (function () {
     GAME.hud.fadeSet(0);   // a start that dies mid-blackout takes the black with it
     GAME.hud.missionEnd();
     GAME.save();
+  }
+
+  function reclaimGrant() {
+    if (!active.grantWeapon) return;
+    var inv = GAME.player.weapons[active.grantWeapon];
+    if (inv) {
+      inv.ammo = Math.max(0, inv.ammo - (active.grantAmmo || 0));
+      if (!active.grantHad && inv.ammo <= 0) inv.have = false;
+      if (GAME.player.currentWeapon === active.grantWeapon && !inv.have) GAME.player.currentWeapon = 'fist';
+    }
+    active.grantWeapon = null;
+    GAME.combat.refreshWeaponHud();
   }
 
   function failActive(reason) {
@@ -2160,7 +2488,7 @@ GAME.missions = (function () {
   }
 
   function notifyChaos(pts) {
-    if (active && active.def.type === 'rampage' && active.state === 'run') {
+    if (active && active.def.type === 'rampage' && active.state === 'run' && !active.stage) {
       active.score += pts;
       GAME.hud.missionObjective(objectiveText());
     }
@@ -2474,7 +2802,9 @@ GAME.missions = (function () {
       return;
     }
 
-    if (d2.type === 'race') {
+    if (active.stage) {
+      updateAct(dt, P);
+    } else if (d2.type === 'race') {
       if (!P.inCar || !P.car || P.car.dead) { finish(false, 'You lost your ride.'); return; }
       for (var r = 0; r < active.racers.length; r++) {
         var rc = active.racers[r];
@@ -2748,6 +3078,10 @@ GAME.missions = (function () {
   return {
     DEFS: DEFS,
     checkCompletion: checkCompletion,
+    get acts() { return actsOn; },
+    set acts(v) { actsOn = !!v; },
+    // headless: which act a story job is on, and what it is
+    get act() { return active && active.stage ? { index: active.actIndex, kind: active.stage.kind, left: active.stage.left, men: active.stage.men ? active.stage.men.length : 0 } : null; },
     get active() { return active; },
     // headless hooks, so the generators can be sampled without playing a shift
     testDropBand: function (lv) { var a = active; active = { level: lv, def: { id: 'taxifare' } }; var r = dropBand(); active = a; return r; },
@@ -2769,6 +3103,7 @@ GAME.missions = (function () {
       // (a stranger's favour has its own way there: strangers.js)
       if (!active) return (GAME.strangers && GAME.strangers.route()) || (GAME.heist ? GAME.heist.route() : null);
       if (active.state === 'fade' || active.state === 'countdown') return null;
+      if (active.stage) return active.courierRoute || null;
       if (active.def.type === 'race') return active.raceRoute || active.def.cps.slice(active.cpIndex);
       if (active.courierRoute) return active.courierRoute; // courier / taxi / ambulance
       return null;

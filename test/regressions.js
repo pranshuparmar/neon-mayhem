@@ -284,6 +284,9 @@
 //      key or by itself and skips on Esc; then the job starts. A retry and a
 //      job already passed go straight in. Every face is valid SVG, the pager
 //      shows its sender's, and a voice makes nothing while muted.
+//  16. STORY ACTS     — a story job's own part won goes on: Rico's men, a
+//      crew down the street, a bag to the lock-up, Rico's stand on the
+//      marina; a failure in a later act retries from the top.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -408,6 +411,11 @@ function withTimeout(p, ms) {
     // every group below starts jobs and measures them from the first tick.
     // The scenes group switches them on for itself.
     if (GAME.scenes) GAME.scenes.enabled = false;
+    // And the story jobs one part each, as they were: a won race, delivery or
+    // rampage went on to Rico's men, the law or a crew (missions.js ACTS),
+    // and every group below measures the job ending where its part does.
+    // The acts group switches them on for itself.
+    GAME.missions.acts = false;
     GAME.test.fastForward(1);
     var a = GAME.audio;
     var engine0 = a.engineState, skid0 = a.skid, siren0 = a.siren, vol0 = a.radio.setVolume;
@@ -1486,6 +1494,7 @@ function withTimeout(p, ms) {
     if (GAME.strangers) GAME.strangers.enabled = false;   // and the strangers stood down, as there
     if (GAME.heist) GAME.heist.enabled = false;
     if (GAME.scenes) GAME.scenes.enabled = false;   // and the scenes off
+    GAME.missions.acts = false;   // and the jobs one part each
     GAME.test.start();
     GAME.test.fastForward(0.5);
     var layer = document.getElementById('touch-layer');
@@ -11263,6 +11272,7 @@ function withTimeout(p, ms) {
     if (GAME.strangers) GAME.strangers.enabled = false;   // and the strangers stood down, as there
     if (GAME.heist) GAME.heist.enabled = false;
     if (GAME.scenes) GAME.scenes.enabled = false;   // and the scenes off
+    GAME.missions.acts = false;   // and the jobs one part each
     GAME.test.start();
     GAME.test.fastForward(1);
     var zone = document.getElementById('tstick-zone');
@@ -12193,6 +12203,137 @@ function withTimeout(p, ms) {
   check('scenes: Rico is on the marina with his man', rico.played && rico.first === 'rico,manny' && rico.staged, JSON.stringify(rico));
   check('scenes: a cut takes it back to Lola\'s, with you standing in', rico.second === 'lola,you' && rico.playerHidden, JSON.stringify(rico));
   check('scenes: and over, nobody is left standing and you are back', rico.tidy && rico.fov > 40, JSON.stringify(rico));
+
+  // ---------- 16: story jobs in acts ----------
+  // A story job's own part won is the first act of several (missions.js
+  // ACTS): Rico's men come for you after a rampage, a crew waits round the
+  // corner from the warehouses, the collector's bag goes back to the lock-up,
+  // and HIGH TIDE's Rico bails out of his pickup for a stand on the marina.
+  // A run that fails in a later act retries from the top.
+  var acts = await page.evaluate(function () {
+    var M = GAME.missions, P = GAME.player, r = {};
+    var keep = {}, ids = ['rampage0', 'rampage1', 'hit0', 'hit2'];
+    var bests = GAME.bests || (GAME.bests = {});
+    ids.forEach(function (id) { keep[id] = bests[id]; delete bests[id]; });
+    var open0 = GAME.isla.isOpen();
+    M.acts = true;
+    GAME.godMode = true;
+    if (M.active) M.failActive('test');
+    if (GAME.share && GAME.share.hide) GAME.share.hide();
+    function def(id) { return M.DEFS.filter(function (d) { return d.id === id; })[0]; }
+    function walkIn(d) {
+      GAME.police.clearWanted();
+      GAME.test.teleport(d.start.x + 25, d.start.z); GAME.test.fastForward(0.5);
+      GAME.test.teleport(d.start.x, d.start.z);
+      for (var i = 0; i < 600 && !(M.active && M.active.state === 'run'); i++) GAME.test.fastForward(1 / 30);
+      return !!(M.active && M.active.def.id === d.id);
+    }
+    function clear() {
+      for (var k = 0; k < 400 && M.act && (M.act.kind === 'heavies' || M.act.kind === 'crew'); k++) {
+        GAME.test.fastForward(0.1);
+        var cp = M.getObjectivePoint();
+        if (M.act && M.act.kind === 'crew' && cp) GAME.test.teleport(cp[0] + 10, cp[1]);
+        GAME.world.peds.forEach(function (p) { if (p.missionFoe && !p.dead) GAME.peds.kill(p); });
+        GAME.world.cars.forEach(function (c) { if (c.heavy && !c.dead) c.hp = 0; });
+      }
+    }
+    function board() {
+      if (P.inCar) return;
+      var c = GAME.test.spawnCar('sedan', 3, 0); GAME.test.fastForward(0.2); GAME.test.enterNearestCar(c); GAME.test.fastForward(1);
+    }
+    function stopTarget() {
+      for (var i = 0; i < 300 && M.active && !M.act; i++) {
+        var p = M.active.perp;
+        if (p && !p.gone && !p.dead) { GAME.test.teleport(p.pos.x + 12, p.pos.z); p.hp = 1; }
+        GAME.world.peds.forEach(function (q) { if (q.missionFoe && !q.dead) GAME.peds.kill(q); });
+        GAME.test.fastForward(0.1);
+      }
+    }
+    try {
+      if (P.inCar) GAME.exitCar();
+      GAME.test.fastForward(0.5);
+      // a rampage won, and his friends turn up
+      r.r0 = walkIn(def('rampage0'));
+      M.notifyChaos(99999); GAME.test.fastForward(0.3);
+      r.r0act = M.act && M.act.kind;
+      r.r0still = !!M.active && bests.rampage0 === undefined;
+      // fail it there, and the retry starts the rampage again
+      M.failActive('test'); GAME.test.fastForward(0.2);
+      GAME.test.pressKey('KeyY', true); GAME.test.fastForward(1 / 60); GAME.test.pressKey('KeyY', false);
+      for (var j = 0; j < 120 && !M.active; j++) GAME.test.fastForward(1 / 60);
+      r.retryTop = !!(M.active && M.active.def.id === 'rampage0' && !M.act);
+      for (var j2 = 0; j2 < 300 && M.active && M.active.state !== 'run'; j2++) GAME.test.fastForward(1 / 30);
+      M.notifyChaos(99999); GAME.test.fastForward(0.3);
+      clear();
+      r.r0done = !M.active && bests.rampage0 !== undefined;
+      if (GAME.share && GAME.share.hide) GAME.share.hide();
+      // the warehouse foreman's crew, down the street from the ring
+      walkIn(def('rampage1'));
+      M.notifyChaos(99999); GAME.test.fastForward(0.3);
+      r.r1act = M.act && M.act.kind;
+      var at = M.getObjectivePoint(), f = GAME.focus();
+      r.r1away = at ? Math.round(Math.hypot(at[0] - f.x, at[1] - f.z)) : 0;
+      GAME.test.teleport(at[0] + 20, at[1]); GAME.test.fastForward(1);
+      r.r1men = M.act && M.act.men;
+      r.r1boss = GAME.world.peds.some(function (p) { return p.boss && !p.dead; });
+      clear();
+      r.r1done = !M.active && bests.rampage1 !== undefined;
+      if (GAME.share && GAME.share.hide) GAME.share.hide();
+      // the collector: his bag, and the bag to the lock-up
+      board();
+      walkIn(def('hit0'));
+      stopTarget();
+      r.h0act = M.act && M.act.kind;
+      var it = M.getObjectivePoint();
+      if (it) { GAME.test.teleport(it[0], it[1]); GAME.test.fastForward(0.3); }
+      r.h0act2 = M.act && M.act.kind;
+      r.h0lockup = /lock-up/.test(M.objectiveText());
+      var to = M.getObjectivePoint();
+      if (to) { GAME.test.teleport(to[0], to[1]); GAME.test.fastForward(0.5); }
+      r.h0done = !M.active && bests.hit0 !== undefined;
+      if (GAME.share && GAME.share.hide) GAME.share.hide();
+      // HIGH TIDE: Rico bails, and it ends on the marina with him in it
+      GAME.isla.setOpen(true); GAME.test.fastForward(0.3);
+      board();
+      r.h2 = walkIn(def('hit2'));
+      stopTarget();
+      r.h2act = M.act && M.act.kind;
+      r.h2streetFree = !GAME.world.peds.some(function (p) { return p.missionFoe && !p.dead && !p.boss; });
+      var q = M.getObjectivePoint();
+      var Mq = GAME.isla.pois().marina;
+      r.h2marina = q ? Math.round(Math.hypot(q[0] - Mq.x, q[1] - Mq.z)) : -1;
+      if (q) GAME.test.teleport(q[0] + 20, q[1]);
+      GAME.test.fastForward(1);
+      r.h2men = M.act && M.act.men;
+      r.h2rico = GAME.world.peds.some(function (p) { return p.boss && !p.dead && p.look && p.look.shirt === 0xf4f1e8; });
+      clear();
+      GAME.test.fastForward(0.3);
+      r.h2done = !M.active && bests.hit2 !== undefined;
+    } finally {
+      if (M.active) M.failActive('test cleanup');
+      GAME.test.fastForward(0.3);
+      if (GAME.share && GAME.share.hide) GAME.share.hide();
+      M.acts = false;
+      GAME.godMode = false;
+      ids.forEach(function (id) { if (keep[id] === undefined) delete bests[id]; else bests[id] = keep[id]; });
+      if (GAME.isla.isOpen() !== open0) GAME.isla.setOpen(open0);
+      GAME.police.clearWanted();
+      if (P.inCar) GAME.exitCar();
+      P.health = 100;
+      GAME.test.teleport(-60, 40); GAME.test.fastForward(0.5);
+    }
+    return r;
+  });
+  check('acts: a rampage won goes on — his friends come for you', acts.r0 && acts.r0act === 'heavies' && acts.r0still, JSON.stringify(acts));
+  check('acts: failed in a later act, the retry starts the job from the top', acts.retryTop, JSON.stringify(acts));
+  check('acts: and with them down, it is passed', acts.r0done, JSON.stringify(acts));
+  check('acts: the warehouse foreman waits down the street with his crew', acts.r1act === 'crew' && acts.r1away > 40 && acts.r1men >= 4 && acts.r1boss, JSON.stringify(acts));
+  check('acts: and with all of them down, it is passed', acts.r1done, JSON.stringify(acts));
+  check('acts: the collector drops his bag, and the bag goes to the lock-up', acts.h0act === 'grab' && acts.h0act2 === 'deliver' && acts.h0lockup && acts.h0done, JSON.stringify(acts));
+  check('acts: HIGH TIDE — Rico bails out of the pickup and runs, he does not fight in the street',
+    acts.h2 && acts.h2act === 'crew' && acts.h2streetFree, JSON.stringify(acts));
+  check('acts: and makes his stand on the marina, with Manny and his men', acts.h2marina >= 0 && acts.h2marina < 60 && acts.h2men >= 5 && acts.h2rico, JSON.stringify(acts));
+  check('acts: and with them down, HIGH TIDE is passed', acts.h2done, JSON.stringify(acts));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the
