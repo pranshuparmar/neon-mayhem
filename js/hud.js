@@ -28,7 +28,7 @@ GAME.hud = (function () {
     ['minimap', 'clock', 'cash', 'wanted-stars', 'health-fill', 'armor-fill', 'weapon-line', 'radio-popup', 'zone-popup',
       'msg-line', 'count-big', 'poi-hint', 'mission-hud', 'mission-title', 'mission-obj', 'mission-timer', 'title-screen', 'pause-screen',
       'wasted-screen', 'busted-screen', 'fade-layer', 'crt-layer', 'press-enter', 'title-best', 'pause-controls',
-      'controls-bar', 'map-screen', 'bigmap', 'map-clear', 'map-close', 'pager', 'pager-from', 'pager-text', 'enter-hint']
+      'controls-bar', 'map-screen', 'bigmap', 'map-clear', 'map-close', 'pager', 'pager-face', 'pager-from', 'pager-text', 'enter-hint']
       .forEach(function (id) { el[id] = $(id); });
     var stars = '';
     for (var i = 0; i < 5; i++) stars += '<span>★</span>';
@@ -1401,6 +1401,9 @@ GAME.hud = (function () {
     pageT = p.dur;
     el['pager-from'].textContent = '📟 ' + p.from;
     el['pager-text'].textContent = p.text;
+    // and who it is from, by their face (cast.js)
+    var id = GAME.cast && GAME.cast.idFor(p.from);
+    if (el['pager-face']) el['pager-face'].innerHTML = id ? GAME.cast.portrait(id) : '';
     // under the radar on a phone, where it moves up into this corner
     el.pager.style.top = GAME.isTouch ? '152px' : '';
     el.pager.classList.add('on');
@@ -1554,6 +1557,8 @@ GAME.hud = (function () {
       e.style.opacity = text ? 1 : 0;
     },
     get pagerText() { return paging && el['pager-text'] ? el['pager-text'].textContent : ''; },
+    get pagerFrom() { return paging && el['pager-from'] ? el['pager-from'].textContent : ''; },
+    get pagerFace() { return paging && el['pager-face'] ? el['pager-face'].innerHTML : ''; },
     // the huge centre numeral for mission countdowns. Callers repeat it every
     // frame while the count runs; it lets go of the screen on its own once
     // they stop (which is how "GO!" gets its moment and then clears itself)

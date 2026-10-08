@@ -84,6 +84,8 @@
       if (GAME.hud.dialogOpen()) { GAME.hud.dialogKey(code); return; }
       // and so does Lola, while you are talking to her
       if (GAME.lolaOpen) { GAME.lola.key(code); return; }
+      // and a scene, all but the sound and the screen's own switches
+      if (GAME.sceneOpen && (GAME.scenes.key(code) || (code !== 'KeyM' && code !== 'KeyT'))) return;
       // and so does the photo album, over the pause screen
       if (GAME.photo.key(code)) return;
       // and an open shop its list and its confirmation card (Esc below)
@@ -431,10 +433,13 @@
     var over = !GAME.started || GAME.paused || GAME.mapOpen || !!GAME.shareOpen || !!GAME.shopOpen || !!GAME.lolaOpen;
     if (over) GAME.hud.lockHint(false);   // an overlay is a mouse screen: no "click to look" under it
     if (!GAME.audio.ctx) return;
-    if (over) GAME.audio.rain(0);   // the tick that keeps it level stops behind an overlay
+    // a scene stops the tick too, but it is not a menu: the loops go quiet
+    // under the voices, and no pads
+    var quiet = over || !!GAME.sceneOpen;
+    if (quiet) GAME.audio.rain(0);   // the tick that keeps it level stops behind an overlay
     var P = GAME.player;
     GAME.audio.titleMusic(over);
-    if (over) {
+    if (quiet) {
       GAME.audio.engineState(false, 0);
       GAME.audio.skid(0);
       GAME.audio.siren(0);
@@ -509,6 +514,13 @@
   }
 
   GAME.tick = function (dt) {
+    // A scene holds the world still and takes the tick for itself (scenes.js):
+    // the clock, the traffic, the law and every mission timer wait it out.
+    if (GAME.sceneOpen) {
+      GAME.scenes.update(dt);
+      GAME.clearPressed();
+      return;
+    }
     GAME.time += dt;
     GAME.frame++;
     // set the ears before anything this tick has a chance to make a noise

@@ -178,7 +178,7 @@ GAME.controls = (function () {
     var inp = GAME.input, P = GAME.player;
     // an in-world dialog (the hud's modal) is a menu too: A answers it
     var dialog = !!(GAME.hud && GAME.hud.dialogOpen && GAME.hud.dialogOpen());
-    var menu = dialog || open || GAME.paused || GAME.mapOpen || GAME.shopOpen || GAME.shareOpen || GAME.lolaOpen || !GAME.started;
+    var menu = dialog || open || GAME.paused || GAME.mapOpen || GAME.shopOpen || GAME.shareOpen || GAME.lolaOpen || GAME.sceneOpen || !GAME.started;
     var touched = pad.lx || pad.ly || pad.rx || pad.ry || pad.lt > 0.2 || pad.rt > 0.2;
     for (var bi = 0; bi < bt.length && !touched; bi++) if (bt[bi] && bt[bi].pressed) touched = true;
     if (touched) noteDevice(true);
