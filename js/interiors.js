@@ -1098,6 +1098,7 @@ GAME.interiors = (function () {
     hall: function () { return hallOf(GAME.player.pos.x, GAME.player.pos.z); },
     get current() { return cur ? cur.room : null; },
     get door() { return cur ? cur.door : null; },
+    get loc() { return cur ? cur.loc : null; },
     get busy() { return !!pending || !!ridingNow; },
     riding: function () { return !!ridingNow; },
     leave: exitRoom,

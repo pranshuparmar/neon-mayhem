@@ -549,6 +549,7 @@
     if (GAME.isla) GAME.isla.tick(dt);
     GAME.shops.update(dt);
     GAME.interiors.update(dt);
+    GAME.robbery.update(dt);
     GAME.derby.update(dt);
     GAME.photo.update(dt);
     // slow autosave heartbeat: health and ammo drift without touching cash,

@@ -32,6 +32,7 @@ GAME.lola = (function () {
     casino: 'The Lucky Gull. The wheel\'s honest, mostly, the horses run on the screens down the right, and the bar patches you up. Spend what you can afford to lose.',
     derby: 'Gull Downs! Pick a horse and a stake. The odds are on the board: a 4/1 shot pays four times your stake plus your money back, and the long shots pay big because they mostly lose. Then watch it run.',
     wardrobe: 'Everything you own hangs in here, and changing is free. Buy something at THREADS and it turns up in every place you own.',
+    robbery: 'Holding up a shop? Keep the gun on him and don\'t blink — the till empties for as long as you do. The alarm went the second his hands did, so have a way out.',
     business: 'A business of your own. The till fills through the day — three days of it, no more — and sits there till you come and empty it at the counter. Leave it too long and somebody with a mask will empty it for you.',
     photo: function () { return 'Nice shot. Your photos are kept in the album — ' + (touch() ? 'PAUSE' : 'Esc') + ', then PHOTOS — and you can download the ones you like.'; }
   };

@@ -292,6 +292,8 @@
 //      sides fight each other and not their own, and turf follows the story.
 //  18. ARSENAL        — melee, throwables, a scoped rifle and a rocket, one
 //      blade and one throwable at a time, SVG icons, and the weapon wheel.
+//  19. ROBBERY        — a gun on the clerk empties the till while held;
+//      dropping it brings the stars; a day to restock; never your own.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -12529,6 +12531,81 @@ function withTimeout(p, ms) {
   check('arsenal: held, the wheel opens with the world slowed, and letting go takes its pick', arms.open && arms.picked, JSON.stringify(arms));
   check('arsenal: every new weapon lies about the city somewhere', arms.pickups.length === 0, JSON.stringify(arms.pickups));
   check('arsenal: and every one of their sounds plays without a fault', arms.sounds);
+
+  // ---------- 19: holding up a shop ----------
+  // A gun on whoever is behind the counter: hands up, and the till empties
+  // into your pocket while you keep it there. Let it drop and the alarm has
+  // gone — two stars. The till takes a day to restock, a shop you own is not
+  // robbed, and fists frighten nobody.
+  var rob = await page.evaluate(function () {
+    var P = GAME.player, R = GAME.robbery, r = {};
+    var weapons0 = JSON.parse(JSON.stringify(P.weapons, function (k, v) { return v === Infinity ? 'INF' : v; }));
+    var cur0 = P.currentWeapon, robbed0 = JSON.stringify(GAME.prefs.robbed || {});
+    if (P.inCar) GAME.exitCar();
+    GAME.police.clearWanted();
+    GAME.godMode = true;
+    var loc = GAME.shops.locations().filter(function (l) { return l.kind === 'hardware'; })[0];
+    var biz = GAME.prefs.business, owned0 = biz && biz.owned ? JSON.stringify(biz.owned) : null;
+    try {
+      if (GAME.prefs.robbed) delete GAME.prefs.robbed[loc.id];
+      GAME.interiors.enter(loc);
+      GAME.test.fastForward(1.5);
+      var room = GAME.interiors.current;
+      var fig = room.anim.filter(function (a) { return a.fig; })[0].fig;
+      function face() {
+        P.pos.set(fig.position.x, P.pos.y, fig.position.z - 5);
+        GAME.cam.yaw = Math.atan2(fig.position.x - P.pos.x, fig.position.z - P.pos.z);
+      }
+      // fists first: nobody is frightened of those
+      P.currentWeapon = 'fist';
+      face();
+      GAME.input.rmb = true; GAME.test.fastForward(0.5); GAME.input.rmb = false; GAME.test.fastForward(0.1);
+      r.fists = !R.busy && fig.userData.pose !== 'up';
+      GAME.combat.giveWeapon('pistol', 20);
+      face();
+      var cash0 = P.cash;
+      GAME.input.rmb = true; GAME.test.fastForward(2);
+      r.robbing = R.busy && fig.userData.pose === 'up';
+      r.paying = P.cash - cash0;
+      r.calmSoFar = GAME.police.wanted === 0;
+      GAME.input.rmb = false; GAME.test.fastForward(0.2);
+      r.over = !R.busy && fig.userData.pose !== 'up';
+      r.stars = GAME.police.wanted;
+      GAME.police.clearWanted();
+      // the same till again, the same day: nothing in it
+      var cash1 = P.cash;
+      face();
+      GAME.input.rmb = true; GAME.test.fastForward(1); GAME.input.rmb = false; GAME.test.fastForward(0.1);
+      r.restocking = !R.busy && P.cash === cash1 && R.restocking(loc.id);
+      // your own shop: not a till you rob
+      delete GAME.prefs.robbed[loc.id];
+      GAME.prefs.business = GAME.prefs.business || { owned: {}, till: {}, told: {} };
+      GAME.prefs.business.owned = GAME.prefs.business.owned || {};
+      GAME.prefs.business.owned[loc.id] = true;
+      face();
+      GAME.input.rmb = true; GAME.test.fastForward(1); GAME.input.rmb = false; GAME.test.fastForward(0.1);
+      r.ownNot = !R.busy && GAME.police.wanted === 0;
+    } finally {
+      GAME.input.rmb = false;
+      if (GAME.prefs.business && GAME.prefs.business.owned) {
+        if (owned0 === null) delete GAME.prefs.business.owned[loc.id]; else GAME.prefs.business.owned = JSON.parse(owned0);
+      }
+      GAME.prefs.robbed = JSON.parse(robbed0);
+      if (P.interior) GAME.interiors.leave();
+      GAME.test.fastForward(1.5);
+      P.weapons = JSON.parse(JSON.stringify(weapons0), function (k, v) { return v === 'INF' ? Infinity : v; });
+      P.currentWeapon = cur0; GAME.combat.refreshWeaponHud();
+      GAME.godMode = false;
+      GAME.police.clearWanted();
+      GAME.test.teleport(-60, 40); GAME.test.fastForward(0.5);
+    }
+    return r;
+  });
+  check('robbery: fists frighten nobody behind a counter', rob.fists, JSON.stringify(rob));
+  check('robbery: a gun on the clerk — hands up, and the till comes over the counter', rob.robbing && rob.paying >= 200 && rob.calmSoFar, JSON.stringify(rob));
+  check('robbery: let the aim drop and it is over, with two stars at least', rob.over && rob.stars >= 2, JSON.stringify(rob));
+  check('robbery: the same till the same day has nothing in it', rob.restocking, JSON.stringify(rob));
+  check('robbery: a shop you own is not one you rob', rob.ownNot, JSON.stringify(rob));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the

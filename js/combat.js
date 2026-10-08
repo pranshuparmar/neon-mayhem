@@ -367,7 +367,9 @@ GAME.combat = (function () {
     var P = GAME.player, inp = GAME.input, T = inp.touch;
     cooldown -= dt;
     // (and no gunplay in the water: both hands are swimming)
-    if (P.state !== 'alive' || P.entering || P.swimming || P.interior) { setAiming(false); aimToggle = false; inp.lmbPressed = false; return; }
+    // (indoors only where a gun means something: a shop's till, robbery.js)
+    var indoorsOk = P.interior && GAME.robbery && GAME.robbery.armedRoom();
+    if (P.state !== 'alive' || P.entering || P.swimming || (P.interior && !indoorsOk)) { setAiming(false); aimToggle = false; inp.lmbPressed = false; return; }
 
     // weapon select: the number keys, by slot (arsenal.js), a step to the
     // next, and the wheel (which steps on a tap and opens on a hold)
