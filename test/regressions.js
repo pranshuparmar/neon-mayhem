@@ -7771,7 +7771,10 @@ function withTimeout(p, ms) {
       P.heading = 0; GAME.cam.yaw = 0; ff(0.2);
       var x0 = P.pos.x, worst = 0;
       GAME.test.pressKey('KeyW', true);
-      for (var i = 0; i < 150; i++) { ff(1 / 60); worst = Math.max(worst, Math.abs(P.pos.x - x0)); }
+      // (five seconds, more than one whole sway — the stagger is two slow
+      // sines of the clock, and two and a half seconds of it could land on
+      // the stretch where they cancel: 0.3 m one run, 3.4 m the next)
+      for (var i = 0; i < 300; i++) { ff(1 / 60); worst = Math.max(worst, Math.abs(P.pos.x - x0)); }
       GAME.test.pressKey('KeyW', false); ff(0.3);
       return +worst.toFixed(2);
     }
