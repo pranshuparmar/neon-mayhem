@@ -56,7 +56,7 @@ A plane rolls down the runway on throttle and climbs once it's fast; airborne, t
 | Map | `P` | BACK | tap the radar |
 | Photo | `C` | L3 | 📷 |
 | See a photo full size | `V` (the last one) · click it in PHOTOS | START → PHOTOS → A | tap the print · tap it in PHOTOS |
-| Call Lola | `L` | START → 📟 ASK LOLA | ❚❚ → 📟 ASK LOLA |
+| Call Lola | `L` | START → 📟 ASK LOLA | 📟 beside the camera (while her tips are on) · ❚❚ → 📟 ASK LOLA |
 | Retry a failed run | `Y` | D-pad ↑ | RETRY |
 | Abandon a mission · clock off | `X` twice · pause → ABANDON | START → ABANDON | ❚❚ → ABANDON (JOB → END for a shift) |
 | Carry on after WASTED / BUSTED | `R` or `Enter` | A | tap |

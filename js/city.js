@@ -2024,8 +2024,11 @@ GAME.city = (function () {
       dummy.rotation.set(0, 0, 0); dummy.scale.setScalar(1);
       dummy.updateMatrix();
       hydMesh.setMatrixAt(hh, dummy.matrix);
-      addSolid(hyd[hh].x, hyd[hh].z, 0.6, 0.6, 1, 'prop', true).knock =
-        { kind: 'flat', mesh: hydMesh, extra: null, i: hh, x: 0, z: 0, rot: 0, down: false, t: 0, m0: null };
+      // Bolted to the water main: a car stops on a hydrant the way it does on
+      // a bollard. It used to be knocked down like a lamp post — and with
+      // nothing to lay over, "down" was simply gone: drive at one and it
+      // vanished from under the bonnet.
+      addSolid(hyd[hh].x, hyd[hh].z, 0.6, 0.6, 1, 'prop', true).hydrant = true;
     }
     scene.add(hydMesh);
 
@@ -2927,7 +2930,7 @@ GAME.city = (function () {
   }
 
   // ---------- things a car can knock down ----------
-  // Lamp posts, hydrants and boardwalk benches. A half-metre post stopped a
+  // Lamp posts and boardwalk benches (hydrants stand: see above). A half-metre post stopped a
   // car at 29 m/s as dead as a building would; now something moving takes it
   // down for a little of its pace and a dent (vehicles.js collideStatic), and
   // it is put back up once nobody has been near it for a while.

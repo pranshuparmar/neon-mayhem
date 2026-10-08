@@ -1,4 +1,7 @@
 GAME.hud = (function () {
+  // the line a route is drawn in, on the big map and on the radar: a fifth
+  // heavier than it was, so it can be followed at a glance rather than found
+  var ROUTE_W = 3.0, RADAR_ROUTE_W = 2.9;
   var el = {};
   var lastClock = -1;
   // what the per-tick readouts last wrote, so a tick that changes nothing
@@ -606,7 +609,7 @@ GAME.hud = (function () {
       // drew one confident straight line across the water. Marker only.
       if (GAME.nav.path.length) {
         g.strokeStyle = 'rgba(141,255,216,.95)';
-        g.lineWidth = 2.5;
+        g.lineWidth = ROUTE_W;
         g.beginPath();
         g.moveTo(w2mx(px), w2my(pz));
         GAME.nav.path.forEach(function (n) { g.lineTo(w2mx(n.x), w2my(n.z)); });
@@ -623,7 +626,7 @@ GAME.hud = (function () {
     var mroute = catVis('objective') ? GAME.missions.getRoutePoints() : null;
     if (mroute && mroute.length) {
       g.strokeStyle = 'rgba(255,138,61,.95)';
-      g.lineWidth = 2.5;
+      g.lineWidth = ROUTE_W;
       g.beginPath();
       g.moveTo(w2mx(px), w2my(pz));
       for (var mr = 0; mr < mroute.length; mr++) g.lineTo(w2mx(mroute[mr][0]), w2my(mroute[mr][1]));
@@ -1084,7 +1087,7 @@ GAME.hud = (function () {
     var mroute = catVis('objective') ? GAME.missions.getRoutePoints() : null;
     if (mroute && mroute.length) {
       g.strokeStyle = 'rgba(255,138,61,.95)';
-      g.lineWidth = 2.4 / zoom;
+      g.lineWidth = RADAR_ROUTE_W / zoom;
       g.beginPath();
       g.moveTo(0, 0);
       for (var mr = 0; mr < mroute.length; mr++) g.lineTo((mroute[mr][0] - px) * MAP_S, (mroute[mr][1] - pz) * MAP_S);
@@ -1097,7 +1100,7 @@ GAME.hud = (function () {
     if (GAME.nav.dest && catVis('dest')) {
       if (GAME.nav.path.length) {
         g.strokeStyle = 'rgba(141,255,216,.95)';
-        g.lineWidth = 2.4 / zoom;
+        g.lineWidth = RADAR_ROUTE_W / zoom;
         g.beginPath();
         g.moveTo(0, 0);
         var path = GAME.nav.path;

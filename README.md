@@ -66,7 +66,7 @@ The basics. Keys can be rebound from **CONTROLS** on the pause screen.
 | Drive · handbrake | `W A S D` · `Space` | RT / LT and left stick · A | GAS / BRAKE and stick · ⇋ |
 | Horn | `G` | R3 | 📢 |
 | Map · pause | `P` · `Esc` | BACK · START | tap the radar · ❚❚ |
-| Ask Lola | `L` | START → 📟 ASK LOLA | ❚❚ → 📟 ASK LOLA |
+| Ask Lola | `L` | START → 📟 ASK LOLA | 📟 · ❚❚ → 📟 ASK LOLA |
 
 Flying, boats, menus and everything else: **[all controls →](docs/CONTROLS.md)**
 

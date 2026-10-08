@@ -1930,6 +1930,22 @@ function withTimeout(p, ms) {
     r.fastPost = { found: fastPost.found, maxDrop: +fastPost.maxDrop.toFixed(2), past: fastPost.past, down: fastPost.down, inHash: fastPost.inHash };
     var slowPost = postAt(3);
     r.slowPost = { found: slowPost.found, past: slowPost.past, down: slowPost.down };
+    // a fire hydrant is bolted down: a car at speed stops on it, it does not
+    // vanish from under the bonnet (found by shape: 0.6 m square, 1 m tall)
+    function isHydrant(b) { return b.tag === 'prop' && Math.abs(b.maxX - b.minX - 0.6) < 0.01 && b.h === 1; }
+    var hb = null;
+    C.hash.all.filter(isHydrant).forEach(function (b2) {
+      if (hb) return;
+      var hx = (b2.minX + b2.maxX) / 2, hz = (b2.minZ + b2.maxZ) / 2;
+      if (C.isInWater(hx, hz - 20) || !C.hash.segmentClear(hx, hz - 20, hx, hz - 1)) return;
+      hb = { b: b2, x: hx, z: hz };
+    });
+    if (hb) {
+      car.pos.set(hb.x, C.groundY(hb.x, hb.z - 10), hb.z - 10); car.heading = 0; car.lat = 0; car.vy = 0;
+      car.speed = 20; car.hp = car.spec.hp;
+      for (var ht = 0; ht < 120; ht++) { car.controls.throttle = 0; GAME.test.fastForward(1 / 60); if (car.pos.z > hb.z + 4) break; }
+      r.hydrant = { found: true, past: car.pos.z > hb.z + 2, inHash: C.hash.all.indexOf(hb.b) >= 0, down: !!(hb.b.knock && hb.b.knock.down) };
+    } else r.hydrant = { found: false };
     // the beach palms and the boardwalk benches are solid now
     r.beachPalm = C.hash.query(372.8, 0, 14).some(function (b) { return b.tag === 'prop' && b.maxX - b.minX < 1 && b.minX > 370; });
     r.bench = C.hash.query(367.5, 0, 30).some(function (b) { return b.tag === 'prop' && b.h < 1.5 && b.maxZ - b.minZ > 2; });
@@ -1958,6 +1974,8 @@ function withTimeout(p, ms) {
     JSON.stringify(soft.fastPost));
   check('props: at a crawl it is still a post', soft.slowPost.found && !soft.slowPost.down && !soft.slowPost.past,
     JSON.stringify(soft.slowPost));
+  check('props: a fire hydrant stops a car at speed, and is still there', soft.hydrant.found && !soft.hydrant.past && soft.hydrant.inHash && !soft.hydrant.down,
+    JSON.stringify(soft.hydrant));
   check('props: the beach palms and the boardwalk benches are solid', soft.beachPalm && soft.bench,
     'palm=' + soft.beachPalm + ' bench=' + soft.bench);
   check('props: and a flattened post is back up once nobody is near it', soft.backUp === true, 'backUp=' + soft.backUp);
@@ -3190,6 +3208,11 @@ function withTimeout(p, ms) {
     var vx = ax ? d.start.x - 30 : rp.x, vz = ax ? rp.z : d.start.z - 30;
     GAME.test.teleport(vx, vz + 3);
     GAME.test.fastForward(0.3);
+    // an empty lane: this is about the ring, not about whoever is parked or
+    // crossing in front of it (traffic in the way failed it now and then)
+    GAME.police.clearWanted();
+    GAME.world.cars.slice().forEach(function (c) { if (!P.inCar || c !== P.car) { if (Math.hypot(c.pos.x - d.start.x, c.pos.z - d.start.z) < 60) GAME.vehicles.removeCar(c); } });
+    GAME.world.peds.slice().forEach(function (p) { if (Math.hypot(p.pos.x - d.start.x, p.pos.z - d.start.z) < 45) GAME.peds.removePed(p); });
     var van = GAME.vehicles.spawnCar('van', vx, vz, ax ? Math.PI / 2 : 0, {});
     GAME.test.enterNearestCar(van); GAME.test.fastForward(1.2);
     // drive up the lane and brake to a stop at the ring, as anybody would
@@ -7858,7 +7881,7 @@ function withTimeout(p, ms) {
     GAME.setTimeMode('day');
     // count the ambience's one-shots by their shape
     var calls = [], n0 = A.amb.noise;
-    A.amb.noise = function (dur, freq, g, type) { calls.push({ dur: dur, freq: freq, type: type }); return n0.apply(A.amb, arguments); };
+    A.amb.noise = function (dur, freq, g, type) { calls.push({ dur: dur, freq: freq, g: g, type: type }); return n0.apply(A.amb, arguments); };
     function count(fn) { return calls.filter(fn).length; }
     function clearAround(x, z, rad) {
       GAME.world.peds.slice().forEach(function (p) { if (Math.hypot(p.pos.x - x, p.pos.z - z) < rad) GAME.peds.removePed(p); });
@@ -7888,6 +7911,8 @@ function withTimeout(p, ms) {
       r.standSteps = count(function (c) { return c.dur <= 0.11; });
       GAME.test.pressKey('KeyW', true); ff(2); GAME.test.pressKey('KeyW', false); ff(0.3);
       r.walkSteps = count(function (c) { return c.dur <= 0.11; });
+      // soft soles: the loudest scuff of the walk (it was a 0.15-0.23 click)
+      r.loudestStep = +Math.max.apply(null, calls.filter(function (c) { return c.dur <= 0.11; }).map(function (c) { return c.g; }).concat([0])).toFixed(3);
       // on the sand, a little way up from the water's edge
       var sand = C.shoreline(60) - 14;
       var grass = null, iroad = C.nearestRoadPoint(I.bounds.cx, I.bounds.cz);
@@ -7999,6 +8024,7 @@ function withTimeout(p, ms) {
     JSON.stringify({ rms: amb.rms, peak: amb.peak, city: amb.streetCity, noAudio: amb.noAudio }));
   check('sound: standing still makes no steps, walking makes a run of them',
     amb.standSteps === 0 && amb.walkSteps >= 4, 'stand=' + amb.standSteps + ' walk=' + amb.walkSteps);
+  check('sound: footsteps are soft, not tap shoes', amb.loudestStep > 0 && amb.loudestStep < 0.08, 'loudest step ' + amb.loudestStep);
   check('sound: a step sounds of what is underfoot', JSON.stringify(amb.surfaces) ===
     JSON.stringify({ road: 'hard', sand: 'sand', pier: 'wood', islaGrass: 'grass', islaRoad: 'hard' }), JSON.stringify(amb.surfaces));
   check('sound: the surf is there on the beach, and gone downtown',
@@ -9851,6 +9877,8 @@ function withTimeout(p, ms) {
     var pl = GAME.vehicles.spawnCar('airplane', 120, -100, 0, {});
     GAME.seatInCar(pl); GAME.test.fastForward(0.1);
     r.shownInPlane = shown(btn('⟲')) && shown(btn('⟳'));
+    // and the radio, which plays up here too
+    r.radioInPlane = shown(btn('♪'));
     pl.pos.y = 120; pl.speed = 50; pl.vy = 0; pl.pitch = 0; pl.roll = 0;
     var L = btn('⟲');
     if (L) { touch(L, 'touchstart'); GAME.test.fastForward(0.25); touch(L, 'touchend'); }
@@ -9862,6 +9890,7 @@ function withTimeout(p, ms) {
   });
   check('touch: no roll buttons in a car (anchor sanity)', rollBtn.hiddenInCar, JSON.stringify(rollBtn));
   check('touch: in a plane ⟲ and ⟳ are there, and ⟲ rolls it', rollBtn.shownInPlane && rollBtn.rolled > 0.3, JSON.stringify(rollBtn));
+  check('touch: and the radio button is there in the air', rollBtn.radioInPlane, JSON.stringify(rollBtn));
 
   // the camera is one tap away on a touchscreen too
   var camBtn = await tpage.evaluate(function () {
@@ -10011,6 +10040,38 @@ function withTimeout(p, ms) {
   });
   check('touch: the camera and fullscreen buttons each have a slot of their own', fsRow.found && fsRow.apart && fsRow.camHit && fsRow.fsHit, JSON.stringify(fsRow));
   check('touch: a refused full screen says so', fsRow.said, JSON.stringify(fsRow));
+  // Lola in the top row, beside the camera, while her tips are on — the
+  // pause screen was the only way a touchscreen could call her
+  var lolaRow = await tpage.evaluate(function () {
+    var all = document.querySelectorAll('.tbtn'), lb = null, cam = null;
+    for (var i = 0; i < all.length; i++) { if (all[i].textContent === '📟') lb = all[i]; if (all[i].textContent === '📷') cam = all[i]; }
+    var fsb = document.getElementById('fs-btn');
+    if (!lb || !cam || !fsb) return { found: false };
+    var tips0 = GAME.lola.tips, was = fsb.style.display;
+    function overlap(a, b) { return !(a.left >= b.right || a.right <= b.left || a.top >= b.bottom || a.bottom <= b.top); }
+    var r = { found: true };
+    try {
+      GAME.lola.setTips(true); GAME.test.fastForward(0.1);
+      fsb.style.display = 'flex';
+      var l = lb.getBoundingClientRect(), c = cam.getBoundingClientRect(), f = fsb.getBoundingClientRect();
+      r.shown = lb.style.display !== 'none';
+      r.apart = !overlap(l, c) && !overlap(l, f) && l.left > c.left && f.left > l.left;
+      var t = new Touch({ identifier: 43, target: lb, clientX: l.left + 5, clientY: l.top + 5 });
+      lb.dispatchEvent(new TouchEvent('touchstart', { touches: [t], changedTouches: [t], targetTouches: [t], bubbles: true, cancelable: true }));
+      lb.dispatchEvent(new TouchEvent('touchend', { touches: [], changedTouches: [t], targetTouches: [], bubbles: true, cancelable: true }));
+      r.calls = !!GAME.lolaOpen;
+      if (GAME.lolaOpen) GAME.lola.close();
+      GAME.lola.setTips(false); GAME.test.fastForward(0.1);
+      r.hiddenWithTipsOff = lb.style.display === 'none';
+      r.fsSteppedBack = fsb.getBoundingClientRect().left < f.left;
+    } finally {
+      fsb.style.display = was;
+      GAME.lola.setTips(tips0); GAME.test.fastForward(0.1);
+    }
+    return r;
+  });
+  check('touch: Lola has a button beside the camera that calls her, while her tips are on',
+    lolaRow.found && lolaRow.shown && lolaRow.apart && lolaRow.calls && lolaRow.hiddenWithTipsOff && lolaRow.fsSteppedBack, JSON.stringify(lolaRow));
   // IMPORT SAVE on a touchscreen picks the file on a page with no city
   // behind it: the phone's picker sends the tab to the background, where a
   // game this size is what Android reclaims first — the import crashed.

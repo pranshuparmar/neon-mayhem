@@ -930,7 +930,7 @@ GAME.vehicles = (function () {
       var bcx = (b.minX + b.maxX) / 2, bcz = (b.minZ + b.maxZ) / 2;
       var bhx = (b.maxX - b.minX) / 2, bhz = (b.maxZ - b.minZ) / 2;
       var dxc = car.pos.x - bcx, dzc = car.pos.z - bcz;
-      // A lamp post, a hydrant, a bench: anything moving goes through it and
+      // A lamp post or a bench (not a hydrant): anything moving goes through it and
       // it goes down, for a fifth of the pace and a dent. A post this thin
       // used to stop a car at 29 m/s as dead as a building. Not on a bike —
       // that still throws the rider (below).
