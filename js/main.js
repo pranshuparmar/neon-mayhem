@@ -372,14 +372,19 @@
     GAME.hud.message(home ? 'Back at ' + home.name + '.' : 'Welcome to Costa Rosa. Steal a ride and see the strip.', 4);
   };
 
-  // attract mode: the live city plays behind the title with spectator cuts
+  // attract mode: the live city plays behind the title with spectator cuts.
+  // Each drifts for 13s, and the whole path must stay out of the buildings
+  // with nothing solid close in front of the lens — the city has grown
+  // around the old shots twice (the opener slid sideways into a block, and
+  // the downtown one sat inside a tower); regressions.js holds them to it
   var ATTRACT_CUTS = [
-    { pos: [330, 10, -80], look: [351, 1, -10], drift: [0.3, 0.05, 2.0] },
+    { pos: [350, 9, -62], look: [352, 2, 10], drift: [0.1, 0.05, 2.0] },  // down the strip
     { pos: [400, 8, 205], look: [490, 14, 150], drift: [-0.8, 0.1, -1.2] },
-    { pos: [-30, 46, -30], look: [-100, 52, -100], drift: [1.6, 0.3, 1.6] },
+    { pos: [90, 95, 90], look: [-60, 30, -60], drift: [-1.4, 0.2, -1.4] }, // over the towers
     { pos: [55, 12, -165], look: [50, 2, -95], drift: [-1.5, 0.1, 0.5] },
     { pos: [393, 7, 35], look: [364, 2, 110], drift: [0.2, 0.05, 2.2] }
   ];
+  GAME.attractCuts = ATTRACT_CUTS;
   var attractIdx = -1, attractT = 1e9;
   function tickAttractCam(dt) {
     attractT += dt;

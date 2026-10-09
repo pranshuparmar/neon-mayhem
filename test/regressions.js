@@ -324,6 +324,8 @@
 //      car goes up on the hook.
 //  31. ONE JOB AT A TIME — on a job, the rings and marks for the others are
 //      out of the street and off the radar, and back when it is over.
+//  32. FIRST IMPRESSION — every title-screen camera shot, all the way along
+//      its drift, stays out of the buildings with a clear view ahead.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -13521,6 +13523,28 @@ function withTimeout(p, ms) {
   check('one job: on a favour, no mission ring, no other stranger\'s mark, none on the radar', oj.favour.rings === 0 && oj.favour.marks === 0 && oj.favour.blips === 0 && oj.favour.strangerBlips === 0, JSON.stringify(oj.favour));
   check('one job: and back when it is over', oj.after.rings > 3 && oj.after.marks >= 1 && oj.after.blips > 3, JSON.stringify(oj.after));
   check('one job: on a mission, no stranger\'s mark in the street or on the radar', oj.markNear >= 1 && oj.mission.on && oj.mission.marks === 0 && oj.mission.strangerBlips === 0, JSON.stringify({ near: oj.markNear, mission: oj.mission }));
+
+  // ---------- 32: the title shots never fly into a building ----------
+  // The opener slid sideways into a block 3s in and the downtown shot sat
+  // inside a tower: the city grew round shots placed by hand. Walk each
+  // cut's whole 13s drift: the lens out of every roof footprint, and
+  // nothing solid in the first 25m toward what it looks at.
+  var fi = await page.evaluate(function () {
+    var C = GAME.city, cuts = GAME.attractCuts, bad = [];
+    function solid(x, y, z) { return C.surfaceY(x, z) > y - 1.5; }
+    for (var k = 0; k < cuts.length; k++) {
+      var c = cuts[k];
+      for (var t = 0; t <= 13; t += 0.5) {
+        var p = [c.pos[0] + c.drift[0] * t, c.pos[1] + c.drift[1] * t, c.pos[2] + c.drift[2] * t];
+        var dx = c.look[0] - p[0], dy = c.look[1] - p[1], dz = c.look[2] - p[2], d = Math.hypot(dx, dy, dz);
+        for (var s = 0; s <= Math.min(d, 25); s += 0.5) {
+          if (solid(p[0] + dx * s / d, p[1] + dy * s / d, p[2] + dz * s / d)) { bad.push({ cut: k, t: t, at: s }); t = 99; break; }
+        }
+      }
+    }
+    return { n: cuts.length, bad: bad };
+  });
+  check('first impression: every title shot keeps out of the buildings, clear ahead', fi.n >= 4 && fi.bad.length === 0, JSON.stringify(fi));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the
