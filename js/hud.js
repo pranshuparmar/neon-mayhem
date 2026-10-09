@@ -1800,7 +1800,33 @@ GAME.nav = (function () {
     if (pSeen[goal.id] !== g) return [];
     var out = [], cur = goal.id;
     while (cur >= 0) { out.push({ x: nodes[cur].x, z: nodes[cur].z }); cur = pPrev[cur]; }
-    return out.reverse();
+    out.reverse();
+    // The search runs junction to junction, and the junction nearest a place
+    // is as often past it as short of it: the line ran on by the destination
+    // to the next corner and came back for it, a U-turn at the lights nobody
+    // makes. The same at the start, back to the corner behind you first.
+    // A place that lies along the last block is reached on it; a start that
+    // lies along the first block sets off on it.
+    if (out.length >= 2 && along(out[out.length - 1], out[out.length - 2], x1, z1)) out.pop();
+    if (out.length >= 2 && along(out[0], out[1], x0, z0)) out.shift();
+    // down to one corner, with you and the place on the same street the same
+    // side of it: nothing to turn at, straight there
+    if (out.length === 1) {
+      var n0 = out[0], ax = x0 - n0.x, az = z0 - n0.z, bx = x1 - n0.x, bz = z1 - n0.z;
+      var la = Math.sqrt(ax * ax + az * az), lb = Math.sqrt(bx * bx + bz * bz);
+      if (la > 1 && lb > 1 && (ax * bx + az * bz) / (la * lb) > 0.8) out[0] = { x: x1, z: z1 };
+    }
+    return out;
+  }
+  // p lies along the block from corner n toward corner a: between them, and
+  // on (or by) that road rather than a street over
+  function along(n, a, px, pz) {
+    var sx = a.x - n.x, sz = a.z - n.z, l2 = sx * sx + sz * sz;
+    if (l2 < 1) return false;
+    var t = ((px - n.x) * sx + (pz - n.z) * sz) / l2;
+    if (t <= 0 || t > 1) return false;
+    var ox = px - (n.x + sx * t), oz = pz - (n.z + sz * t);
+    return ox * ox + oz * oz < 18 * 18;
   }
 
   function computePath() {

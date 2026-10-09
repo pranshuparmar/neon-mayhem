@@ -308,6 +308,8 @@
 //      and ticked off once each; wrecks turned away; a full list's bonus.
 //  26. RC RACE        — the toy buggy race on the stadium pitch: start, quit
 //      back to the gate, and a win that pays.
+//  27. ROUTES         — the route line stops at the destination: never on to
+//      the next corner and back, nor back to the one behind you first.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -13073,6 +13075,37 @@ function withTimeout(p, ms) {
   check('rc: step in and it is you in a toy against three, after a countdown', rcr.notHot && rcr.started && rcr.go, JSON.stringify(rcr));
   check('rc: put the controller down and it is over, back at the gate', rcr.quit, JSON.stringify(rcr));
   check('rc: home first, and it pays', rcr.won, JSON.stringify(rcr));
+
+  // ---------- 27: the route line stops where it is going ----------
+  // The search runs junction to junction, and the junction nearest a place
+  // is as often past it as short of it: half the routes ran on by the
+  // destination to the next corner and came back, a U-turn at the lights.
+  // Four hundred routes across the mainland, drawn as the map draws them
+  // (you, the corners, the place): none turns back on itself.
+  var rt = await page.evaluate(function () {
+    var C = GAME.city, seed = 7, n = 0, bad = 0, none = 0, ex = null;
+    function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+    for (var k = 0; k < 400; k++) {
+      var a = C.nearestRoadPoint(-400 + rnd() * 750, -420 + rnd() * 820), b = C.nearestRoadPoint(-400 + rnd() * 750, -420 + rnd() * 820);
+      var p = GAME.nav.roadPath(a.x, a.z, b.x, b.z);
+      if (!p.length) { none++; continue; }
+      var pts = [[a.x, a.z]];
+      p.concat([{ x: b.x, z: b.z }]).forEach(function (q) {
+        var l = pts[pts.length - 1];
+        if (Math.hypot(q.x - l[0], q.z - l[1]) > 0.5) pts.push([q.x, q.z]);
+      });
+      n++;
+      for (var i = 1; i < pts.length - 1; i++) {
+        var ux = pts[i][0] - pts[i - 1][0], uz = pts[i][1] - pts[i - 1][1], vx = pts[i + 1][0] - pts[i][0], vz = pts[i + 1][1] - pts[i][1];
+        if ((ux * vx + uz * vz) / (Math.hypot(ux, uz) * Math.hypot(vx, vz)) < -0.87) {
+          bad++; if (!ex) ex = pts.map(function (q) { return [Math.round(q[0]), Math.round(q[1])]; }); break;
+        }
+      }
+    }
+    return { routes: n, uturns: bad, none: none, ex: ex };
+  });
+  check('routes: every route across the mainland is found', rt.routes === 400 && rt.none === 0, JSON.stringify(rt));
+  check('routes: none runs past the place and back, or back before it sets off', rt.uturns === 0, JSON.stringify(rt));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the
