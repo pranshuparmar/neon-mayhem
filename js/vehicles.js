@@ -1840,6 +1840,13 @@ GAME.vehicles = (function () {
     car.vy *= 0.25;
   }
 
+  // squared distance from (px, pz) to the segment (ax, az)-(bx, bz)
+  function segDist2(ax, az, bx, bz, px, pz) {
+    var dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
+    var t = l2 > 0 ? U.clamp(((px - ax) * dx + (pz - az) * dz) / l2, 0, 1) : 0;
+    var qx = ax + dx * t - px, qz = az + dz * t - pz;
+    return qx * qx + qz * qz;
+  }
   // Somebody else's now: up off the ground to `to.y`, then across to
   // (to.x, to.z), swaying a little on the way, over `dur` seconds. Nobody
   // aboard, nobody steering, nothing pushing it about.
@@ -2067,6 +2074,18 @@ GAME.vehicles = (function () {
       }).sort(function (a, b) { return a.turn - b.turn; });
       // a near-U-turn is only for the cornered (dead ends)
       var options = scored.filter(function (s) { return s.turn < 2.4; });
+      // Turned round from where it was boxed in, it does not take the first
+      // road back to it: for a while, any road that runs past that spot is
+      // out (a man on the run, making for somewhere beyond a van across the
+      // road, turned round, came to the next corner, chose the same street
+      // as the way nearest his goal, and was boxed in again — for ever).
+      if (ai.avoidT && GAME.time < ai.avoidT) {
+        var node0 = ai.node;
+        var clearOf = function (s) { return segDist2(node0.x, node0.z, s.n.x, s.n.z, ai.avoidX, ai.avoidZ) > 14 * 14; };
+        var safe = options.filter(clearOf);
+        if (!safe.length) safe = scored.filter(clearOf);
+        if (safe.length) options = safe;
+      }
       var next;
       // Somewhere to be: a car with a place to make for, or a car to keep
       // after (streetlife.js — a getaway heading your way, a cruiser on its
@@ -2127,6 +2146,7 @@ GAME.vehicles = (function () {
         ai.wedged = (ai.wedged || 0) + 1;
         var back = ai.prev || city.nearestNode(car.pos.x - Math.sin(car.heading) * 40, car.pos.z - Math.cos(car.heading) * 40);
         if (ai.wedged >= 2 && back && back !== ai.node) {
+          ai.avoidX = ai.wedgeX; ai.avoidZ = ai.wedgeZ; ai.avoidT = GAME.time + 25;
           ai.wedged = 0;
           ai.prev = ai.node; ai.node = back;
           setLane(ai, back.x - ai.prev.x, back.z - ai.prev.z);
