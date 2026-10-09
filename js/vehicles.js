@@ -2133,11 +2133,15 @@ GAME.vehicles = (function () {
     // wedged against something: back out
     // (a man on the run — a takedown's target, missions.js — does not sit
     // there thinking about it)
-    if (Math.abs(car.speed) < 0.8 && distN > 8) car.unstickT += dt; else car.unstickT = 0;
+    // (and so is one shoving a car down the road in front of him that he
+    // cannot get round — crawling, nose to its side, for a second and a half
+    // (see `shoving` below): pushing a van across both lanes along at walking
+    // pace, he never counted as stopped)
+    if ((Math.abs(car.speed) < 0.8 && distN > 8) || ai.shoving) car.unstickT += dt; else car.unstickT = 0;
     // (clear of where he was boxed in, and it is forgotten)
     if (ai.wedged && U.dist2(car.pos.x, car.pos.z, ai.wedgeX, ai.wedgeZ) > 25 * 25) ai.wedged = 0;
     if (car.unstickT > (ai.bolt ? 0.6 : 1.6)) {
-      car.reverseT = 1.1; car.unstickT = 0;
+      car.reverseT = 1.1; car.unstickT = 0; ai.shoving = false; ai.shoveT = 0;
       // boxed in across the whole road — the second lane no better than the
       // first — he stops trying the same gap: he turns round and goes back
       // the way he came
@@ -2145,7 +2149,8 @@ GAME.vehicles = (function () {
         if (!ai.wedged) { ai.wedgeX = car.pos.x; ai.wedgeZ = car.pos.z; }
         ai.wedged = (ai.wedged || 0) + 1;
         var back = ai.prev || city.nearestNode(car.pos.x - Math.sin(car.heading) * 40, car.pos.z - Math.cos(car.heading) * 40);
-        if (ai.wedged >= 2 && back && back !== ai.node) {
+        // (at once if he was already going round it: that gap was tried)
+        if ((ai.wedged >= 2 || ai.passT > 0) && back && back !== ai.node) {
           ai.avoidX = ai.wedgeX; ai.avoidZ = ai.wedgeZ; ai.avoidT = GAME.time + 25;
           ai.wedged = 0;
           ai.prev = ai.node; ai.node = back;
@@ -2209,6 +2214,10 @@ GAME.vehicles = (function () {
         if (fd < blockD) { blockD = fd; blockCar = o; }
       }
     }
+    if (ai.bolt && blockCar && blockD < 6.5 && Math.abs(car.speed) < 4.5) {
+      ai.shoveT = (ai.shoveT || 0) + dt;
+      if (ai.shoveT > 1.5) ai.shoving = true;
+    } else { ai.shoveT = 0; ai.shoving = false; }
     var P = GAME.player;
     var byPlayer = !!blockCar && blockCar === P.car && P.inCar;
     // ...and you standing in the road in front of him is your problem: he
