@@ -1992,7 +1992,8 @@ GAME.city = (function () {
   city.monsterSpot = null;
   city.unlockMonsterTruck = function () {
     if (city.monsterSpot) return;
-    city.monsterSpot = { x: city.airport.apron.x + 14, z: city.airport.apron.z + 16, heading: 0, vtype: 'monster' };
+    // nose east down the runway, the same way as the plane parked beside it
+    city.monsterSpot = { x: city.airport.apron.x + 14, z: city.airport.apron.z + 16, heading: Math.PI / 2, vtype: 'monster' };
     city.parkedSpots.push(city.monsterSpot);
   };
 
