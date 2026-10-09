@@ -3,7 +3,7 @@ GAME.player = {
   inCar: false, car: null,
   health: 100, armor: 0, cash: 250,
   state: 'alive', stateT: 0,
-  weapons: { fist: { have: true, ammo: Infinity } },
+  weapons: null,     // GAME.starterKit(), below
   currentWeapon: 'fist',
   moveSpeed: 0,
   // run-over cooldown. It has to start as a number: left undefined, the
@@ -80,6 +80,8 @@ function loadSave() {
       for (var w in s.loadout) {
         if (typeof s.loadout[w] === 'number') P.weapons[w] = { have: true, ammo: s.loadout[w] };
       }
+      // a blade you were carrying holds the melee slot, not the starter bat
+      if (P.weapons.bat && ['knife', 'katana', 'chainsaw'].some(function (m) { return P.weapons[m]; })) delete P.weapons.bat;
       if (s.currentWeapon && P.weapons[s.currentWeapon]) P.currentWeapon = s.currentWeapon;
     }
     if (GAME.prefs.timeMode && GAME.setTimeMode) GAME.setTimeMode(GAME.prefs.timeMode);
@@ -88,6 +90,14 @@ function loadSave() {
     if (GAME.isla) GAME.isla.syncUnlock();
   } catch (e) { GAME.bests = {}; GAME.prefs = {}; }
 }
+// What you always have: fists, and a bat in the melee slot — that slot sat
+// empty on the wheel until you found or bought a blade. A hospital or cell
+// visit takes your gear and leaves you this. A knife, katana or chainsaw
+// still takes the bat's place: one weapon a slot.
+GAME.starterKit = function () {
+  return { fist: { have: true, ammo: Infinity }, bat: { have: true, ammo: 1 } };
+};
+GAME.player.weapons = GAME.starterKit();
 GAME.save = function () {
   try {
     var P = GAME.player;
@@ -316,7 +326,7 @@ function respawnAfterScreen() {
     // every stunt jump found: the arsenal survives a hospital or cell visit
     var keepGear = GAME.jumpArsenal || (kind === 'wasted' && GAME.shops && GAME.shops.homeSpawn(P.pos.x, P.pos.z));
     if (!keepGear) {
-      P.weapons = { fist: { have: true, ammo: Infinity } };
+      P.weapons = GAME.starterKit();
       P.currentWeapon = 'fist';
     }
     // everything finished: and it never runs dry

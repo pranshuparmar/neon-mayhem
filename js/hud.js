@@ -1246,7 +1246,15 @@ GAME.hud = (function () {
     stepLockHint();
     if (hitT > 0) { hitT -= dt; if (hitT <= 0) $('hit-dir').style.opacity = 0; }
     var P0 = GAME.player, low = P0.state === 'alive' && P0.health > 0 && P0.health < LOW_HEALTH;
-    if (low !== lowShown) { lowShown = low; $('low-health').style.display = low ? 'block' : 'none'; }
+    if (low !== lowShown) { lowShown = low; lowT = 0; $('low-health').style.display = low ? 'block' : 'none'; }
+    if (low) {
+      // ten seconds of pulse, then it fades; a fresh hit lights it again
+      if (P0.health < lowHp) lowT = 0;
+      lowT += dt;
+      var spent = lowT > LOW_PULSE;
+      if (spent !== lowSpent) { lowSpent = spent; $('low-health').classList.toggle('spent', spent); }
+    } else if (lowSpent) { lowSpent = false; $('low-health').classList.remove('spent'); }
+    lowHp = P0.health;
     stepTips(dt);
     if (countT > 0) { countT -= dt; if (countT <= 0) el['count-big'].style.opacity = 0; }
     if (radioT > 0) { radioT -= dt; if (radioT <= 0) el['radio-popup'].style.opacity = 0; }
@@ -1321,6 +1329,7 @@ GAME.hud = (function () {
   // second; and below a quarter of your health the screen's edges pulse
   // until you patch up.
   var hitT = 0, lowShown = false, LOW_HEALTH = 25;
+  var lowT = 0, lowHp = 100, lowSpent = false, LOW_PULSE = 10;
   function hitFrom(x, z) {
     var h = $('hit-dir');
     if (!h || !isFinite(x) || !isFinite(z)) return;

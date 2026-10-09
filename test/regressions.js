@@ -328,6 +328,8 @@
 //      its drift, stays out of the buildings with a clear view ahead.
 //  33. THE CARD ON TOP — a car bought in the showroom shows its card over the
 //      shop, not behind it, and the list under it hears none of the keys.
+//  34. A FULL WHEEL — you always have a bat: from the start, and after a
+//      hospital visit takes the rest; a blade you carry still replaces it.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -2297,6 +2299,11 @@ function withTimeout(p, ms) {
     // and below a quarter of your health the edges pulse
     P.health = 12; GAME.test.fastForward(0.1);
     r.lowOn = $('low-health').style.display;
+    // for ten seconds, not for ever: then it fades, and a fresh hit lights it
+    var lc = function () { return $('low-health').classList.contains('spent'); };
+    GAME.test.fastForward(9); r.lowStill = !lc();
+    GAME.test.fastForward(1.5); r.lowFaded = lc();
+    P.health = 10; GAME.test.fastForward(0.1); r.lowRelit = !lc();
     P.health = 100; GAME.test.fastForward(0.1);
     r.lowOff = $('low-health').style.display;
     // no fullscreen API (an iPhone): the button says what does work instead
@@ -2347,6 +2354,8 @@ function withTimeout(p, ms) {
     ux.hitShown && ux.hitAngle !== null && Math.abs(ux.hitAngle - Math.PI / 2) < 0.15, 'angle=' + ux.hitAngle);
   check('ux: low health pulses the edges, and stops when patched up',
     ux.lowOn === 'block' && ux.lowOff === 'none', ux.lowOn + ' / ' + ux.lowOff);
+  check('ux: the low-health pulse runs ten seconds, then fades — and a fresh hit lights it again',
+    ux.lowStill && ux.lowFaded && ux.lowRelit, JSON.stringify({ still: ux.lowStill, faded: ux.lowFaded, relit: ux.lowRelit }));
   check('ux: with no fullscreen API the button says Add to Home Screen', ux.iphone);
 
   // ---------- 5a: the bigger gaps ----------
@@ -13576,6 +13585,50 @@ function withTimeout(p, ms) {
   });
   check('card on top: a car bought in the showroom shows its card over the shop, where it can be seen and clicked', !!ct.bought && ct.shop && ct.card && ct.zCard > ct.zShop && ct.onTop, JSON.stringify(ct));
   check('card on top: Enter shuts the card and the list under it hears nothing', ct.closed && ct.noConfirm && ct.cashKept, JSON.stringify(ct));
+
+  // ---------- 34: the melee slot is never empty ----------
+  // The wheel's melee slot sat empty until you found or bought a blade, and
+  // a hospital visit emptied it again. The bat is now part of what you
+  // always have.
+  var fw = await page.evaluate(function () {
+    var r = {}, P = GAME.player;
+    var kit = GAME.starterKit();
+    r.kit = !!(kit.fist && kit.fist.have && kit.bat && kit.bat.have && kit.bat.ammo === 1);
+    P.weapons = GAME.starterKit(); P.currentWeapon = 'fist';
+    GAME.arsenal.openWheel();
+    r.meleeShown = !document.getElementById('wheel-ring').children[1].classList.contains('empty');
+    GAME.arsenal.closeWheel(false);
+    // a saved knife holds the slot: no bat beside it
+    var saved = localStorage.getItem('neonMayhemSave');
+    var s = JSON.parse(saved || '{}'); s.loadout = { knife: 1 };
+    localStorage.setItem('neonMayhemSave', JSON.stringify(s));
+    P.weapons = GAME.starterKit(); loadSave();
+    r.knifeLoad = !!P.weapons.knife && !P.weapons.bat;
+    if (saved === null) localStorage.removeItem('neonMayhemSave'); else localStorage.setItem('neonMayhemSave', saved);
+    // wasted with no home: the guns go, the bat stays
+    P.weapons = GAME.starterKit(); P.currentWeapon = 'fist';
+    r.homes0 = JSON.stringify(GAME.prefs.safehouses || null);
+    GAME.prefs.safehouses = [];
+    GAME.combat.giveWeapon('pistol', 30);
+    GAME.police.clearWanted();
+    GAME.playerWasted('test');
+    GAME.test.fastForward(0.5);
+    return r;
+  });
+  try {
+    await page.evaluate(function () { GAME.input.keys['KeyR'] = true; GAME.test.fastForward(1.2); GAME.input.keys['KeyR'] = false; });
+    await page.waitForFunction(function () { return GAME.player.state === 'alive'; }, null, { timeout: 10000 });
+  } catch (e) { }
+  fw.afterDeath = await page.evaluate(function (homes0) {
+    var P = GAME.player;
+    GAME.test.fastForward(0.5);
+    var r = { alive: P.state === 'alive', bat: !!(P.weapons.bat && P.weapons.bat.have), pistol: !!(P.weapons.pistol && P.weapons.pistol.have) };
+    GAME.prefs.safehouses = JSON.parse(homes0) || undefined;
+    return r;
+  }, fw.homes0);
+  check('full wheel: the kit you always have is fists and a bat, and the wheel shows the bat', fw.kit && fw.meleeShown, JSON.stringify(fw));
+  check('full wheel: a hospital visit takes the guns and leaves the bat', fw.afterDeath.alive && fw.afterDeath.bat && !fw.afterDeath.pistol, JSON.stringify(fw.afterDeath));
+  check('full wheel: a saved knife holds the melee slot, no bat beside it', fw.knifeLoad, JSON.stringify(fw));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the
