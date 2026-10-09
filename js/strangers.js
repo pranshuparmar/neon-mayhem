@@ -257,7 +257,10 @@ GAME.strangers = (function () {
     for (var i = 0; i < people.length; i++) {
       var p = people[i], d2 = U.dist2(p.at.x, p.at.z, f.x, f.z);
       var gone = done(p.def.id) || !avail(p.def) || (job && job.def === p.def && job.away);
-      if (p.ped && (p.ped.dead || p.ped.gone)) { if (p.mark) { GAME.scene.remove(p.mark); p.mark = null; } p.ped = null; }
+      // killed (or cleared away): the spot stays empty until you have left
+      // it, not refilled the next frame beside the body — a copy of somebody
+      // you just shot getting up off the pavement
+      if (p.ped && (p.ped.dead || p.ped.gone)) { if (p.mark) { GAME.scene.remove(p.mark); p.mark = null; } p.ped = null; p.hold = true; }
       // (someone who got out of your car on a favour that went wrong is
       // walking off up the street: not back on their spot until you have gone)
       if (p.hold && d2 > KEEP_R * KEEP_R) p.hold = false;
@@ -728,6 +731,8 @@ GAME.strangers = (function () {
   function marcoStep(j, dt) {
     var car = marcoCar();
     if (j.phase === 'car' || j.phase === 'pick') {
+      // shot where she waited: there is no date, and no body sliding in
+      if (j.gina && (j.gina.dead || j.gina.gone)) { j.gina = null; return fail('Gina is not coming. Not ever.'); }
       var was = j.phase;
       j.phase = car ? 'pick' : 'car';
       if (j.phase !== was) marcoNext(j);

@@ -223,6 +223,10 @@ GAME.heist = (function () {
   }
   function earStep(j, dt) {
     var p = P(), f = GAME.focus();
+    // shot on the quay: the part is off. Left alone, he lay there while the
+    // part waited for a man who was never getting in (and once his body was
+    // cleared, it walked a ghost to your car)
+    if (j.ped && (j.ped.dead || j.ped.gone)) { j.ped = null; return fail('Benny is dead. Nobody else can open that vault.'); }
     if (j.phase === 'find') {
       // he is there when you are near enough to see him
       if (!j.ped && dist(f, j.spot.x, j.spot.z) < 140) {

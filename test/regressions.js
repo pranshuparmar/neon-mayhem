@@ -330,6 +330,8 @@
 //      shop, not behind it, and the list under it hears none of the keys.
 //  34. A FULL WHEEL — you always have a bat: from the start, and after a
 //      hospital visit takes the rest; a blade you carry still replaces it.
+//  35. THE DEAD STAY DOWN — a stranger shot on their spot is not stood back
+//      up beside the body; they are there again once you have been away.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -13640,6 +13642,39 @@ function withTimeout(p, ms) {
   check('full wheel: the kit you always have is fists and a bat, and the wheel shows the bat', fw.kit && fw.meleeShown, JSON.stringify(fw));
   check('full wheel: a hospital visit takes the guns and leaves the bat', fw.afterDeath.alive && fw.afterDeath.bat && !fw.afterDeath.pistol, JSON.stringify(fw.afterDeath));
   check('full wheel: a saved knife holds the melee slot, no bat beside it', fw.knifeLoad, JSON.stringify(fw));
+
+  // ---------- 35: a stranger shot on their spot stays down ----------
+  // Killed, the next tick took them off their spot and — with you still in
+  // range — put a fresh copy straight back on it, beside the body.
+  var dd = await page.evaluate(function () {
+    var r = {}, SG = GAME.strangers, ff = function (t) { GAME.test.fastForward(t); };
+    var sg0 = SG.enabled, done0 = JSON.stringify(GAME.prefs.strangers || {});
+    try {
+      GAME.prefs.strangers = {};
+      SG.enabled = true;
+      var ray = SG.people().filter(function (q) { return q.def.id === 'ray'; })[0];
+      GAME.test.teleport(ray.at.x + 30, ray.at.z); ff(1.5);
+      var first = ray.ped;
+      r.out = !!first;
+      if (first) GAME.peds.kill(first, 'shot', true);
+      ff(2);
+      var near = GAME.world.peds.filter(function (q) { return q.stranger === 'ray' && !q.dead; }).length;
+      r.notBack = !ray.ped && near === 0;
+      GAME.police.clearWanted();
+      // away and back: there again
+      GAME.test.teleport(ray.at.x + 400, ray.at.z); ff(1.5);
+      GAME.test.teleport(ray.at.x + 30, ray.at.z); ff(1.5);
+      r.backLater = !!(ray.ped && !ray.ped.dead && ray.ped !== first);
+    } finally {
+      GAME.prefs.strangers = JSON.parse(done0);
+      SG.reset(); SG.enabled = sg0;
+      GAME.police.clearWanted();
+      GAME.test.teleport(-60, 40); ff(0.5);
+    }
+    return r;
+  });
+  check('dead stay down: a stranger shot on their spot is not stood back up beside the body', dd.out && dd.notBack, JSON.stringify(dd));
+  check('dead stay down: and they are back on it once you have been away', dd.backLater, JSON.stringify(dd));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the
