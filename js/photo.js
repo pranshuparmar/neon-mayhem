@@ -263,7 +263,7 @@ GAME.photo = (function () {
     el.viewNext.style.visibility = i > 0 ? '' : 'hidden';
   }
   function paintButton() {
-    if (el.btn) el.btn.textContent = '📷 PHOTOS' + (album.length ? ' (' + album.length + ')' : '');
+    if (el.btn) el.btn.textContent = 'PHOTOS' + (album.length ? ' (' + album.length + ')' : '');
   }
   function paintAuto() {
     if (el.auto) el.auto.textContent = 'AUTO-DOWNLOAD: ' + (prefs().photoAuto ? 'ON' : 'OFF');

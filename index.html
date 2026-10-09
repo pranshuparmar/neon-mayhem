@@ -267,23 +267,64 @@
      overflow, `safe center` + overflow-y lets it scroll instead of clipping
      both ends off (centered flex overflow is unreachable — no scrollbar can
      reach above the top edge) */
-  #pause-screen { position:fixed; inset:0; z-index:35; display:none; align-items:center; justify-content:safe center; flex-direction:column;
-    background:rgba(8,4,18,.82); overflow-y:auto; padding:14px 0; }
-  #pause-screen h2 { font-size:clamp(24px,7vh,44px); font-weight:900; font-style:italic; color:#9df3ff; letter-spacing:5px; text-shadow:0 0 16px rgba(60,220,255,.8); margin:0 0 14px; flex-shrink:0; }
-  /* the pause menu should FIT an ordinary phone; the scrollbar stays only as
-     the escape hatch for genuinely tiny screens */
-  #pause-screen .mbtn { margin:8px 5px 0; padding:7px 16px; font-size:13px; }
-  @media (max-height:740px), (max-width:480px) {
-    #pause-screen h2 { margin:0 0 6px; }
-    #pause-screen .mbtn { margin:5px 3px 0; padding:6px 11px; font-size:12px; }
-    #pause-controls { font-size:11.5px !important; line-height:1.5 !important; }
-    #pause-stunts, #pause-missions { font-size:12px; }
+  #pause-screen { position:fixed; inset:0; z-index:35; display:none; flex-direction:column; align-items:center; justify-content:safe center;
+    overflow-y:auto; padding:calc(28px + env(safe-area-inset-top,0px)) 16px 14px;
+    background:linear-gradient(100deg, rgba(10,3,22,.94) 0%, rgba(10,3,22,.86) 38%, rgba(10,3,22,.66) 100%); }
+  /* a menu down the left in big italic type, the chosen section in a card
+     beside it — the way the classic mobile ports laid out their pause */
+  #pause-frame { display:flex; gap:clamp(18px,4vw,56px); align-items:flex-start; width:min(1040px,100%); }
+  #pause-side { flex:0 0 auto; display:flex; flex-direction:column; min-width:200px; }
+  #pause-title h2 { font-size:clamp(26px,7vh,48px); font-weight:900; font-style:italic; color:#ff7fd0; letter-spacing:4px; margin:0;
+    text-shadow:0 0 18px rgba(255,60,170,.75); }
+  #pause-place { color:#9df3ff; font-size:12.5px; font-weight:700; letter-spacing:3px; margin:2px 0 12px; opacity:.85; }
+  #pause-tabs { display:flex; flex-direction:column; align-items:flex-start; }
+  #pause-screen .ptab { display:block; margin:2px 0; padding:6px 22px 6px 14px; background:none; border:none; border-left:4px solid transparent;
+    border-radius:0; font-size:clamp(18px,4.2vh,28px); font-weight:900; font-style:italic; letter-spacing:2px; color:#cfe6ff;
+    text-shadow:0 0 10px rgba(80,200,255,.35); box-shadow:none; transition:color .12s, border-color .12s, transform .12s; }
+  #pause-screen .ptab:hover, #pause-screen .ptab.kfocus { color:#fff; border-left-color:#ff4fb0; transform:translateX(6px);
+    text-shadow:0 0 14px rgba(255,80,190,.9); outline:none; box-shadow:none; background:linear-gradient(90deg, rgba(255,60,170,.22), transparent); }
+  #pause-screen .ptab.open { color:#ff9fdc; border-left-color:#ff4fb0; }
+  #pause-screen #pause-abandon { color:#ffb0b0; }
+  #pause-screen #pause-abandon.danger { color:#fff; background:rgba(255,60,60,.28); }
+  #pause-panel { flex:1 1 auto; min-width:0; background:rgba(14,6,30,.78); border:1px solid rgba(255,105,200,.35); border-radius:12px;
+    padding:16px 20px 18px; box-shadow:0 0 30px rgba(255,60,170,.18), inset 0 0 40px rgba(60,20,120,.25); }
+  .ppanel { display:none; }
+  .ppanel.on { display:block; }
+  .ppanel h3 { margin:0 0 10px; color:#9df3ff; font-size:15px; letter-spacing:5px; font-weight:900; font-style:italic; text-shadow:0 0 10px rgba(60,220,255,.6); }
+  .pgroup { margin:0 0 10px; }
+  .pgroup h4 { margin:0 0 2px; color:#ff9fdc; font-size:11px; letter-spacing:3px; font-weight:800; opacity:.9; }
+  #pause-screen .ppanel .mbtn { margin:5px 6px 0 0; padding:6px 14px; font-size:13px; }
+  #pause-stats { display:grid; grid-template-columns:1fr auto; gap:6px 18px; margin-bottom:10px; }
+  #pause-stats .k { color:#cfe6ff; font-size:13px; font-weight:800; letter-spacing:2px; }
+  #pause-stats .v { color:#8dffd8; font-size:15px; font-weight:900; text-align:right; text-shadow:0 0 8px rgba(60,255,190,.5); }
+  #pause-stats .v.gold { color:#ffe08a; text-shadow:0 0 8px rgba(255,190,60,.55); }
+  .pstat-note { color:#bcd0ee; font-size:12px; line-height:1.5; letter-spacing:1px; }
+  #pause-controls { margin-top:8px; color:#cfe6ff; font-size:12px; line-height:1.7; }
+  #pause-link { margin-top:6px; font-size:11.5px; }
+  #pause-link a { color:#9fd8ff; }
+  #pause-hint { margin-top:12px; color:#8dffd8; font-weight:700; font-size:12.5px; text-align:center; flex-shrink:0; }
+  /* a phone held upright, or anything narrow: the menu runs across the top
+     and the card goes under it */
+  @media (max-width:640px) {
+    #pause-frame { flex-direction:column; gap:10px; }
+    #pause-side { min-width:0; width:100%; }
+    #pause-place { margin-bottom:6px; }
+    #pause-tabs { flex-direction:row; flex-wrap:wrap; gap:2px 4px; }
+    #pause-screen .ptab { font-size:16px; padding:5px 10px; border-left:none; border-bottom:3px solid transparent; }
+    #pause-screen .ptab:hover, #pause-screen .ptab.kfocus, #pause-screen .ptab.open { transform:none; border-bottom-color:#ff4fb0; }
+    #pause-panel { width:100%; padding:12px 14px; }
   }
+  /* short landscape phones: tighter type, and the controls card (on the title
+     screen and under H) makes way */
   @media (max-height:460px) {
-    #pause-screen h2 { margin:0 0 4px; font-size:clamp(18px,6vh,30px); }
-    #pause-controls { display:none; }   /* the controls card is on the title screen and under H */
-    #pause-stunts { margin-top:2px; font-size:12px; }
-    #pause-screen .mbtn { margin:4px 3px 0; padding:4px 9px; font-size:11.5px; }
+    #pause-screen { padding-top:calc(14px + env(safe-area-inset-top,0px)); }
+    #pause-title h2 { font-size:clamp(18px,6vh,30px); }
+    #pause-place { margin-bottom:4px; }
+    #pause-screen .ptab { font-size:15px; padding:3px 16px 3px 10px; margin:1px 0; }
+    #pause-screen .ppanel .mbtn { margin:3px 4px 0 0; padding:4px 10px; font-size:11.5px; }
+    #pause-controls { display:none; }
+    .pgroup { margin-bottom:5px; }
+    #pause-hint { margin-top:6px; }
   }
 
   #fs-btn { position:fixed; right:calc(14px + env(safe-area-inset-right,0px)); bottom:calc(14px + env(safe-area-inset-bottom,0px)); z-index:65; width:36px; height:36px; border-radius:8px;
@@ -560,41 +601,67 @@
 </div>
 
 <div id="pause-screen">
-  <h2>PAUSED</h2>
-  <div id="pause-controls" style="color:#cfe6ff;font-size:13px;line-height:1.8;text-align:center;"></div>
-  <div id="pause-stunts" style="margin-top:10px;color:#ffe08a;font-size:14px;font-weight:800;letter-spacing:2px;text-shadow:0 0 10px rgba(255,190,60,.7)"></div>
-  <div id="pause-missions" style="margin-top:2px;color:#8de8b0;font-size:14px;font-weight:800;letter-spacing:2px;text-shadow:0 0 10px rgba(80,232,160,.6)"></div>
-  <div style="max-width:520px;text-align:center;">
-    <span class="mbtn" id="pause-resume">RESUME</span>
-    <span class="mbtn" id="pause-abandon" style="display:none">✖ ABANDON MISSION</span>
-    <span class="mbtn" id="pause-map">🗺 MAP</span>
-    <span class="mbtn" id="pause-lola">📟 ASK LOLA</span>
-    <span class="mbtn" id="pause-photos">📷 PHOTOS</span>
-    <span class="mbtn" id="pause-mute">🔊 SOUND</span>
-    <span class="mbtn" id="pause-music">🎵 MUSIC: ON</span>
-    <span class="mbtn" id="pause-sfx">💥 SFX: ON</span>
-    <span class="mbtn" id="pause-crt">📺 CRT</span>
-    <span class="mbtn" id="pause-shake">🎥 SHAKE: ON</span>
-    <span class="mbtn" id="pause-gfx">🖥 GFX: HIGH</span>
-    <span class="mbtn" id="pause-keys">🎮 CONTROLS</span>
-    <span class="mbtn" id="pause-hintbar">💡 HINT BAR: ON</span>
-    <span class="mbtn" id="pause-fs">⛶ FULL SCREEN: OFF</span>
-    <span class="mbtn" id="pause-haptic">📳 RUMBLE: ON</span>
-    <span class="mbtn" id="pause-tips">💬 LOLA'S TIPS: ON</span>
-    <span class="mbtn" id="pause-lefty">🎮 CONTROLS: RIGHT</span>
-    <span class="mbtn" id="pause-chaos">🌆 CITY: LIVELY</span>
-    <span class="mbtn" id="pause-day">🕓 TIME: AUTO</span>
-    <span class="mbtn" id="pause-weather">🌧 WEATHER: AUTO</span>
-    <span class="mbtn" id="pause-cheats">🕹 CHEATS</span>
-    <span class="mbtn" id="pause-export">💾 EXPORT SAVE</span>
-    <span class="mbtn" id="pause-import">📂 IMPORT SAVE</span>
-    <span class="mbtn" id="pause-reset">🗑 RESET PROGRESS</span>
-    <span class="mbtn" id="pause-exit">EXIT TO TITLE</span>
+  <div id="pause-frame">
+    <div id="pause-side">
+      <div id="pause-title"><h2>PAUSED</h2><div id="pause-place"></div></div>
+      <div id="pause-tabs">
+        <span class="mbtn ptab act" id="pause-resume">RESUME</span>
+        <span class="mbtn ptab act" id="pause-abandon" style="display:none">✖ ABANDON MISSION</span>
+        <span class="mbtn ptab act" id="pause-map">MAP</span>
+        <span class="mbtn ptab" id="ptab-stats" data-panel="pp-stats">STATS</span>
+        <span class="mbtn ptab act" id="pause-lola">ASK LOLA</span>
+        <span class="mbtn ptab act" id="pause-photos">PHOTOS</span>
+        <span class="mbtn ptab" id="ptab-settings" data-panel="pp-settings">SETTINGS</span>
+        <span class="mbtn ptab" id="ptab-game" data-panel="pp-game">GAME</span>
+      </div>
+    </div>
+    <div id="pause-panel">
+      <div class="ppanel" id="pp-stats">
+        <h3>STATS</h3>
+        <div id="pause-stats"></div>
+        <div id="pause-missions" class="pstat-note"></div>
+        <div id="pause-stunts" class="pstat-note"></div>
+      </div>
+      <div class="ppanel" id="pp-settings">
+        <h3>SETTINGS</h3>
+        <div class="pgroup"><h4>SOUND</h4>
+          <span class="mbtn" id="pause-mute">🔊 SOUND</span>
+          <span class="mbtn" id="pause-music">🎵 MUSIC: ON</span>
+          <span class="mbtn" id="pause-sfx">💥 SFX: ON</span></div>
+        <div class="pgroup"><h4>DISPLAY</h4>
+          <span class="mbtn" id="pause-gfx">🖥 GFX: HIGH</span>
+          <span class="mbtn" id="pause-crt">📺 CRT</span>
+          <span class="mbtn" id="pause-shake">🎥 SHAKE: ON</span>
+          <span class="mbtn" id="pause-hintbar">💡 HINT BAR: ON</span>
+          <span class="mbtn" id="pause-fs">⛶ FULL SCREEN: OFF</span></div>
+        <div class="pgroup"><h4>CONTROLS</h4>
+          <span class="mbtn" id="pause-keys">🎮 CONTROLS</span>
+          <span class="mbtn" id="pause-lefty">🎮 CONTROLS: RIGHT</span>
+          <span class="mbtn" id="pause-haptic">📳 RUMBLE: ON</span>
+          <span class="mbtn" id="pause-tips">💬 LOLA'S TIPS: ON</span>
+          <div id="pause-controls"></div></div>
+        <div class="pgroup"><h4>WORLD</h4>
+          <span class="mbtn" id="pause-chaos">🌆 CITY: LIVELY</span>
+          <span class="mbtn" id="pause-day">🕓 TIME: AUTO</span>
+          <span class="mbtn" id="pause-weather">🌧 WEATHER: AUTO</span></div>
+      </div>
+      <div class="ppanel" id="pp-game">
+        <h3>GAME</h3>
+        <div class="pgroup"><h4>YOUR SAVE</h4>
+          <span class="mbtn" id="pause-export">💾 EXPORT SAVE</span>
+          <span class="mbtn" id="pause-import">📂 IMPORT SAVE</span>
+          <span class="mbtn" id="pause-reset">🗑 RESET PROGRESS</span></div>
+        <div class="pgroup"><h4>EXTRAS</h4>
+          <span class="mbtn" id="pause-cheats">🕹 CHEATS</span></div>
+        <div class="pgroup"><h4>LEAVE</h4>
+          <span class="mbtn" id="pause-exit">EXIT TO TITLE</span></div>
+        <div id="pause-link"><a href="https://github.com/pranshuparmar/neon-mayhem" target="_blank" rel="noopener"
+          onclick="event.stopPropagation()" ontouchend="event.stopPropagation()">github.com/pranshuparmar/neon-mayhem</a></div>
+      </div>
+    </div>
   </div>
   <input type="file" id="save-file" accept=".json,application/json" style="display:none">
-  <div id="pause-hint" style="margin-top:9px;color:#8dffd8;font-weight:700;font-size:13px;">ESC, RESUME or a click off the buttons to carry on &nbsp;·&nbsp; arrow keys and Enter pick a button</div>
-  <div style="margin-top:5px;font-size:11.5px;"><a href="https://github.com/pranshuparmar/neon-mayhem" target="_blank" rel="noopener"
-    style="color:#9fd8ff;" onclick="event.stopPropagation()" ontouchend="event.stopPropagation()">github.com/pranshuparmar/neon-mayhem</a></div>
+  <div id="pause-hint">ESC, RESUME or a click off the menu to carry on &nbsp;·&nbsp; ↑ ↓ pick · → / Enter open · ← back</div>
 </div>
 
 <div id="shutter"></div>

@@ -95,6 +95,9 @@ GAME.hud = (function () {
       var ps = el['pause-screen'];
       if (!GAME.paused || e.target.closest('a, input')) return false;
       if (x >= ps.getBoundingClientRect().left + ps.clientWidth) return false;   // its scrollbar
+      // the card is somewhere to read, not empty screen
+      var pr = $('pause-panel').getBoundingClientRect();
+      if (x >= pr.left && x <= pr.right && y >= pr.top && y <= pr.bottom) return false;
       return offTheButtons(x, y);
     }
     el['pause-screen'].addEventListener('click', function (e) {
@@ -120,6 +123,11 @@ GAME.hud = (function () {
         b.addEventListener(ev, function (e) { e.stopPropagation(); e.preventDefault(); fn(); });
       });
     }
+    // the sections: a tap opens one in the card
+    var ptabs = el['pause-screen'].querySelectorAll('.ptab[data-panel]');
+    for (var pt = 0; pt < ptabs.length; pt++) (function (t) {
+      pauseBtn(t.id, function () { showPausePanel(t.getAttribute('data-panel')); pauseZone = 'tabs'; paintPauseSel(); });
+    })(ptabs[pt]);
     pauseBtn('pause-resume', function () { if (GAME.paused) GAME.togglePause(); });
     pauseBtn('pause-map', function () { if (GAME.paused) GAME.togglePause(); api.toggleMap(true); });
     // Lola, called up (lola.js): the way a touchscreen reaches her
@@ -1281,20 +1289,36 @@ GAME.hud = (function () {
     el['zone-popup'].style.top = mh.style.display === 'block' ? (mh.offsetTop + mh.offsetHeight + 6) + 'px' : '';
   }
 
-  // ---------- keys on the pause screen ----------
-  // It was mouse-only. The arrows walk the buttons (up and down by row),
-  // Enter or Space presses the lit one, Esc still resumes.
-  var pauseSel = 0;
-  function pauseButtons() {
-    var all = el['pause-screen'].querySelectorAll('.mbtn'), out = [];
-    for (var i = 0; i < all.length; i++) if (all[i].offsetParent !== null) out.push(all[i]);
+  // ---------- the pause screen: a menu down the left, a card beside it ----------
+  // The menu's entries either do something (RESUME, MAP, LOLA, PHOTOS) or
+  // open a section in the card (STATS, SETTINGS, GAME). On the keys, up and
+  // down walk the menu, right (or Enter) goes into an open card, and left
+  // comes back out; in the card the arrows walk its buttons. Esc resumes.
+  var pauseSel = 0, pauseZone = 'tabs', pausePanel = 'pp-stats';
+  function visible(list) {
+    var out = [];
+    for (var i = 0; i < list.length; i++) if (list[i].offsetParent !== null) out.push(list[i]);
     return out;
   }
+  function pauseButtons() {
+    return visible(pauseZone === 'tabs' ? el['pause-screen'].querySelectorAll('.ptab')
+      : $(pausePanel).querySelectorAll('.mbtn'));
+  }
+  function showPausePanel(id) {
+    pausePanel = id;
+    var ps = el['pause-screen'].querySelectorAll('.ppanel');
+    for (var i = 0; i < ps.length; i++) ps[i].classList.toggle('on', ps[i].id === id);
+    var ts = el['pause-screen'].querySelectorAll('.ptab');
+    for (var j = 0; j < ts.length; j++) ts[j].classList.toggle('open', ts[j].getAttribute('data-panel') === id);
+  }
   function paintPauseSel() {
+    var all = el['pause-screen'].querySelectorAll('.mbtn');
+    for (var k = 0; k < all.length; k++) all[k].classList.remove('kfocus');
     var bs = pauseButtons();
     if (!bs.length) return;
     pauseSel = (pauseSel % bs.length + bs.length) % bs.length;
-    for (var i = 0; i < bs.length; i++) bs[i].classList.toggle('kfocus', i === pauseSel);
+    bs[pauseSel].classList.add('kfocus');
+    if (pauseZone === 'panel' && bs[pauseSel].scrollIntoView) bs[pauseSel].scrollIntoView({ block: 'nearest' });
   }
   function pauseRowStep(bs, cur, dir) {
     var r0 = bs[cur].getBoundingClientRect(), cx = r0.left + r0.width / 2, cy = r0.top + r0.height / 2;
@@ -1307,20 +1331,81 @@ GAME.hud = (function () {
     }
     return best;
   }
+  function pressPause(b) {
+    b.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    if (GAME.paused) paintPauseSel();   // a toggle relabels; keep the light on it
+  }
+  function enterPanel() {
+    pauseZone = 'panel'; pauseSel = 0;
+    if (!pauseButtons().length) pauseZone = 'tabs';
+    paintPauseSel();
+  }
   function pauseKey(code) {
     var bs = pauseButtons();
     if (!bs.length) return false;
-    if (code === 'ArrowRight' || code === 'Tab') pauseSel++;
-    else if (code === 'ArrowLeft') pauseSel--;
-    else if (code === 'ArrowDown') pauseSel = pauseRowStep(bs, pauseSel, 1);
-    else if (code === 'ArrowUp') pauseSel = pauseRowStep(bs, pauseSel, -1);
-    else if (code === 'Enter' || code === 'Space') {
-      bs[(pauseSel % bs.length + bs.length) % bs.length].dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      if (GAME.paused) paintPauseSel();   // a toggle relabels; keep the light on it
+    var cur = (pauseSel % bs.length + bs.length) % bs.length, b = bs[cur];
+    if (pauseZone === 'tabs') {
+      if (code === 'ArrowDown' || code === 'Tab') pauseSel = cur + 1;
+      else if (code === 'ArrowUp') pauseSel = cur - 1;
+      else if (code === 'ArrowRight' || code === 'Enter' || code === 'Space') {
+        var panel = b.getAttribute('data-panel');
+        if (panel) { showPausePanel(panel); enterPanel(); return true; }
+        if (code === 'ArrowRight') return true;   // RESUME is not a door
+        pressPause(b);
+        return true;
+      } else return false;
+      paintPauseSel();
+      // walking onto a section opens it, as a tap would
+      var nb = pauseButtons()[pauseSel], np = nb && nb.getAttribute('data-panel');
+      if (np) showPausePanel(np);
       return true;
-    } else return false;
+    }
+    if (code === 'ArrowRight' || code === 'Tab') pauseSel = cur + 1;
+    else if (code === 'ArrowLeft') {
+      if (cur === 0) {
+        // back out to the menu, on the section you came from
+        pauseZone = 'tabs';
+        var ts = pauseButtons();
+        for (var i = 0; i < ts.length; i++) if (ts[i].getAttribute('data-panel') === pausePanel) pauseSel = i;
+      } else pauseSel = cur - 1;
+    }
+    else if (code === 'ArrowDown') pauseSel = pauseRowStep(bs, cur, 1);
+    else if (code === 'ArrowUp') pauseSel = pauseRowStep(bs, cur, -1);
+    else if (code === 'Enter' || code === 'Space') { pressPause(b); return true; }
+    else return false;
     paintPauseSel();
     return true;
+  }
+  // what you have done, as the STATS card shows it
+  function paintPauseStats() {
+    var box = $('pause-stats');
+    if (!box) return;
+    var rows = [], isOpen = !GAME.isla || GAME.isla.isOpen();
+    rows.push(['CASH', '$' + Math.floor(GAME.player.cash).toLocaleString(), 'gold']);
+    var done = 0;
+    if (GAME.missions) {
+      var defs = GAME.missions.DEFS, bests = GAME.bests || {};
+      for (var mi = 0; mi < defs.length; mi++) if (bests[defs[mi].id] !== undefined) done++;
+      rows.push(['MISSIONS', done + ' / ' + defs.length + (done >= defs.length ? ' ✓' : '')]);
+    }
+    if (GAME.strangers && GAME.strangers.total) rows.push(['STRANGERS', GAME.strangers.done + ' / ' + GAME.strangers.total]);
+    if (GAME.stunts) {
+      var ST = GAME.stunts;
+      rows.push(['STUNT JUMPS', ST.found + ' / ' + ST.total + (ST.complete ? ' ✓' : '')]);
+      if (isOpen && ST.islaTotal) rows.push(['ISLA JUMPS', ST.islaFound + ' / ' + ST.islaTotal + (ST.islaComplete ? ' ✓' : '')]);
+    }
+    if (GAME.tapes && GAME.tapes.total) rows.push(['LOST TAPES', GAME.tapes.found + ' / ' + GAME.tapes.total]);
+    var homes = (GAME.prefs && GAME.prefs.safehouses) || [];
+    rows.push(['PLACES OWNED', String(homes.length)]);
+    box.innerHTML = rows.map(function (r) {
+      return '<span class="k">' + r[0] + '</span><span class="v' + (r[2] ? ' ' + r[2] : '') + '">' + r[1] + '</span>';
+    }).join('');
+    // what the mission count is FOR while the bridges are still shut
+    var pm = $('pause-missions');
+    if (pm) pm.textContent = !GAME.missions ? '' : isOpen ? (done >= GAME.missions.DEFS.length ? 'Every mission done.' : '')
+      : Math.min(done, 4) + ' of 4 missions to open the bridges to Isla Verde.';
+    var sj = $('pause-stunts');
+    if (sj) sj.textContent = GAME.stunts && GAME.stunts.complete ? 'Every stunt jump found.' : '';
   }
 
   // ---------- what is hurting you ----------
@@ -1686,32 +1771,18 @@ GAME.hud = (function () {
     setPaused: function (p) {
       el['pause-screen'].style.display = p ? 'flex' : 'none';
       if (api.paintAbandon) api.paintAbandon(true);
-      if (p) { pauseSel = 0; paintPauseSel(); }
+      if (p) { pauseZone = 'tabs'; pauseSel = 0; showPausePanel('pp-stats'); paintPauseSel(); }
       // a phone has no Esc and no arrow keys to mention (and a touchscreen
       // laptop can go back to its mouse between pauses)
       var ph = $('pause-hint');
       if (p && ph) {
         if (ph.__mouse === undefined) ph.__mouse = ph.innerHTML;
-        if (GAME.isTouch) ph.textContent = 'Tap RESUME, or anywhere off the buttons, to carry on';
+        if (GAME.isTouch) ph.textContent = 'Tap RESUME, or anywhere off the menu, to carry on';
         else ph.innerHTML = ph.__mouse;
       }
-      var sj = $('pause-stunts');
-      if (sj && GAME.stunts) {
-        var ST = GAME.stunts, isOpen = !GAME.isla || GAME.isla.isOpen();
-        sj.textContent = 'STUNT JUMPS  ' + ST.found + ' / ' + ST.total + (ST.complete ? ' ✓' : '') +
-          (isOpen && ST.islaTotal ? '   ·   ISLA  ' + ST.islaFound + ' / ' + ST.islaTotal + (ST.islaComplete ? ' ✓' : '') : '') +
-          (GAME.tapes && GAME.tapes.total ? '   ·   LOST TAPES  ' + GAME.tapes.found + ' / ' + GAME.tapes.total : '');
-      }
-      // missions alongside the jumps: distinct marked missions finished, and
-      // what the count is FOR while the bridges are still shut
-      var pm = $('pause-missions');
-      if (pm && GAME.missions) {
-        var defs = GAME.missions.DEFS, bests = GAME.bests || {}, done = 0;
-        for (var mi = 0; mi < defs.length; mi++) if (bests[defs[mi].id] !== undefined) done++;
-        var open = !GAME.isla || GAME.isla.isOpen();
-        pm.textContent = 'MISSIONS  ' + done + ' / ' + defs.length +
-          (open ? (done >= defs.length ? '   ·   ALL DONE' : '') : '   ·   ' + Math.min(done, 4) + ' / 4 TO OPEN THE BRIDGES TO ISLA VERDE');
-      }
+      paintPauseStats();
+      var pl = $('pause-place');
+      if (pl && p) { var zf = GAME.focus(); pl.textContent = (GAME.city.districtName(zf.x, zf.z) || '').toUpperCase(); }
       api.refreshFsBtn();
     },
     toggleCRT: function () {

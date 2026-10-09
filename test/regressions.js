@@ -2178,9 +2178,17 @@ function withTimeout(p, ms) {
     ps.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: rb.right + 6, clientY: rb.top + rb.height / 2 }));
     r.stillPaused = GAME.paused === true;
     r.lockHintUnderPause = $('lock-hint').style.display;
-    GAME.onKeyDown('ArrowRight');
+    GAME.onKeyDown('ArrowDown');
     r.lit = (document.querySelector('#pause-screen .kfocus') || {}).id;
+    // down to SETTINGS opens its card; right goes into it and left comes out
+    var hops = 0;
+    while ((document.querySelector('#pause-screen .kfocus') || {}).id !== 'ptab-settings' && hops++ < 10) GAME.onKeyDown('ArrowDown');
+    r.settingsOpen = $('pp-settings').classList.contains('on');
+    GAME.onKeyDown('ArrowRight');
+    r.inCard = (document.querySelector('#pause-screen .kfocus') || {}).id;
     GAME.onKeyDown('ArrowLeft');
+    r.backOut = (document.querySelector('#pause-screen .kfocus') || {}).id;
+    while ((document.querySelector('#pause-screen .kfocus') || {}).id !== 'pause-resume' && hops++ < 20) GAME.onKeyDown('ArrowUp');
     GAME.onKeyDown('Enter');
     r.resumedByEnter = GAME.paused === false;
     // with no mouse capture (this page never takes one) it says how to get it
@@ -2330,8 +2338,9 @@ function withTimeout(p, ms) {
   check('ux: a click or a tap on the empty pause screen resumes, a scrolling drag does not',
     ux.clickResumed && ux.dragStill && ux.tapResumed && ux.mouseBack,
     'click=' + ux.clickResumed + ' drag stays=' + ux.dragStill + ' tap=' + ux.tapResumed + ' mouse back=' + ux.mouseBack);
-  check('ux: the pause buttons answer the arrows and Enter',
-    ux.lit === 'pause-map' && ux.resumedByEnter, 'lit=' + ux.lit + ' resumed=' + ux.resumedByEnter);
+  check('ux: the pause menu answers the arrows and Enter — down the menu, into a card and back out',
+    ux.lit === 'pause-map' && ux.settingsOpen && ux.inCard === 'pause-mute' && ux.backOut === 'ptab-settings' && ux.resumedByEnter,
+    JSON.stringify({ lit: ux.lit, open: ux.settingsOpen, inCard: ux.inCard, back: ux.backOut, resumed: ux.resumedByEnter }));
   check('ux: no mouse capture says CLICK TO LOOK AROUND, but not under an overlay',
     ux.lockHint === 'block' && ux.lockHintUnderPause === 'none', 'playing=' + ux.lockHint + ' paused=' + ux.lockHintUnderPause);
   check('ux: the map names its missions and marks the beaten ones',
@@ -7421,6 +7430,8 @@ function withTimeout(p, ms) {
       GAME.hud.message = function (t) { fsMsgs.push(String(t)); return fsM0.apply(GAME.hud, arguments); };
       try {
         tap(9);
+        // it lives in SETTINGS: open that card, as a pad would
+        document.getElementById('ptab-settings').dispatchEvent(new MouseEvent('click', { bubbles: true }));
         var fsb = document.getElementById('pause-fs');
         r.fsListed = !!fsb && fsb.offsetParent !== null && /FULL SCREEN/.test(fsb.textContent);
         if (fsb) fsb.dispatchEvent(new MouseEvent('click', { bubbles: true }));
