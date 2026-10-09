@@ -1562,7 +1562,19 @@ GAME.shops = (function () {
   function items(loc) {
     // (and, at a counter that can be bought, the business itself: business.js)
     var biz = GAME.business ? GAME.business.rows(loc) : [];
-    return tradeItems(loc).concat(biz);
+    var trade = tradeItems(loc);
+    // and in a shop that is yours, what it sells is yours too: the cut, the
+    // shirt, the round at the bar, a box of rounds — on the house
+    if (GAME.business && GAME.business.owns(loc.id)) trade = trade.map(onTheHouse);
+    return trade.concat(biz);
+  }
+  function onTheHouse(it) {
+    if (!(it.price > 0) || it.noPrice) return it;
+    var c = {};
+    for (var k in it) c[k] = it[k];
+    c.price = 0;
+    c.ds = (it.ds ? it.ds + '  ' : '') + 'On the house — it\'s your shop.';
+    return c;
   }
   function tradeItems(loc) {
     switch (loc.kind) {
@@ -2007,8 +2019,14 @@ GAME.shops = (function () {
     // multi-metre move between scans is a teleport — waking up at your own
     // condo, a mission repositioning you, a loaded save — and any mat you
     // land on stays shut until you step off and come back meaning it
+    // (Feet, not wheels: your own position stays where you got in while you
+    // drive, and getting out at the door put you there in one step — read as
+    // a teleport, the mat you parked by stayed shut until you walked five
+    // metres off and came back. Driving up to a door and stepping off is
+    // meaning it.)
+    if (P.inCar) lastWX = null;
     var jumped = lastWX !== null && U.dist2(P.pos.x, P.pos.z, lastWX, lastWZ) > 12 * 12;
-    lastWX = P.pos.x; lastWZ = P.pos.z;
+    if (!P.inCar) { lastWX = P.pos.x; lastWZ = P.pos.z; }
     var unlocked = !GAME.isla || GAME.isla.isOpen();
     // the bridges opening adds the island lots — re-plan the fleet then
     if (unlocked !== lastUnlocked) { lastUnlocked = unlocked; refreshGarageSpots(); }

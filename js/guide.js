@@ -21,7 +21,7 @@ GAME.guide = (function () {
   var step = null;                    // what she is waiting for, or null
   var car = null, arrow = null, hudText = '', hudTitle = '';
   var waitT = 0, stepT = 0, saidHeat = false, saidGo = false, saidWrongRide = false;
-  var shopCash = null, ringAt = null, barberAt = null;
+  var shopCash = null, shopLook = null, ringAt = null, barberAt = null;
   // how far off the step's goal you were when it began: a job can end a
   // kilometre from the barber, and a failed run far from its ring, and only
   // heading further away than that is walking off
@@ -132,6 +132,15 @@ GAME.guide = (function () {
     startFrom(ringAt);
     if (ringAt) route(ringAt.x, ringAt.z);
   }
+  // Paid: she comes to you and says so, face to face (scenes.js — the
+  // pager in the corner undersold your first job), then marks the barber.
+  var FIRST_PAY = { id: 'guide-paid', shots: [{ set: 'here', cast: ['lola', 'you'], lines: [
+    ['lola', 'Three drops, on the clock, and not a scratch on the merchandise. You did good, kid.'],
+    ['you', 'Easiest money I ever made.'],
+    ['lola', 'Don\'t get used to easy. And no offence — you look like you got off the bus this morning.'],
+    ['lola', 'Go get yourself a new look. Whatever you like, your money. CORTES CUTS does a good cut, up in Las Colinas by the hospital.'],
+    ['lola', 'I\'ve marked it on your map. Walk in off the mat at the door.']
+  ] }] };
   function toBarber() {
     go('barber');
     var b = barberLoc();
@@ -141,7 +150,46 @@ GAME.guide = (function () {
     // she is about to say how a shop works herself: her general first-shop
     // tip would say it again on the way in
     var pr = prefs(); pr.lolaSeen = pr.lolaSeen || {}; pr.lolaSeen.shop = true;
-    say('That\'s your first pay. Now — no offence, kid — you look like you got off the bus this morning. CORTES CUTS does a good cut, up in Las Colinas by the hospital: I\'ve marked it. Walk in off the mat at the door.', 9);
+    if (GAME.scenes && GAME.scenes.play(FIRST_PAY)) return;
+    say('That\'s your first pay. You did good, kid. Now — no offence — you look like you got off the bus this morning. Get yourself a new look: CORTES CUTS does a good cut, up in Las Colinas by the hospital. I\'ve marked it. Walk in off the mat at the door.', 9);
+  }
+  function threadsLoc() {
+    return GAME.shops ? GAME.shops.locations().filter(function (l) { return l.kind === 'dress'; })[0] : null;
+  }
+  // Out of the barber's: she is there on the pavement. The clothes are the
+  // same deal at THREADS — does she mark it, or are you on your own now?
+  function outro(bought) {
+    go('outro');
+    clearHud();
+    var first = bought === true ? 'Now you look like you belong on the strip.' : bought === false ? 'Your money, your call.' : 'Not today? Your call.';
+    var lines = [
+      ['lola', first],
+      ['lola', 'Same goes for the clothes. THREADS, on Centro Alto, will dress you head to toe — and what you buy hangs in your wardrobe at home.'],
+      ['lola', 'Want me to mark it for you, or are you finding your own way from here?']
+    ];
+    var ask = function () { askThreads(); };
+    if (GAME.scenes && GAME.scenes.play({ id: 'guide-threads', shots: [{ set: 'here', cast: ['lola', 'you'], lines: lines }] }, ask)) return;
+    say(first + ' ' + lines[1][1], 7);
+    ask();
+  }
+  function askThreads() {
+    var th = threadsLoc();
+    var ok = th && GAME.lola && GAME.lola.offer && GAME.lola.offer({
+      say: 'THREADS, for the clothes — shall I mark it, or do you want to find your own way from here?',
+      top: true,
+      escSays: 'to find your own way',
+      list: [
+        { label: '🧭 MARK THREADS FOR ME', fn: function () {
+          GAME.lola.close();
+          route(th.at.x, th.at.z);
+          wrap('Marked. Walk in off the mat, same as the barber\'s.');
+        } },
+        { label: '🗺 I\'LL EXPLORE ON MY OWN', fn: function () { GAME.lola.close(); wrap(null); } }
+      ],
+      // closing her without an answer is exploring on your own
+      onClose: function () { if (step === 'outro') wrap(null); }
+    });
+    if (!ok) wrap(null);
   }
   // the island, while it is still shut: mentioned, and no more than that
   function islandTease(lead) {
@@ -170,7 +218,7 @@ GAME.guide = (function () {
     if (barberAt) unroute(barberAt.x, barberAt.z);
     clearHud();
     dropArrow();
-    step = null; car = null; shopCash = null;
+    step = null; car = null; shopCash = null; shopLook = null;
     prefs().guide = state;
     save();
   }
@@ -317,15 +365,18 @@ GAME.guide = (function () {
     if (step === 'counter') {
       var S = GAME.shops, inShop = GAME.shopOpen && S.current && S.current.kind === 'barber';
       if (inShop) {
-        if (shopCash === null) { shopCash = P.cash; clearHud(); }
+        if (shopCash === null) { shopCash = P.cash; shopLook = JSON.stringify(prefs().outfit || {}); clearHud(); }
         return;
       }
-      if (shopCash !== null) {
-        wrap(P.cash < shopCash ? 'Now you look like you belong on the strip.' : 'Your money, your call.');
+      // out of the chair: she waits for you on the pavement
+      if (P.interior || (GAME.interiors && GAME.interiors.busy)) {
+        if (shopCash === null) objective('A NEW LOOK', 'Step up to the counter at the back');
+        else clearHud();
         return;
       }
-      if (!P.interior) { wrap(null); return; }
-      objective('A NEW LOOK', 'Step up to the counter at the back');
+      // (a new look, paid for or on the house in a shop that is yours)
+      outro(shopCash === null ? null : shopLook !== JSON.stringify(prefs().outfit || {}));
+      return;
     }
   }
 
@@ -348,7 +399,8 @@ GAME.guide = (function () {
         job: 'Get the deliveries done — follow the line on your radar.',
         paid: 'Nice work. Hang on a second.',
         barber: 'Get yourself to CORTES CUTS — it\'s on your map — and walk in off the mat.',
-        counter: 'Step up to the counter at the back and pick a look.'
+        counter: 'Step up to the counter at the back and pick a look.',
+        outro: 'THREADS does the clothes — want it marked on your map?'
       }[step] || '';
     },
     get step() { return step; },

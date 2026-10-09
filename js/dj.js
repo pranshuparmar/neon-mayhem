@@ -98,7 +98,10 @@ GAME.dj = (function () {
     if (!R || !R.audible) return null;
     var id = idOf(R.name);
     if (!id) return null;
-    var ad = Math.random() < 0.4;
+    // (an ad is for cruising: never in the middle of a job, a race, a favour
+    // or a heist — Gull Downs' horses came on in the middle of a first
+    // delivery. The DJ can still say a word; the ads wait.)
+    var ad = roaming() && Math.random() < 0.4;
     var text = ad ? next('ads', ADS) : next(R.name, id.lines);
     var who = ad ? 'AD' : id.dj;
     var dur = Math.min(9, 2.5 + text.length * 0.045);
@@ -117,6 +120,11 @@ GAME.dj = (function () {
     if (GAME.track) GAME.track(ad ? 'radio-ad' : 'radio-dj');
     return seg;
   }
+  function roaming() {
+    var G = GAME;
+    return !((G.missions && G.missions.active) || (G.strangers && G.strangers.busy) || (G.heist && G.heist.busy) ||
+      (G.rc && G.rc.running) || (G.robbery && G.robbery.busy) || (G.guide && G.guide.step) || G.player.interior);
+  }
   function stopTalk() {
     seg = null;
     var c = $('radio-talk');
@@ -128,6 +136,8 @@ GAME.dj = (function () {
     var on = P.inCar && P.state === 'alive' && R && R.audible;
     if (!on) { if (seg) stopTalk(); return; }
     if (seg) {
+      // (a job started half way through an ad: the ad is over)
+      if (seg.who === 'AD' && !roaming()) { stopTalk(); R.duck(1, 0.3); return; }
       seg.t += dt;
       var v = seg.voice, want = Math.floor(seg.t * v.cps / 2);
       while (seg.i < want && seg.i * 2 < seg.letters.length) { R.talk(v, seg.letters.charAt(seg.i * 2)); seg.i++; }
@@ -144,6 +154,7 @@ GAME.dj = (function () {
     segment: segment,
     get talking() { return seg ? { who: seg.who, text: seg.text } : null; },
     identity: idOf,
+    roaming: roaming,
     get enabled() { return enabled; },
     set enabled(v) { enabled = !!v; if (!enabled) stopTalk(); },
     ADS: ADS

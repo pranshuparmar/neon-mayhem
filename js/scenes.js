@@ -48,6 +48,19 @@ GAME.scenes = (function () {
       nx /= nl; nz /= nl;
       return { x: d.x + nx * 2.4, z: d.z + nz * 2.4, nx: nx, nz: nz };
     },
+    // wherever you are: she comes to you. On the pavement where you stand,
+    // or beside the car you are sat in, the camera out toward the road.
+    here: function () {
+      var p = P(), f = GAME.focus(), x = f.x, z = f.z;
+      if (p.interior) return null;
+      if (p.inCar && p.car) {
+        var h = p.car.heading + Math.PI / 2, off = (p.car.spec.w || 1.8) / 2 + 2.2;
+        x += Math.sin(h) * off; z += Math.cos(h) * off;
+      }
+      var rp = GAME.city.nearestRoadPoint(x, z), nx = rp.x - x, nz = rp.z - z, nl = Math.hypot(nx, nz);
+      if (nl < 1) { nx = -Math.sin(GAME.cam.yaw); nz = -Math.cos(GAME.cam.yaw); nl = 1; }
+      return { x: x, z: z, nx: nx / nl, nz: nz / nl };
+    },
     // the marina on Isla Verde, on the quay with the jetties and the boats
     // behind them — Rico's way out
     marina: function () {

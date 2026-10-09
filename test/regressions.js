@@ -310,6 +310,10 @@
 //      back to the gate, and a win that pays.
 //  27. ROUTES         — the route line stops at the destination: never on to
 //      the next corner and back, nor back to the one behind you first.
+//  28. FIRST DAY II   — Lola comes to you to say well done after the first
+//      pay, and outside the barber's to offer THREADS; no radio ads in a
+//      job; a shop you own is on the house; a door mat by your parked car
+//      takes you in.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -8316,7 +8320,17 @@ function withTimeout(p, ms) {
       pages.length = 0;
       S.buy('style_' + cut.id); ff(0.2);
       S.close(); ff(0.5);
+      // still in the shop, she waits; out on the pavement, she asks about THREADS
+      r.waitsInside = G.step === 'counter';
+      GAME.interiors.leave(); ff(1.5);
+      var threads = S.locations().filter(function (l) { return l.kind === 'dress'; })[0];
+      r.threads = { step: G.step, asked: L.isOpen && L.options().some(function (o) { return /MARK THREADS/.test(o); }) && L.options().some(function (o) { return /EXPLORE/.test(o); }),
+        line: pages.some(function (t) { return /THREADS/.test(t); }) };
+      if (L.isOpen) L.choose(/MARK THREADS/);
+      ff(0.3);
+      nd = GAME.nav && GAME.nav.dest;
       r.done = { step: G.step, pref: GAME.prefs.guide, paid: cash0 - P.cash, hud: hud(),
+        threadsRouted: !!nd && Math.hypot(nd.x - threads.at.x, nd.z - threads.at.z) < 2,
         pointers: pages.some(function (t) { return /races, rampages and takedowns/.test(t) && /four/.test(t) && /stunt jump/.test(t); }) };
       L.open(); r.ropesAfter = L.options().some(function (o) { return /SHOW ME THE ROPES/.test(o); }); L.close();
       settle();
@@ -8381,9 +8395,12 @@ function withTimeout(p, ms) {
   check('guide: paid, she waits out the card, then routes you to CORTES CUTS',
     gd.won.step === 'paid' && gd.won.best && gd.won.card && gd.waitsForCard && gd.barber.step === 'barber' && gd.barber.routed && gd.barber.line && /CORTES CUTS/.test(gd.barber.hud),
     JSON.stringify({ won: gd.won, wait: gd.waitsForCard, barber: gd.barber }));
-  check('guide: a cut with the pay, then the other rings, the island rule and how to call her',
-    gd.inside === 'counter' && gd.done.step === null && gd.done.pref === 'done' && gd.done.paid === 150 && gd.done.pointers && gd.done.hud === '' && !gd.ropesAfter,
-    JSON.stringify({ inside: gd.inside, done: gd.done, ropesAfter: gd.ropesAfter }));
+  check('guide: a cut with the pay; out of the door she asks about THREADS, and marks it',
+    gd.inside === 'counter' && gd.waitsInside && gd.threads.step === 'outro' && gd.threads.asked && gd.threads.line && gd.done.threadsRouted,
+    JSON.stringify({ inside: gd.inside, waits: gd.waitsInside, threads: gd.threads, done: gd.done }));
+  check('guide: then the other rings, the island rule and how to call her',
+    gd.done.step === null && gd.done.pref === 'done' && gd.done.paid === 150 && gd.done.pointers && gd.done.hud === '' && !gd.ropesAfter,
+    JSON.stringify({ done: gd.done, ropesAfter: gd.ropesAfter }));
   check('guide: driving off lets you go, with the way back', gd.wandered.step === null && gd.wandered.pref === 'left' && gd.wandered.line, JSON.stringify(gd.wandered));
   check('guide: so does abandoning the run', gd.abandoned.started && gd.abandoned.step === null && gd.abandoned.pref === 'left', JSON.stringify(gd.abandoned));
   check('guide: outside her day BEACH RUN is untouched', gd.untouched);
@@ -13106,6 +13123,121 @@ function withTimeout(p, ms) {
   });
   check('routes: every route across the mainland is found', rt.routes === 400 && rt.none === 0, JSON.stringify(rt));
   check('routes: none runs past the place and back, or back before it sets off', rt.uturns === 0, JSON.stringify(rt));
+
+  // ---------- 28: first day, face to face; and the street's small things ----------
+  var fd = await page.evaluate(function () {
+    var r = {}, P = GAME.player, G = GAME.guide, M = GAME.missions, S = GAME.shops, L = GAME.lola, C = GAME.city;
+    var ff = function (t) { GAME.test.fastForward(t); };
+    var spawned = [], guide0 = GAME.prefs.guide, bests0 = JSON.stringify(GAME.bests || {});
+    var biz0 = JSON.stringify(GAME.prefs.business || null), outfit0 = JSON.stringify(GAME.prefs.outfit || {});
+    var courier = M.DEFS.filter(function (d) { return d.id === 'courier2'; })[0];
+    var barber = S.locations().filter(function (l) { return l.kind === 'barber'; })[0];
+    function settle() {
+      if (GAME.scenes.active) GAME.scenes.skip();
+      if (L.isOpen) L.close();
+      if (M.active) M.abandon();
+      if (GAME.shopOpen) S.close();
+      if (GAME.interiors.current) GAME.interiors.reset();
+      if (P.inCar) GAME.exitCar();
+      GAME.police.clearWanted();
+      ff(0.5);
+    }
+    try {
+      settle();
+      GAME.scenes.enabled = true;
+      // --- paid: she comes to you, a scene where you stand, then the barber's marked ---
+      GAME.bests = {}; GAME.prefs.guide = 'skipped';
+      GAME.test.teleport(356, 40); ff(0.3);
+      var bike = GAME.vehicles.spawnCar('motorcycle', 352, 44, 0, {}); spawned.push(bike);
+      GAME.enterCar(bike); ff(1.5);
+      G.begin(); ff(0.2);
+      var job = G.jobFor(courier);
+      G.finished(job, true); ff(2);
+      var st = GAME.scenes.stage('here'), on = GAME.scenes.on;
+      r.paid = { scene: GAME.scenes.active, cast: on.join(), near: st ? Math.round(Math.hypot(st.x - P.car.pos.x, st.z - P.car.pos.z)) : -1,
+        says: /did good/.test((GAME.scenes.line || {}).text || ''), step: G.step };
+      for (var i = 0; i < 40 && GAME.scenes.active; i++) { GAME.scenes.advance(); ff(0.3); GAME.scenes.advance(); ff(0.1); }
+      var nd = GAME.nav.dest;
+      r.paid.after = { over: !GAME.scenes.active, routed: !!nd && Math.hypot(nd.x - barber.at.x, nd.z - barber.at.z) < 2 };
+      // --- out of the barber's: a scene on the pavement, then her question ---
+      settle();
+      GAME.test.teleport(barber.at.x + 3, barber.at.z); ff(0.3);
+      GAME.interiors.enter(barber); ff(1.5);
+      S.open(barber); ff(0.2); S.close(); ff(0.3);
+      GAME.interiors.leave(); ff(1.5);
+      r.out = { scene: GAME.scenes.active, step: G.step, threads: false };
+      for (var j = 0; j < 40 && GAME.scenes.active; j++) { if (/THREADS/.test((GAME.scenes.line || {}).text || '')) r.out.threads = true; GAME.scenes.advance(); ff(0.3); GAME.scenes.advance(); ff(0.1); }
+      r.out.asked = L.isOpen && L.options().some(function (o) { return /MARK THREADS/.test(o); });
+      if (L.isOpen) L.choose(/EXPLORE/);
+      ff(0.3);
+      r.out.done = G.step === null && GAME.prefs.guide === 'done';
+      settle();
+      GAME.scenes.enabled = false;
+      // --- the radio: the DJ in a job, but never an ad ---
+      var car = GAME.test.spawnCar('sedan', 4, 0); spawned.push(car);
+      ff(0.2); GAME.test.enterNearestCar(car); ff(1.5);
+      var D = GAME.dj, dj0 = D.enabled; D.enabled = true;
+      var R = GAME.audio.radio, rnd0 = Math.random;
+      Math.random = function () { return 0.01; };   // an ad, if one is allowed
+      var seg = D.segment();
+      r.ads = { roaming: D.roaming(), roamAd: !!seg && seg.who === 'AD' };
+      GAME.test.teleport(courier.start.x + 8, courier.start.z); ff(0.2);
+      P.car.pos.set(courier.start.x, C.groundY(courier.start.x, courier.start.z), courier.start.z); P.car.speed = 0; ff(1.5);
+      var seg2 = M.active ? D.segment() : null;
+      r.ads.inJob = !!M.active; r.ads.jobRoaming = D.roaming(); r.ads.jobAd = !!seg2 && seg2.who === 'AD';
+      Math.random = rnd0;
+      D.enabled = dj0;
+      settle();
+      // --- a shop of your own: what it sells is on the house ---
+      GAME.prefs.business = GAME.prefs.business || { owned: {}, till: {}, told: {}, fares: 0 };
+      GAME.prefs.business.owned.barber0 = true;
+      GAME.test.teleport(barber.at.x + 3, barber.at.z); ff(0.3);
+      S.open(barber); ff(0.2);
+      var cash = P.cash, style = S.wardrobe.HAIRSTYLES.filter(function (h) { return h.id !== (GAME.prefs.outfit || {}).hairStyle; })[0];
+      S.buy('style_' + style.id);
+      r.owned = { free: P.cash === cash, cut: GAME.prefs.outfit.hairStyle === style.id };
+      S.close(); ff(0.2);
+      delete GAME.prefs.business.owned.barber0;
+      S.open(barber); ff(0.2);
+      cash = P.cash;
+      S.buy('style_' + S.wardrobe.HAIRSTYLES.filter(function (h) { return h.id !== GAME.prefs.outfit.hairStyle; })[0].id);
+      r.owned.paysElsewhere = cash - P.cash === 150;
+      settle();
+      // --- a door mat by the car you parked takes you in when you get out ---
+      var rp = C.nearestRoadPoint(barber.at.x + 40, barber.at.z);
+      var c2 = GAME.vehicles.spawnCar('sedan', rp.x, rp.z, 0, {}); spawned.push(c2);
+      GAME.test.teleport(rp.x + 2.5, rp.z); ff(0.2);
+      GAME.enterCar(c2); ff(1.5);
+      for (var k = 0; k < 90; k++) { c2.pos.x += (barber.at.x + 3.5 - c2.pos.x) * 0.08; c2.pos.z += (barber.at.z - c2.pos.z) * 0.08; c2.speed = 0; ff(1 / 60); }
+      GAME.exitCar(); ff(0.3);
+      for (var w = 0; w < 4 && !GAME.interiors.current; w += 1 / 60) {
+        var dx = barber.at.x - P.pos.x, dz = barber.at.z - P.pos.z;
+        if (dx * dx + dz * dz < 0.1) break;
+        P.heading = Math.atan2(dx, dz); GAME.cam.yaw = P.heading;
+        GAME.test.pressKey('KeyW', true); ff(1 / 60);
+      }
+      GAME.test.pressKey('KeyW', false); ff(1);
+      r.door = !!GAME.interiors.current;
+    } finally {
+      GAME.scenes.enabled = false;
+      settle();
+      spawned.forEach(function (c) { if (!c.gone) GAME.vehicles.removeCar(c); });
+      GAME.prefs.guide = guide0; GAME.bests = JSON.parse(bests0);
+      if (biz0 === 'null') delete GAME.prefs.business; else GAME.prefs.business = JSON.parse(biz0);
+      GAME.prefs.outfit = JSON.parse(outfit0); if (S.applyOutfit) S.applyOutfit();
+      if (GAME.nav) GAME.nav.clear();
+      GAME.test.teleport(-60, 40); ff(0.5);
+    }
+    return r;
+  });
+  check('first day: paid, Lola comes to you — a scene where you stand, and she says you did good',
+    fd.paid && fd.paid.scene && fd.paid.cast === 'lola,you' && fd.paid.near >= 0 && fd.paid.near < 8 && fd.paid.says, JSON.stringify(fd.paid));
+  check('first day: and after it, CORTES CUTS is marked', fd.paid && fd.paid.after.over && fd.paid.after.routed && fd.paid.step === 'barber', JSON.stringify(fd.paid));
+  check('first day: out of the barber\'s, a scene on the pavement, then THREADS — marked, or on your own',
+    fd.out && fd.out.scene && fd.out.threads && fd.out.step === 'outro' && fd.out.asked && fd.out.done, JSON.stringify(fd.out));
+  check('radio: an ad while you cruise, never in the middle of a job', fd.ads && fd.ads.roaming && fd.ads.roamAd && fd.ads.inJob && !fd.ads.jobRoaming && !fd.ads.jobAd, JSON.stringify(fd.ads));
+  check('business: in a shop of your own it is on the house; anywhere else it costs', fd.owned && fd.owned.free && fd.owned.cut && fd.owned.paysElsewhere, JSON.stringify(fd.owned));
+  check('doors: get out of the car by a door mat and step on it, and you are in', fd.door, JSON.stringify(fd.door));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the
