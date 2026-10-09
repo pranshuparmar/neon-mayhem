@@ -474,7 +474,7 @@ function sitIn(car) {
     : 'Plane — W throttle up the runway, Space to climb once fast · A/D turn · F to bail out', 4.5);
   else if (car.spec.heli) GAME.hud.message(pad ? 'Heli — RT up · LT down · stick fly · Y to exit (bail with a chute if high up)'
     : 'Heli — Space up · Shift down · WASD fly · F to exit (bail with a chute if high up)', 4);
-  else if (car.spec.cab) GAME.hud.message((car.type === 'zebra' ? 'The Zebra Cab' : 'Cab') + ' — press ' + jobKey() + ' to start a fare', 3);
+  else if (car.spec.cab) GAME.hud.message((car.type === 'tiger' ? 'The Tiger Cab' : 'Cab') + ' — press ' + jobKey() + ' to start a fare', 3);
   else if (car.type === 'ambulance') GAME.hud.message('Ambulance — press ' + jobKey() + ' for a paramedic run', 3);
   else if (car.type === 'icecream') GAME.hud.message('Ice cream truck — press ' + jobKey() + ' to start a round', 3);
   else if (car.type === 'police') GAME.hud.message('Cruiser — G for lights and siren, J (or JOB) for vigilante work', 3.5);

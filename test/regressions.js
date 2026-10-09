@@ -154,7 +154,7 @@
 //       building off the road; the plots they left on the strip are built
 //       on. VERDE CABS on Isla Verde: an open garage walked into off the
 //       street, a cab either side to take, for sale at its desk; bought, the
-//       Zebra Cab is in the middle bay and takes fares, each one putting more
+//       Tiger Cab is in the middle bay and takes fares, each one putting more
 //       on the firm's board, and its till fills at the bigger rate.
 //   4y. AROUND THE GAME — messages stack; the district name keeps out of a
 //       mission's title; every overlay uses the game's face; the title says
@@ -8820,11 +8820,10 @@ function withTimeout(p, ms) {
       GAME.test.teleport(node.x + 2.5, node.z); ff(0.2);
       GAME.test.enterNearestCar(rc); ff(1.5);
       rc.speed = 0; rc.vx = rc.vz = 0; ff(0.5);
-      r.racerOn = S.start('racer');
-      for (var t2 = 0; t2 < 20 * 60 && S.racer && S.racer.state === 'pull'; t2++) ff(1 / 60);
-      r.alongside = S.racer ? { state: S.racer.state, d: +Math.hypot(S.racer.car.pos.x - rc.pos.x, S.racer.car.pos.z - rc.pos.z).toFixed(1), flag: !!S.racer.marker } : null;
-      // The road to the flag is left to the two of you: a crash into
-      // passing traffic is a race too (below), but not this one. Your car
+      // The road is left to the two of you, from before they turn up: a
+      // crash into passing traffic is a race too (below), but not this one —
+      // and on the way up alongside, a car crossing the junction behind you
+      // took the racer out before it ever arrived (CI run 204). Your car
       // stays where it stops — on the line, in their way.
       var keepTraffic = GAME.settings.maxTraffic;
       GAME.settings.maxTraffic = 0;
@@ -8832,6 +8831,11 @@ function withTimeout(p, ms) {
         GAME.world.cars.slice().forEach(function (c) { if (c !== rc && !(S.racer && c === S.racer.car) && c.occupied === 'ai') GAME.vehicles.removeCar(c); });
       };
       clearRoad();
+      r.racerOn = S.start('racer');
+      var rcar = S.racer && S.racer.car;
+      for (var t2 = 0; t2 < 20 * 60 && S.racer && S.racer.state === 'pull'; t2++) ff(1 / 60);
+      r.alongside = S.racer ? { state: S.racer.state, d: +Math.hypot(S.racer.car.pos.x - rc.pos.x, S.racer.car.pos.z - rc.pos.z).toFixed(1), flag: !!S.racer.marker }
+        : { gone: true, started: r.racerOn, car: rcar ? { gone: !!rcar.gone, dead: !!rcar.dead, occ: rcar.occupied, d: Math.round(Math.hypot(rcar.pos.x - rc.pos.x, rcar.pos.z - rc.pos.z)) } : null, mine: Math.round(rc.speed * 10) / 10, inCar: P.inCar };
       GAME.test.pressKey('KeyW', true); ff(1.5); GAME.test.pressKey('KeyW', false);
       r.raceOn = S.racer && S.racer.state;
       // and your car, stopped dead in their lane a little way up the road
@@ -9727,14 +9731,17 @@ function withTimeout(p, ms) {
       van.pos.set(t.pos.x + fx * 14, van.pos.y, t.pos.z + fz * 14); van.heading = t.heading + Math.PI / 2; van.speed = 0;
       // (round it, back the way he came, or off down a side street before he
       // reaches it: anything but sat against it)
-      var touched = false, clear = 0, i;
+      var touched = false, clear = 0, i, trace = [], v0 = { x: van.pos.x, z: van.pos.z };
       for (i = 0; i < 150 && clear < 30; i++) {
         ff(0.1);
         var dv = Math.hypot(t.pos.x - van.pos.x, t.pos.z - van.pos.z);
         if (dv < 9) touched = true;
         clear = Math.max(clear, dv);
+        // (what he was doing, every half second, in case it comes to that)
+        if (i % 5 === 0) trace.push([i / 10, Math.round(dv), +t.speed.toFixed(1), +(t.ai.passT || 0).toFixed(1), +(t.reverseT || 0).toFixed(1), t.ai.wedged || 0, t.ai.shoving ? 1 : 0, t.ai.prev ? (t.ai.prev === t.ai.node ? 'same' : 'prev') : 'none'].join(' '));
       }
       r.boxed = { touched: touched, clear: Math.round(clear), secs: i / 10 };
+      if (clear < 30) { r.boxed.vanPushed = Math.round(Math.hypot(van.pos.x - v0.x, van.pos.z - v0.z)); r.boxed.trace = trace; }
       // --- hurt, he shoots back out of the window ---
       GAME.vehicles.damageCar(t, t.hp - a.maxHp * 0.6, 'bullet', true);
       var s0 = shots.length;
@@ -9870,16 +9877,16 @@ function withTimeout(p, ms) {
       SH.buy('biz_buy');
       r.bought = { owns: B.owns('cabs0'), paid: c0 - P.cash, rate: B.rate('cabs0') };
       SH.close();
-      // the Zebra Cab in the middle bay, to take out, and fares in it
+      // the Tiger Cab in the middle bay, to take out, and fares in it
       var z = mid.live;
-      r.zebra = { there: !!z && z.type === 'zebra' };
+      r.tiger = { there: !!z && z.type === 'tiger' };
       if (z) {
         GAME.test.teleport(z.pos.x + 2.5, z.pos.z); ff(0.3);
         GAME.test.enterNearestCar(z); ff(1.2);
-        r.zebra.aboard = P.inCar && P.car === z;
+        r.tiger.aboard = P.inCar && P.car === z;
         GAME.test.pressKey('KeyW', true); ff(2.5); GAME.test.pressKey('KeyW', false); ff(1);
         // how far out past the garage front (the bay is 6.5 m in from it)
-        r.zebra.out = Math.round((z.pos.x - mid.x) * -ox + (z.pos.z - mid.z) * -oz - 6.5);
+        r.tiger.out = Math.round((z.pos.x - mid.x) * -ox + (z.pos.z - mid.z) * -oz - 6.5);
         z.speed = 0; ff(0.3);
         GAME.test.pressKey('KeyJ', true); ff(1 / 60); GAME.test.pressKey('KeyJ', false); ff(0.5);
         var a = M.active;
@@ -9919,16 +9926,16 @@ function withTimeout(p, ms) {
   check('city: the strip keeps the bank, the condo and the casino, and no more',
     cy.onStrip.length === 3 && ['bank0', 'home_condo', 'casino0'].every(function (id) { return cy.onStrip.indexOf(id) >= 0; }), JSON.stringify(cy.onStrip));
   check('city: the plots they left on the strip are built on', cy.oldPlots.every(Boolean), JSON.stringify(cy.oldPlots));
-  check('cabs: VERDE CABS is on Isla Verde, in Puerto Dorado: three bays, a cab either side, the middle kept for the Zebra Cab',
-    cy.cabs && cy.cabs.isla && cy.cabs.district === 'Puerto Dorado' && JSON.stringify(cy.cabs.bays) === '["taxi","zebra","taxi"]' &&
+  check('cabs: VERDE CABS is on Isla Verde, in Puerto Dorado: three bays, a cab either side, the middle kept for the Tiger Cab',
+    cy.cabs && cy.cabs.isla && cy.cabs.district === 'Puerto Dorado' && JSON.stringify(cy.cabs.bays) === '["taxi","tiger","taxi"]' &&
     JSON.stringify(cy.cabs.parked) === '["taxi",null,"taxi"]', JSON.stringify(cy.cabs));
   check('cabs: an open garage — you walk in off the street to the dispatch desk, no door, no room',
     cy.walkIn && cy.walkIn.desk === 'cabs0' && !cy.walkIn.room, JSON.stringify(cy.walkIn));
   check('cabs: it is for sale at the desk for $40,000, and says what fares do for it',
     cy.forSale && cy.forSale.price === 40000 && cy.forSale.says && cy.bought.owns && cy.bought.paid === 40000 && cy.bought.rate === 1200,
     JSON.stringify({ sale: cy.forSale, bought: cy.bought }));
-  check('cabs: bought, the Zebra Cab is in the middle bay, and drives out',
-    cy.zebra && cy.zebra.there && cy.zebra.aboard && cy.zebra.out > 3, JSON.stringify(cy.zebra));
+  check('cabs: bought, the Tiger Cab is in the middle bay, and drives out',
+    cy.tiger && cy.tiger.there && cy.tiger.aboard && cy.tiger.out > 3, JSON.stringify(cy.tiger));
   check('cabs: and it takes fares — one driven to its stop puts another on the board',
     cy.shift && cy.fared && cy.fared.fares === 1 && cy.fared.rate === 1240, JSON.stringify({ shift: cy.shift, fared: cy.fared }));
   check('cabs: and a day fills the till at that rate; it is green on the radar',
@@ -12874,7 +12881,7 @@ function withTimeout(p, ms) {
   check('cheats: the stars up and off, and the weather', cheat.up && cheat.clear && cheat.rain && cheat.count >= 15, JSON.stringify(cheat));
 
   // ---------- 22: landmarks ----------
-  // One a district, on a lot the blocks left empty: THE MALIBU on the strip,
+  // One a district, on a lot the blocks left empty: THE NEON TIDE on the strip,
   // the stadium in Las Colinas, ROSA PICTURES in Centro Alto, VILLA SALAZAR
   // up in the hills. Each is solid where it is built, signed, and open where
   // you would go in; nothing that was lying about ended up inside one.
@@ -13076,7 +13083,7 @@ function withTimeout(p, ms) {
   check('export: a wreck is turned away, and nobody wants the same car twice', ex.wreck && ex.once, JSON.stringify(ex));
   check('export: a full list pays the buyer\'s bonus', ex.bonus, JSON.stringify(ex));
 
-  // ---------- 26: RC BANDIT RACE ----------
+  // ---------- 26: MINI MAYHEM RACE ----------
   // A ring at the stadium gate: step in and you are driving a toy buggy on
   // the pitch against three more, after a countdown; put the controller down
   // and it is over, with you back at the gate; get home first and it pays.
@@ -13090,7 +13097,7 @@ function withTimeout(p, ms) {
       var s = R.site;
       r.site = !!s && s.cps.length >= 12;
       GAME.test.teleport(s.ring.x + 6, s.ring.z); GAME.test.fastForward(0.3);
-      r.hint = /RC BANDIT/.test(R.hint);
+      r.hint = /MINI MAYHEM/.test(R.hint);
       // not with the law on you
       GAME.police.setWanted(1);
       GAME.test.teleport(s.ring.x, s.ring.z); GAME.test.fastForward(0.3);

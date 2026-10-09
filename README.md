@@ -45,11 +45,11 @@ Want the details? **[Read the full tour →](docs/FEATURES.md)**
 
 ## What's new
 
-- 🏎 **RC BANDIT RACE** — toy buggies, two laps round the pitch at Memorial Stadium.
+- 🏎 **MINI MAYHEM RACE** — toy buggies, two laps round the pitch at Memorial Stadium.
 - 🏗 **Import/export** — two lists of wanted cars for the crane on the docks, paid by condition, with a bonus for each full list.
 - 📻 **Radio with personality** — a frequency, a jingle and a DJ for every station, with talk and 1986 ads between the songs.
 - 🔧 **Damage you can see** — bumpers that come off, bonnets that spring, tyres that burst and spark.
-- 🏛 **Landmarks** — the Malibu on the strip, a stadium, a film lot and Rico's villa in the hills.
+- 🏛 **Landmarks** — the Neon Tide on the strip, a stadium, a film lot and Rico's villa in the hills.
 - 🕹 **Cheats** — PANZER, ASPIRINE, the weapon sets and the rest of Vice City's words, typed into CHEATS on the pause screen.
 - 🪖 **Six stars** — the army, its soldiers and a tank you can take; and cruisers that ram, PIT and box you in.
 - 💵 **Store robberies** — a gun on the clerk empties the till while you keep it there, and the law is waiting outside.
@@ -57,7 +57,7 @@ Want the details? **[Read the full tour →](docs/FEATURES.md)**
 - 🟣 **Gangs and turf** — Rico's crew in plum and black against Lola's people in pink, each on their own streets, drawing on sight once Rico has a price on you, and turf that changes hands as the story goes.
 - 🎭 **Story jobs in acts** — a won race brings sore losers or the law, a rampage the crew behind it, the collector's bag goes back to the lock-up, and HIGH TIDE ends with Rico's stand on the marina.
 - 🎬 **Talking heads** — Lola's jobs open on a cut to her lock-up, Vice City style: letterbox, the two of you face to face, subtitles with a face drawn in code and a babble voice for everyone. Rico gets his own cut to the marina before the end.
-- 🏪 **Businesses that pay** — buy the barber, THREADS, a hardware store, the bar in the Lucky Gull, or VERDE CABS on Isla Verde (an open garage with a Zebra Cab for its owner, earning more with every fare you drive); the till fills every day for you to come and empty — and a hold-up there runs with it.
+- 🏪 **Businesses that pay** — buy the barber, THREADS, a hardware store, the bar in the Lucky Gull, or VERDE CABS on Isla Verde (an open garage with a Tiger Cab for its owner, earning more with every fare you drive); the till fills every day for you to come and empty — and a hold-up there runs with it.
 - 💰 **The big score** — once the bridges open, Lola wants the Savings & Loan: case it with your camera, fetch Benny "the Ear" from the marina, get a getaway car resprayed, then keep the floor while he works the vault.
 - 🗞️ **A city with its own business** — getaway chases, hold-ups, an armoured van and racers at the lights; a dozen strangers with a favour each, on both islands; and the morning paper when you make the news.
 - 🌊 **Life on the water** — jet skis and boats out in the bay, a jet ski of your own at the northern pier, and the harbour patrol's launches when you're wanted at sea.

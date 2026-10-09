@@ -133,11 +133,11 @@ var VEHICLES = {
   sports: { label: 'Vulture GT', maxSpeed: 40, accel: 17, grip: 3.6, turn: 2.7, hp: 210, l: 4.3, w: 1.95, cabinH: 0.5, bodyH: 0.5, colors: [0xff2f7a, 0x38e8ff, 0xffe14f, 0xffffff, 0xb040ff] },
   sedan: { label: 'Cadenza', maxSpeed: 29, accel: 10, grip: 5.2, turn: 2.1, hp: 245, l: 4.5, w: 1.9, cabinH: 0.62, bodyH: 0.55, colors: [0x9fb4c8, 0xc0a0d8, 0x88c8a8, 0xd8d0c0, 0x8090b0] },
   taxi: { label: 'Taxi', maxSpeed: 30, accel: 10.5, grip: 5.2, turn: 2.2, hp: 245, l: 4.5, w: 1.9, cabinH: 0.62, bodyH: 0.55, colors: [0xf0c020], cab: true },
-  // VERDE CABS' own (shops.js): cab yellow in black zebra
+  // VERDE CABS' own (shops.js): cab yellow in black tiger
   // stripes. A little quicker, surer and tougher than the fleet's, never in
   // traffic — it is in the middle bay of the firm's garage once the firm is
   // yours, and it takes fares like any cab
-  zebra: { label: 'Zebra Cab', maxSpeed: 35, accel: 13, grip: 5.6, turn: 2.4, hp: 300, l: 4.5, w: 1.9, cabinH: 0.62, bodyH: 0.55, colors: [0xf2c21a], cab: true },
+  tiger: { label: 'Tiger Cab', maxSpeed: 35, accel: 13, grip: 5.6, turn: 2.4, hp: 300, l: 4.5, w: 1.9, cabinH: 0.62, bodyH: 0.55, colors: [0xf2c21a], cab: true },
   van: { label: 'Cargo Van', maxSpeed: 23, accel: 7, grip: 6, turn: 1.7, hp: 360, l: 5.1, w: 2.1, cabinH: 1.0, bodyH: 0.9, colors: [0x9a8a78, 0x7888a0, 0xa87868] },
   police: { label: 'Cruiser', maxSpeed: 35, accel: 13.5, grip: 5.0, turn: 2.4, hp: 280, l: 4.6, w: 1.95, cabinH: 0.6, bodyH: 0.55, colors: [0xe8ecf2] },
   ambulance: { label: 'Ambulance', maxSpeed: 27, accel: 8.5, grip: 5.6, turn: 1.8, hp: 335, l: 5.3, w: 2.15, cabinH: 1.15, bodyH: 1.0, colors: [0xf2f2f6] },
@@ -174,9 +174,9 @@ var VEHICLES = {
   // truck that unloads soldiers, and a tank — slow, near enough
   // indestructible, crushing whatever it drives into, a turret that follows
   // your aim and a cannon on LMB. Take one off them and it is yours.
-  // a toy: the RC BANDIT RACE's buggy (rc.js), a fifth the size of the real
+  // a toy: the MINI MAYHEM RACE's buggy (rc.js), a fifth the size of the real
   // thing, driven from the controller at the stadium gate
-  rc: { label: 'RC Bandit', maxSpeed: 15, accel: 20, grip: 6.5, turn: 3.6, hp: 45, l: 0.72, w: 0.42, cabinH: 0, bodyH: 0.12, colors: [0x38e8ff], rc: true },
+  rc: { label: 'Mini Mayhem', maxSpeed: 15, accel: 20, grip: 6.5, turn: 3.6, hp: 45, l: 0.72, w: 0.42, cabinH: 0, bodyH: 0.12, colors: [0x38e8ff], rc: true },
   tank: { label: 'Mastodon', maxSpeed: 17, accel: 7, grip: 7.5, turn: 1.45, hp: 4200, l: 6.6, w: 3.3, cabinH: 0, bodyH: 1.0, colors: [0x4a5a36], tank: true, army: true },
   armytruck: { label: 'Quartermaster', maxSpeed: 26, accel: 8, grip: 5.8, turn: 1.6, hp: 650, l: 6.4, w: 2.5, cabinH: 0.9, bodyH: 0.9, colors: [0x55603e], army: true },
   policeboat: { label: 'Harbour Patrol', maxSpeed: 32, accel: 12.5, grip: 1.8, turn: 1.6, hp: 340, l: 6.6, w: 2.2, cabinH: 0, bodyH: 0.7, colors: [0xf2f4f8], boat: true, police: true }
@@ -553,7 +553,7 @@ function buildCarMesh(type, colorHex, parts) {
       for (var rb = 0; rb < 4; rb++) b.addBox(0, 0.42 + s.bodyH / 2 + 1.62, -0.9 - s.l * 0.27 + rb * s.l * 0.18, s.w + 0.1, 0.06, 0.08, 0, 0x4a4a32, 0);
       b.addBox(hw - 0.4, 0.42 + s.bodyH / 2 + 0.05, -0.9, 0.3, 0.1, s.l * 0.5, 0, 0xf0f0e0, 0);   // a white star stencil, near enough
     }
-    if (type === 'zebra') {
+    if (type === 'tiger') {
       // The stripes, black on the yellow: down both flanks, each one leaning
       // back as it climbs (three short steps of it, which is how a slanted
       // band is drawn in boxes) and no two the same width; and over the
@@ -2149,6 +2149,18 @@ GAME.vehicles = (function () {
         if (!ai.wedged) { ai.wedgeX = car.pos.x; ai.wedgeZ = car.pos.z; }
         ai.wedged = (ai.wedged || 0) + 1;
         var back = ai.prev || city.nearestNode(car.pos.x - Math.sin(car.heading) * 40, car.pos.z - Math.cos(car.heading) * 40);
+        // (with no corner he came from, the nearest one to a point behind
+        // him can be the very one ahead — and then he never turned round at
+        // all, pushing a van along a whole block. The way back is whichever
+        // road off the corner ahead runs furthest behind him.)
+        if (!back || back === ai.node) {
+          var hbx = Math.sin(car.heading), hbz = Math.cos(car.heading), nbb = ai.node ? city.neighbors(ai.node) : [], bestB = 0;
+          back = null;
+          for (var bi = 0; bi < nbb.length; bi++) {
+            var behind = -((nbb[bi].x - car.pos.x) * hbx + (nbb[bi].z - car.pos.z) * hbz);
+            if (behind > bestB) { bestB = behind; back = nbb[bi]; }
+          }
+        }
         // (at once if he was already going round it: that gap was tried)
         if ((ai.wedged >= 2 || ai.passT > 0) && back && back !== ai.node) {
           ai.avoidX = ai.wedgeX; ai.avoidZ = ai.wedgeZ; ai.avoidT = GAME.time + 25;
@@ -2214,7 +2226,17 @@ GAME.vehicles = (function () {
         if (fd < blockD) { blockD = fd; blockCar = o; }
       }
     }
-    if (ai.bolt && blockCar && blockD < 6.5 && Math.abs(car.speed) < 4.5) {
+    // (the car he is going round counts too: it is left out of `blocked` while
+    // he passes it, so a van across both lanes — no way round on either side
+    // — was pushed along the road pass after pass, for good. Across the road
+    // it is as wide as it is long.)
+    var shoveCar = blockCar && blockD < 6.5 ? blockCar : null;
+    var pc0 = ai.passT > 0 ? ai.passCar : null;
+    if (!shoveCar && pc0 && !pc0.gone) {
+      var px0 = pc0.pos.x - car.pos.x, pz0 = pc0.pos.z - car.pos.z, pfd0 = px0 * fx + pz0 * fz;
+      if (pfd0 > 0 && pfd0 < 7 && Math.abs(px0 * fz - pz0 * fx) < (car.spec.w + Math.max(pc0.spec.w, pc0.spec.l)) / 2 + 0.3) shoveCar = pc0;
+    }
+    if (ai.bolt && shoveCar && Math.abs(car.speed) < 4.5) {
       ai.shoveT = (ai.shoveT || 0) + dt;
       if (ai.shoveT > 1.5) ai.shoving = true;
     } else { ai.shoveT = 0; ai.shoving = false; }
@@ -2362,7 +2384,7 @@ GAME.vehicles = (function () {
       // pad kept the tower's find hidden the whole time.
       var pcar = (P.inCar && P.car) || (P.entering && P.entering.car) || null;
       if (sp.vtype && !sp.live && pcar && pcar.fromSpot === sp) continue;
-      // (a spot can wait on something: the Zebra Cab's bay, on the firm being yours)
+      // (a spot can wait on something: the Tiger Cab's bay, on the firm being yours)
       if (sp.need && !sp.live && !sp.need()) continue;
       var minD = special ? 0 : 40 * 40;
       // a spot can ask to exist at longer range: the helipad finds sit on

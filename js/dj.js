@@ -17,7 +17,7 @@ GAME.dj = (function () {
         'If your car doesn\'t have a cassette deck, I don\'t know what to tell you. Get a new car. Steal one, I don\'t care.',
         'Somebody called in to say synthesizers aren\'t real instruments. Somebody is wrong.',
         'Johnny Wave here, coming to you live from a booth with no windows and a lot of opinions.',
-        'Traffic on the strip is backed up past the Malibu. Again. Maybe walk. Ha. Nobody walks.',
+        'Traffic on the strip is backed up past the Neon Tide. Again. Maybe walk. Ha. Nobody walks.',
         'Fun fact: this next one was recorded entirely on a home computer. The future is weird, Costa Rosa.'
       ] },
     'RIVIERA FM': { freq: '96.1 FM', genre: 'DISCO, BOOGIE & POP', dj: 'COCO RIVIERA', color: '#ffe14f',

@@ -1,4 +1,4 @@
-// RC BANDIT RACE, a toy-car side job: a ring at
+// MINI MAYHEM RACE, a toy-car side job: a ring at
 // the gate of Memorial Stadium (landmarks.js), and in it a remote-control
 // buggy on the pitch with three others on the grid. Two laps round the
 // cones; first past the last gate wins. The camera comes down to the toy's
@@ -56,7 +56,7 @@ GAME.rc = (function () {
       var c = GAME.vehicles.spawnCar('rc', x, z, h, { occupied: 'ai', ai: { mode: 'race' }, mission: true, color: g[2] });
       if (c) { c.cpIndex = 0; c.rcSkill = 0.7 + Math.random() * 0.15; run.rivals.push(c); }
     });
-    GAME.hud.missionStart('RC BANDIT RACE', 'Two laps round the cones');
+    GAME.hud.missionStart('MINI MAYHEM RACE', 'Two laps round the cones');
     GAME.audio.pickup();
     if (GAME.track) GAME.track('rc-started');
     return true;
@@ -150,7 +150,7 @@ GAME.rc = (function () {
     hint = '';
     if (d2 > (RING_R + 1.5) * (RING_R + 1.5)) armed = true;
     if (P.inCar || P.state !== 'alive' || d2 > 30 * 30) return;
-    hint = 'RC BANDIT RACE — step into the ring' + (prefs().best ? '  ·  best ' + prefs().best.toFixed(1) + 's' : '');
+    hint = 'MINI MAYHEM RACE — step into the ring' + (prefs().best ? '  ·  best ' + prefs().best.toFixed(1) + 's' : '');
     if (armed && d2 < RING_R * RING_R && !busy() && GAME.police.wanted === 0) begin();
   }
 

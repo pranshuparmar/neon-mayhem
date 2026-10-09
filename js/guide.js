@@ -303,7 +303,7 @@ GAME.guide = (function () {
     if (step === 'ride') {
       if (P.inCar && landCar(P.car)) {
         toRing();
-        say('Now we\'re moving. I have a delivery for you — the ring\'s on your map, a few blocks in off the strip by the Malibu. Follow the line, pull in and stop.', 7);
+        say('Now we\'re moving. I have a delivery for you — the ring\'s on your map, a few blocks in off the strip by the Neon Tide. Follow the line, pull in and stop.', 7);
         return;
       }
       if (P.inCar && !saidWrongRide) { saidWrongRide = true; say('Something with wheels, kid — this job\'s on the road.', 5); }

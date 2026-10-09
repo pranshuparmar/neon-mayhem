@@ -2,7 +2,7 @@
 // mansion in the hills — built in Costa Rosa's own boxes, with their names
 // on signs painted onto a canvas here.
 //
-//   THE MALIBU            the club on the Ocean Strip's south end: pink
+//   THE NEON TIDE            the club on the Ocean Strip's south end: pink
 //                         stucco, neon bands, a marquee, searchlights
 //   MEMORIAL STADIUM      Las Colinas: a bowl of stands round a pitch, the
 //                         gate open to the road, floodlights on four masts
@@ -15,7 +15,7 @@
 // and open where you would walk or drive in.
 GAME.landmarks = (function () {
   var SITES = [
-    { id: 'malibu', name: 'THE MALIBU', x: 196, z: 418, lot: 56 },
+    { id: 'tide', name: 'THE NEON TIDE', x: 196, z: 418, lot: 56 },
     { id: 'stadium', name: 'MEMORIAL STADIUM', x: 98, z: 450, lot: 58 },
     { id: 'pictures', name: 'ROSA PICTURES', x: 18, z: 18, lot: 42 },
     { id: 'villa', name: 'VILLA SALAZAR', x: -14, z: -298, lot: 42 }
@@ -24,7 +24,7 @@ GAME.landmarks = (function () {
 
   // ---------- the signs: one canvas, a row each ----------
   var SIGN_ROWS = [
-    { text: 'THE MALIBU', col: '#ff4fa3', font: 'italic 900 50px "Segoe UI", Arial, sans-serif' },
+    { text: 'THE NEON TIDE', col: '#ff4fa3', font: 'italic 900 50px "Segoe UI", Arial, sans-serif' },
     { text: 'MEMORIAL STADIUM', col: '#38e8ff', font: '900 40px "Segoe UI", Arial, sans-serif' },
     { text: 'ROSA PICTURES', col: '#ffe14f', font: 'italic 900 44px Georgia, serif' },
     { text: 'VILLA SALAZAR', col: '#f4f1e8', font: '700 40px Georgia, serif' }
@@ -87,8 +87,8 @@ GAME.landmarks = (function () {
     return m;
   }
 
-  // ---------- THE MALIBU ----------
-  function malibu(site, b, glow, group) {
+  // ---------- THE NEON TIDE ----------
+  function neonTide(site, b, glow, group) {
     var F = frame(site), PINK = 0xf2b8d2, TEAL = 0x7fd8d0;
     F.box(b, 0, 4.5, -4, 34, 9, 22, PINK, true);                     // the club
     F.box(b, 0, 10.2, -6, 24, 2.4, 14, PINK, true);                  // the upper deck
@@ -198,7 +198,7 @@ GAME.landmarks = (function () {
     return F;
   }
 
-  var BUILD = { malibu: malibu, stadium: stadium, pictures: pictures, villa: villa };
+  var BUILD = { tide: neonTide, stadium: stadium, pictures: pictures, villa: villa };
   function build() {
     if (built || !GAME.city || !GAME.city.hash) return;
     built = true;

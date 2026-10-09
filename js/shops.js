@@ -747,7 +747,7 @@ GAME.shops = (function () {
     // a room — you walk in (or drive in) under the header, past the cabs in
     // their bays, to the dispatch desk at the back. Three bays, nose out: a
     // cab either side for anybody to take, and the middle one kept for the
-    // Zebra Cab, which is there once the firm is yours (zebraBay).
+    // Tiger Cab, which is there once the firm is yours (tigerBay).
     function buildGarage(loc, placed, S, gy, fx, fz, px2) {
       var dir = placed.dir, flip = dir.x !== 0;
       var HW = S.w / 2, IN = HW - 0.5, BACK = S.d - 0.5;
@@ -818,7 +818,7 @@ GAME.shops = (function () {
       // ---- the bays (parked spots: vehicles.js keeps them stocked)
       var nose = Math.atan2(-dir.x, -dir.z);
       loc.bays = [-8, 0, 8].map(function (a) {
-        var sp = { x: X(a, 6.5), z: Z(a, 6.5), heading: nose, vtype: a === 0 ? 'zebra' : 'taxi', isla: !!loc.isla };
+        var sp = { x: X(a, 6.5), z: Z(a, 6.5), heading: nose, vtype: a === 0 ? 'tiger' : 'taxi', isla: !!loc.isla };
         if (a === 0) sp.need = function () { return !!(GAME.business && GAME.business.owns(loc.id)); };
         GAME.city.parkedSpots.push(sp);
         return sp;
@@ -1590,8 +1590,8 @@ GAME.shops = (function () {
       case 'derby': return GAME.derby.items();
       case 'cabs': return [{ id: 'cabs_yard', name: 'THE GARAGE', noPrice: true, off: true, chip: ' ',
         ds: GAME.business && GAME.business.owns('cabs0')
-          ? 'The cabs in the bays are yours to take — and the Zebra Cab in the middle one. Every fare you drive puts more on the board.'
-          : 'The cabs in the bays are the firm\'s; take one out and start a shift. Own the firm and the Zebra Cab is in the middle bay, and every fare you drive puts more on its board.' }];
+          ? 'The cabs in the bays are yours to take — and the Tiger Cab in the middle one. Every fare you drive puts more on the board.'
+          : 'The cabs in the bays are the firm\'s; take one out and start a shift. Own the firm and the Tiger Cab is in the middle bay, and every fare you drive puts more on its board.' }];
     }
     return [];
   }
@@ -1898,10 +1898,10 @@ GAME.shops = (function () {
     // the place itself, or what is in its till (business.js)
     if (id.indexOf('biz_') === 0) {
       GAME.business.act(openShop, id);
-      // the cab firm's: the Zebra Cab is in its bay as you sign
+      // the cab firm's: the Tiger Cab is in its bay as you sign
       if (id === 'biz_buy' && openShop && openShop.kind === 'cabs' && openShop.bays) {
         GAME.vehicles.fillSpot(openShop.bays[1]);
-        GAME.hud.message('And the Zebra Cab in the middle bay is yours — take it out.', 4);
+        GAME.hud.message('And the Tiger Cab in the middle bay is yours — take it out.', 4);
       }
       if (openShop) render();
       GAME.audio.pickup();

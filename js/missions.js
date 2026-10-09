@@ -165,7 +165,7 @@ GAME.missions = (function () {
     // (BEACH RUN is the first job Lola shows a new player, and it sat sixty
     // metres from where a new game starts: in and out of the ring before the
     // first drive was a drive. It waits a few blocks in off the strip, by
-    // the Malibu, now — the best part of half a kilometre and three turns.)
+    // the Neon Tide, now — the best part of half a kilometre and three turns.)
     { id: 'courier2', type: 'courier', name: 'BEACH RUN', reward: 340, time: 115, start: { x: 204, z: 225 }, drops: 4, legMin: 300, legMax: 660 },
     { id: 'rampage0', type: 'rampage', name: 'STRIP HAVOC', reward: 400, time: 30, target: 3000, weapon: 'smg', ammo: 160, start: { x: 241.6, z: -258.4 } },
     { id: 'rampage1', type: 'rampage', name: 'HARBOR HAVOC', reward: 450, time: 30, target: 3500, weapon: 'shotgun', ammo: 30, start: { x: -341.6, z: 258.4 } },
@@ -2684,7 +2684,7 @@ GAME.missions = (function () {
       // taxi / ambulance jobs start from within the vehicle
       var jobKind = null;
       if (P.inCar && P.car) {
-        if (P.car.spec.cab) jobKind = 'taxifare';     // a fleet cab or the Zebra Cab
+        if (P.car.spec.cab) jobKind = 'taxifare';     // a fleet cab or the Tiger Cab
         else if (P.car.type === 'ambulance') jobKind = 'ambulance';
         else if (P.car.type === 'icecream') jobKind = 'icecream';
         else if (P.car.type === 'police') jobKind = 'vigilante';
