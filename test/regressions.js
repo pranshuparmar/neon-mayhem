@@ -8262,7 +8262,7 @@ function withTimeout(p, ms) {
       L.open(); r.ropesOnMenu = L.options().some(function (o) { return /SHOW ME THE ROPES/.test(o); });
       pages.length = 0;
       L.choose(/SHOW ME THE ROPES/); ff(0.3);
-      r.ride = { step: G.step, car: !!G.car, hud: hud(), near: G.car ? Math.round(Math.hypot(G.car.pos.x - P.pos.x, G.car.pos.z - P.pos.z)) : -1,
+      r.ride = { step: G.step, car: !!G.car, bike: !!(G.car && G.car.spec.bike), hud: hud(), near: G.car ? Math.round(Math.hypot(G.car.pos.x - P.pos.x, G.car.pos.z - P.pos.z)) : -1,
         islandTease: pages.some(function (t) { return /Isla Verde/.test(t) && /shut/.test(t) && !/four/.test(t); }) };
       GAME.isTouch = true; r.touchWords = G.now(); GAME.isTouch = keepTouch;
       // --- in the car: off to the ring, on the map ---
@@ -8366,8 +8366,8 @@ function withTimeout(p, ms) {
   check('guide: closing her is finding your own way, told the island is shut, and the old hints keep quiet',
     gd.skipped && !!gd.skipLine && gd.oldHints === 0, JSON.stringify({ skipped: gd.skipped, line: gd.skipLine, oldHints: gd.oldHints }));
   check('guide: a save with a job done is not asked, and keeps the old welcome', !gd.oldSave.asked && gd.oldSave.welcome, JSON.stringify(gd.oldSave));
-  check('guide: SHOW ME THE ROPES on her menu starts it: a car marked close by, the button named',
-    gd.ropesOnMenu && gd.ride.step === 'ride' && gd.ride.car && gd.ride.near < 100 && /Get in the car/.test(gd.ride.hud) && gd.ride.islandTease &&
+  check('guide: SHOW ME THE ROPES on her menu starts it: a bike marked close by, the button named',
+    gd.ropesOnMenu && gd.ride.step === 'ride' && gd.ride.car && gd.ride.bike && gd.ride.near < 100 && /Get on the bike/.test(gd.ride.hud) && gd.ride.islandTease &&
     /ENTER/.test(gd.touchWords), JSON.stringify({ menu: gd.ropesOnMenu, ride: gd.ride, touch: gd.touchWords }));
   check('guide: in the car, the ring is routed on the map', gd.ring.step === 'ring' && gd.ring.routed && /ring/.test(gd.ring.hud), JSON.stringify(gd.ring));
   check('guide: the ring starts BEACH RUN made kinder — three drops, 150 s — and leaves the real one alone',

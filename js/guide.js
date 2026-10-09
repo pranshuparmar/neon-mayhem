@@ -4,9 +4,9 @@
 // ME AROUND, or I'LL FIND MY OWN WAY.
 //
 // Shown around, you are walked through one thing of each kind the town is
-// made of: a ride (a parked car, marked, with the button for whatever you
-// play on), a job (BEACH RUN, the delivery a hundred metres up the strip
-// from where a new game starts — three drops instead of four, on a kinder
+// made of: a ride (a bike at the kerb, marked, with the button for whatever
+// you play on), a job (BEACH RUN, a few blocks in off the strip from where a
+// new game starts, so there is a drive to it — three drops instead of four, on a kinder
 // clock, because failing your first job is a bad first five minutes), and
 // what the money is for (CORTES CUTS, a short drive up into Las Colinas: a new look with the
 // pay). Then the wider picture: the other rings, what opens the bridges to
@@ -101,12 +101,13 @@ GAME.guide = (function () {
     arrow = null;
   }
 
-  // the nearest parked car to hand you, or one parked at the kerb for you
+  // A bike for the first ride: the nearest one parked nearby, or one stood
+  // at the kerb for you. (It was the nearest parked car, which is a sedan
+  // more often than not; the strip on two wheels is a better first minute.)
   function pickCar() {
     var P = GAME.player, best = null, bd = 90 * 90;
     GAME.world.cars.forEach(function (c) {
-      if (!landCar(c) || c.occupied === 'ai' || c.mission || !c.ai || c.ai.mode !== 'parked') return;
-      if (c.spec.bike) return;      // four wheels for a first drive
+      if (!landCar(c) || !c.spec.bike || c.occupied === 'ai' || c.mission || !c.ai || c.ai.mode !== 'parked') return;
       var d = U.dist2(c.pos.x, c.pos.z, P.pos.x, P.pos.z);
       if (d < bd) { bd = d; best = c; }
     });
@@ -114,7 +115,7 @@ GAME.guide = (function () {
     var rp = GAME.city.nearestRoadPoint(P.pos.x, P.pos.z);
     var along = rp.axis === 'z', side = along ? (P.pos.x > rp.x ? 1 : -1) : (P.pos.z > rp.z ? 1 : -1);
     var x = rp.x + (along ? side * 4.6 : 0), z = rp.z + (along ? 0 : side * 4.6);
-    return GAME.vehicles.spawnCar('sedan', x, z, along ? 0 : Math.PI / 2, { ai: { mode: 'parked' } });
+    return GAME.vehicles.spawnCar('motorcycle', x, z, along ? 0 : Math.PI / 2, { ai: { mode: 'parked' } });
   }
 
   // ---------- the steps ----------
@@ -214,7 +215,7 @@ GAME.guide = (function () {
       say('Good, you\'ve got wheels. I have a delivery for you — the ring\'s on your map. Follow the line, pull in and stop.', 7);
     } else {
       toRide();
-      say('Good. First, wheels. See the arrow? Nobody\'s using that one — ' + getIn() + ' to get in.', 7);
+      say('Good. First, wheels. See the arrow? That bike\'s yours for the day — ' + getIn() + ' to get on.', 7);
     }
     var tease = islandTease('And that island across the water? ');
     if (tease) say(tease, 7);
@@ -254,14 +255,14 @@ GAME.guide = (function () {
     if (step === 'ride') {
       if (P.inCar && landCar(P.car)) {
         toRing();
-        say('Now we\'re moving. I have a delivery for you — the ring\'s on your map, just up the strip. Follow the line, pull in and stop.', 7);
+        say('Now we\'re moving. I have a delivery for you — the ring\'s on your map, a few blocks in off the strip by the Malibu. Follow the line, pull in and stop.', 7);
         return;
       }
       if (P.inCar && !saidWrongRide) { saidWrongRide = true; say('Something with wheels, kid — this job\'s on the road.', 5); }
       if (!car || car.dead || GAME.world.cars.indexOf(car) < 0 || car.occupied === 'ai' ||
         U.dist2(car.pos.x, car.pos.z, f.x, f.z) > 140 * 140) car = pickCar();
       if (car && !P.interior) showArrow(car); else hideArrow();
-      objective('FIRST DAY', 'Get in the car under the arrow — ' + getIn());
+      objective('FIRST DAY', 'Get on the bike under the arrow — ' + getIn());
       if (a) leave('Already on something? Good.');
       return;
     }
@@ -342,7 +343,7 @@ GAME.guide = (function () {
     // what she would tell you to do right now (her WHAT NEXT answer)
     now: function () {
       return {
-        ride: 'Get in the car under the arrow — ' + getIn() + '.',
+        ride: 'Get on the bike under the arrow — ' + getIn() + '.',
         ring: 'Drive into the delivery ring on your map and stop in it.',
         job: 'Get the deliveries done — follow the line on your radar.',
         paid: 'Nice work. Hang on a second.',
