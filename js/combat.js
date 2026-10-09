@@ -427,8 +427,7 @@ GAME.combat = (function () {
       }
       if (!lockTarget && GAME.frame % 20 === 0) lockTarget = bestCandidate();
     } else {
-      // (not aiming, the mouse wheel steps through what you carry — the
-      // way Vice City's did)
+      // (not aiming, the mouse wheel steps through what you carry)
       if (inp.wheel !== 0 && !P.inCar) cycle(inp.wheel > 0 ? 1 : -1);
       inp.wheel = 0;
     }
@@ -613,8 +612,8 @@ GAME.combat = (function () {
     shotgun: { color: 0xff8a3d, label: 'SHOTGUN AMMO' },
     rifle: { color: 0x8dffd8, label: 'RIFLE' },
     cash: { color: 0x8dffd8, label: 'CASH' },
-    // the rest of the arsenal (arsenal.js), out in the city where Vice City
-    // left its own: on corners, for whoever looks
+    // the rest of the arsenal (arsenal.js), out in the city: on corners,
+    // for whoever looks
     bat: { color: 0xffd24a, label: 'BASEBALL BAT' },
     knife: { color: 0xffd24a, label: 'KNIFE' },
     katana: { color: 0xffd24a, label: 'KATANA' },

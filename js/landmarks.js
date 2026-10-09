@@ -1,5 +1,4 @@
-// One landmark a district, on a lot the city's blocks left empty: the places
-// Vice City had — a nightclub on the strip, a stadium, a film lot and a
+// One landmark a district, on a lot the city's blocks left empty: a nightclub on the strip, a stadium, a film lot and a
 // mansion in the hills — built in Costa Rosa's own boxes, with their names
 // on signs painted onto a canvas here.
 //

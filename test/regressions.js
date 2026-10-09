@@ -296,7 +296,7 @@
 //      dropping it brings the stars; a day to restock; never your own.
 //  20. THE TOP END    — a sixth star and the army; a tank you can take,
 //      whose cannon and tracks work for you; cruisers that ram, PIT, box.
-//  21. CHEATS         — Vice City's codes, typed into CHEATS on the pause
+//  21. CHEATS         — the codes, typed into CHEATS on the pause
 //      screen; a word that is not one does nothing.
 //  22. LANDMARKS      — a club, a stadium, a film lot and a villa, solid,
 //      signed, open at the gate, with nothing buried in them.
@@ -1465,6 +1465,20 @@ function withTimeout(p, ms) {
     r.first = told();
     GAME.test.fastForward(10);
     r.stayed = told();
+    // and flying over it is not arriving at it (a plane over the barrier
+    // was told the bridge was shut)
+    GAME.test.teleport(-60, 40); GAME.test.fastForward(0.5);
+    var hx = gx + ax * sgn * 12, hz = gz + az * sgn * 12;
+    // (boarded well away from it: stood on the deck by the gate, you are
+    // told before you ever take off)
+    var heli = GAME.vehicles.spawnCar('helicopter', -56, 40, 0, {});
+    GAME.enterCar(heli); GAME.test.fastForward(1.5);
+    window.__msgs = [];
+    for (var hf = 0; hf < 180; hf++) { heli.pos.set(hx, deckY + 25, hz); heli.speed = 0; heli.vy = 0; GAME.test.fastForward(1 / 60); }
+    r.over = { inHeli: P.inCar && P.car === heli, told: told() };
+    if (P.inCar) GAME.exitCar();
+    GAME.test.fastForward(0.3);
+    GAME.vehicles.removeCar(heli);
     GAME.isla.setOpen(was);
     GAME.test.teleport(-60, 40);
     GAME.test.fastForward(0.3);
@@ -1476,6 +1490,7 @@ function withTimeout(p, ms) {
     gate.under === 0, gate.under + ' banners in 8 s at y=' + gate.underY + ' under a deck at ' + gate.deckY);
   check('audit: up on the deck, it says so once — and not again while you stand there',
     gate.first === 1 && gate.stayed === 1, 'first=' + gate.first + ' after 12 s=' + gate.stayed);
+  check('audit: flying over a closed gate, nobody tells you the bridge is closed', gate.over && gate.over.inHeli && gate.over.told === 0, JSON.stringify(gate.over));
 
   // The next arrest after a bust takes as long as the first one. The hold
   // timer used to be left where the last arrest put it, so the second came
@@ -12099,7 +12114,7 @@ function withTimeout(p, ms) {
   // Lola's lock-up, the two of them face to face, subtitles with a face and a
   // voice. The world holds still while it plays; a key moves it on, Esc cuts
   // it short, and the job starts when it is over. A retry goes straight back
-  // in, as GTA's did. The faces are SVG made in code, and the voices are
+  // in. The faces are SVG made in code, and the voices are
   // Web Audio blips that make nothing at all while muted.
   var faces = await page.evaluate(function () {
     var out = { ids: GAME.cast.ids(), bad: [], noMouth: [] };
@@ -12492,7 +12507,7 @@ function withTimeout(p, ms) {
     gang.harborAfter === 'lola' && gang.doradoAfter === 'lola' && gang.peaceAfter, JSON.stringify(gang));
 
   // ---------- 18: the arsenal ----------
-  // Bat, knife, katana and chainsaw (one at a time, as in Vice City),
+  // Bat, knife, katana and chainsaw (one at a time),
   // grenades and Molotovs (one kind at a time), a scoped sniper rifle and a
   // rocket launcher; an SVG icon each, drawn in code; and the weapon wheel,
   // held open on Z with the world slowed, a tap of it stepping to the next.
@@ -12729,12 +12744,24 @@ function withTimeout(p, ms) {
         r.cannon = car.dead || car.hp < hp0;
         GAME.police.clearWanted();
         // and it drives over what is in its way
+        // (on the ground where it is put, and kept in the tank's path: shoved
+        // off to one side by the first touch, it was no longer in the way of
+        // anything, and the check came down to which way it was knocked)
         var car2 = GAME.test.spawnCar('sedan', 0, 0); spawned.push(car2);
-        car2.pos.set(t.pos.x + Math.sin(t.heading) * 3.5, car2.pos.y, t.pos.z + Math.cos(t.heading) * 3.5);
         car2.occupied = null;
+        function inFront(d) {
+          var x = t.pos.x + Math.sin(t.heading) * d, z = t.pos.z + Math.cos(t.heading) * d;
+          car2.pos.set(x, GAME.city.groundY(x, z), z); car2.speed = 0; car2.vx = car2.vz = 0;
+        }
+        inFront(3.5);
         var hp2 = car2.hp;
-        for (var c2 = 0; c2 < 60; c2++) { t.speed = 6; GAME.test.fastForward(1 / 60); }
+        for (var c2 = 0; c2 < 120 && !(car2.dead || car2.hp < hp2 - 100); c2++) {
+          var ox = car2.pos.x - t.pos.x, oz = car2.pos.z - t.pos.z;
+          if (Math.abs(ox * Math.cos(t.heading) - oz * Math.sin(t.heading)) > 1.5) inFront(3.2);
+          t.speed = 6; GAME.test.fastForward(1 / 60);
+        }
         r.crush = car2.dead || car2.hp < hp2 - 100;
+        if (!r.crush) r.crushWhy = { hp: Math.round(car2.hp), hp0: Math.round(hp2), d: Math.round(Math.hypot(car2.pos.x - t.pos.x, car2.pos.z - t.pos.z) * 10) / 10, ts: +t.speed.toFixed(1) };
         GAME.exitCar(); GAME.test.fastForward(1.5);
       }
       GAME.police.clearWanted();
@@ -12792,7 +12819,7 @@ function withTimeout(p, ms) {
   check('law: with the tactics off they only follow', law.politeOff, JSON.stringify(law));
 
   // ---------- 21: cheats ----------
-  // Vice City's words, typed into CHEATS on the pause screen: health,
+  // The codes, typed into CHEATS on the pause screen: health,
   // armour, the three weapon sets, the stars off and on, a tank, cars, the
   // weather. A word that is not one does nothing.
   var cheat = await page.evaluate(function () {

@@ -1288,7 +1288,7 @@ function updateOnFoot(dt) {
 // G (or the horn button): a stolen cruiser's lights and siren go on and off;
 // anything else has a horn. Neither existed — a cruiser was a white car with
 // a dead lightbar, and nobody could honk at anybody. The ice cream truck's
-// horn is its chimes, as the van's was in Vice City: on a round, the jingle
+// horn is its chimes: on a round, the jingle
 // is what brings people to the hatch (missions.js).
 var hornSounding = false;
 function playerHorn(on, low) {

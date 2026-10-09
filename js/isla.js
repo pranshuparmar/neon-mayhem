@@ -2217,8 +2217,10 @@ GAME.isla = (function () {
       var cx = (g.minX + g.maxX) / 2, cz = (g.minZ + g.maxZ) / 2;
       if (U.dist2(px, pz, cx, cz) > 34 * 34) continue;
       // up on the bridge, approach ramp included — not on the beach or in the
-      // water underneath it
-      if (GAME.city.crossingY(px, pz, py) === null) continue;
+      // water underneath it, and not flying over it either (a plane over the
+      // barrier was told the bridge was shut)
+      var deckY = GAME.city.crossingY(px, pz, py);
+      if (deckY === null || py > deckY + 4) continue;
       at = i;
       break;
     }

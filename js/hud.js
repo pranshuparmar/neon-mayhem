@@ -124,7 +124,7 @@ GAME.hud = (function () {
     pauseBtn('pause-map', function () { if (GAME.paused) GAME.togglePause(); api.toggleMap(true); });
     // Lola, called up (lola.js): the way a touchscreen reaches her
     pauseBtn('pause-lola', function () { if (GAME.lola) GAME.lola.open(); });
-    // the cheat box (cheats.js): typed, the way Vice City's were
+    // the cheat box (cheats.js): codes typed in
     pauseBtn('pause-cheats', function () { if (GAME.cheats) GAME.cheats.open(); });
     // walking away from a run, for the pad and the touchscreen as much as
     // anybody (X on a keyboard): shown only with one going, and asks once

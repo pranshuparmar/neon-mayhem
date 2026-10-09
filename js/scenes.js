@@ -1,5 +1,4 @@
-// Talking heads: the cut to somebody's place before a job, the way Vice City
-// did it. Black bars come in, the camera cuts away to two people standing
+// Talking heads: the cut to somebody's place before a job. Black bars come in, the camera cuts away to two people standing
 // face to face — Lola at her lock-up, Rico on the marina — and they talk:
 // the speaker's face and name in the subtitle, the words typing out in time
 // with a voice that is all pitch and no words (cast.js). Then it cuts back to

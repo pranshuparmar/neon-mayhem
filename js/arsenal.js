@@ -2,9 +2,9 @@
 // things you throw, a rocket, a fire, a scope, and the bang at the end of it.
 //
 // Every icon is a little SVG drawn here, in the HUD's neon — nothing is
-// loaded. The wheel is Vice City's slots laid out in a ring: fists, a melee
+// loaded. The wheel is the weapon slots laid out in a ring: fists, a melee
 // weapon, something to throw, then the guns from pistol up to the rocket
-// launcher, one weapon a slot (pick up a katana and the bat goes, as it did).
+// launcher, one weapon a slot (pick up a katana and the bat goes).
 // Hold the wheel key — Z, D-pad down, or WPN on a touchscreen — and the world
 // slows while you point at one; a quick tap still steps to the next weapon.
 GAME.arsenal = (function () {
@@ -292,7 +292,7 @@ GAME.arsenal = (function () {
   }
 
   // ---------- the wheel ----------
-  // Vice City's slots, round a ring. Each slot shows what you carry in it.
+  // The weapon slots, round a ring. Each slot shows what you carry in it.
   var SLOTS = [
     { id: 'fist', list: ['fist'] },
     { id: 'melee', list: ['bat', 'knife', 'katana', 'chainsaw'] },

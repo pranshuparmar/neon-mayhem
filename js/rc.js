@@ -1,4 +1,4 @@
-// RC BANDIT RACE, the way Vice City had its toy-car side jobs: a ring at
+// RC BANDIT RACE, a toy-car side job: a ring at
 // the gate of Memorial Stadium (landmarks.js), and in it a remote-control
 // buggy on the pitch with three others on the grid. Two laps round the
 // cones; first past the last gate wins. The camera comes down to the toy's

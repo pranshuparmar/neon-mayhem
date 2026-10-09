@@ -1,4 +1,4 @@
-// Holding up a shop, the Vice City way: walk in, put a gun on whoever is
+// Holding up a shop: walk in, put a gun on whoever is
 // behind the counter, and keep it there. Their hands go up and the till
 // empties into your pocket for as long as you hold the aim — let it drop, or
 // clean them out, and the alarm has already gone: two stars as you leave,

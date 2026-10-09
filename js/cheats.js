@@ -1,5 +1,5 @@
-// Cheats, the Vice City way: the same words, typed in. Vice City took them
-// straight off the keyboard mid-game, but here half the alphabet already does
+// Cheats: words, typed in. Typed straight off the keyboard mid-game they
+// would trip over the controls — half the alphabet already does
 // something (P is the map, N the night, M the sound), so they are typed into
 // CHEATS on the pause screen instead — which a touchscreen's keyboard can
 // reach too. A code that is not one is just "nothing happens".

@@ -67,6 +67,7 @@ GAME.dj = (function () {
   var talkT = 40, seg = null, caption = null, deal = {};
 
   function $(id) { return document.getElementById(id); }
+  function titleCase(t) { return String(t).toLowerCase().replace(/\b[a-z]/g, function (c) { return c.toUpperCase(); }); }
   function idOf(name) { return ID[name] || null; }
   // where it is on the dial, under its name, as you tune in — and its jingle
   function tuned(name) {
@@ -77,7 +78,9 @@ GAME.dj = (function () {
       if (id) {
         var sub = document.createElement('div');
         sub.className = 'rsub';
-        sub.textContent = id.freq + '  ·  ' + id.genre;
+        // (and who is on: a DJ's name in a caption meant nothing to anybody
+        // who had not been told it was the radio talking)
+        sub.textContent = id.freq + '  ·  ' + id.genre + '  ·  with DJ ' + titleCase(id.dj);
         sub.style.color = id.color;
         box.appendChild(sub);
       }
@@ -111,7 +114,8 @@ GAME.dj = (function () {
     if (c) {
       c.innerHTML = '';
       var w = document.createElement('b');
-      w.textContent = who + ': ';
+      // which station, and whether it is its DJ talking or an advert
+      w.textContent = '📻 ' + R.name + (ad ? ' · ADVERT: ' : ' · DJ ' + titleCase(who) + ': ');
       w.style.color = id.color;
       c.appendChild(w);
       c.appendChild(document.createTextNode(text));

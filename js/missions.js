@@ -1149,8 +1149,7 @@ GAME.missions = (function () {
   //   scene    a cut away mid-job (scenes.js), or the same lines on the pager
   // Each act sets its own clock (`time`), and says something going in
   // (`say` on the message line, `lola` / `rico` on the pager). A run that
-  // fails anywhere fails as the job, and a retry starts it from the top, as
-  // Vice City's did.
+  // fails anywhere fails as the job, and a retry starts it from the top.
   var CREW_WAKE_R = 48, CREW_SPAWN_R = 150, CREW_LOST_R = 700;
   // (the regression suite plays the jobs as they were, one part each, the
   // way it stands the scenes down; its acts group switches this back on)
@@ -1520,7 +1519,7 @@ GAME.missions = (function () {
     // No marker, no route, no "crowd" pin — you roam, and you play the
     // chimes where there are people. The map pointing at a spot made it a
     // delivery run, which it isn't. The chimes used to play by themselves on
-    // a loop; now they are the horn, as they were in Vice City, and nobody
+    // a loop; now they are the horn, and nobody
     // comes who has not heard them.
     active.callT = Math.max(0, (active.callT || 0) - dt);
     // Anyone on the pavement in earshot of the chimes: stop the truck and
@@ -2098,7 +2097,7 @@ GAME.missions = (function () {
   // Into a job from its ring: the cut to Lola's first, if this is one you have
   // not done yet (scenes.js), and the job when she is done talking. A retry
   // never comes this way — relaunch goes straight to start — so a run you
-  // just failed is not talked through twice, as GTA's never was.
+  // just failed is not talked through twice.
   function begin(def) {
     var base = def.orig || def, sc = SCENES[base.id];
     if (sc && (GAME.bests || {})[bestKey(base)] === undefined && GAME.scenes &&

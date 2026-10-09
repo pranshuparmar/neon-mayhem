@@ -18,8 +18,8 @@ GAME.police = (function () {
   // — twenty to earn a five-star manhunt from a standing start, against five
   // before. The escalation below is folded into the arithmetic, so those are
   // the counts you actually get and not the counts before it is applied.
-  // ...and the sixth: the army. Seven more past five, the way Vice City's
-  // was something you had to really keep at.
+  // ...and the sixth: the army. Seven more past five: something you
+  // have to really keep at.
   var THRESH = [0, 138, 366, 698, 1148, 1730, 2450];
   var HEAT_CEIL = 2900, MAX_STARS = 6;
   // Offending while already wanted still counts for a little more — the

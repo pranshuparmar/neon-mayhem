@@ -1,4 +1,4 @@
-// Import/export, the Vice City way: a crane on the harbour with a board of
+// Import/export: a crane on the harbour with a board of
 // wanted cars beside it. Bring one that is on a list into the ring, in one
 // piece, and it goes up on the hook and out on the next boat: paid for what
 // it is and the state it is in, ticked off the board, and not wanted again.
