@@ -314,6 +314,8 @@
 //      pay, and outside the barber's to offer THREADS; no radio ads in a
 //      job; a shop you own is on the house; a door mat by your parked car
 //      takes you in.
+//  29. PARKED         — every parked vehicle's spot is out of the traffic
+//      lanes, out of the water and clear of walls and props at its level.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -13238,6 +13240,41 @@ function withTimeout(p, ms) {
   check('radio: an ad while you cruise, never in the middle of a job', fd.ads && fd.ads.roaming && fd.ads.roamAd && fd.ads.inJob && !fd.ads.jobRoaming && !fd.ads.jobAd, JSON.stringify(fd.ads));
   check('business: in a shop of your own it is on the house; anywhere else it costs', fd.owned && fd.owned.free && fd.owned.cut && fd.owned.paysElsewhere, JSON.stringify(fd.owned));
   check('doors: get out of the car by a door mat and step on it, and you are in', fd.door, JSON.stringify(fd.door));
+
+  // ---------- 29: every parked vehicle out of the way ----------
+  // A motorbike stood on the crown of the road at a crossing by the
+  // hospital, a cruiser inside the tower beside the police station and a
+  // bike in a lamp post on the strip. Every spot, mainland and island, with
+  // the bridges open: a land vehicle's spot is no nearer a road's middle
+  // than its kerbside lane (5.3 m) allows, not in the water, and nothing
+  // solid stands where it would at its own level.
+  var pk = await page.evaluate(function () {
+    var C = GAME.city, open0 = GAME.isla.isOpen(), out = { n: 0, lane: [], wet: [], solid: [] };
+    if (!open0) GAME.isla.setOpen(true);
+    try {
+      C.parkedSpots.forEach(function (sp) {
+        if (/boat|jetski/.test(sp.vtype || '')) return;
+        out.n++;
+        var tag = (sp.vtype || (sp.police ? 'police' : 'car')) + '@' + Math.round(sp.x) + ',' + Math.round(sp.z);
+        var y = sp.y !== undefined ? sp.y : C.groundY(sp.x, sp.z);
+        if (sp.y === undefined || sp.y < 3) {
+          var rp = C.nearestRoadPoint(sp.x, sp.z);
+          if (Math.hypot(rp.x - sp.x, rp.z - sp.z) < 4.2) out.lane.push(tag);
+          if (C.isInWater(sp.x, sp.z)) out.wet.push(tag);
+        }
+        C.hash.query(sp.x, sp.z, 1.6).forEach(function (b) {
+          if (sp.x < b.minX - 0.9 || sp.x > b.maxX + 0.9 || sp.z < b.minZ - 0.9 || sp.z > b.maxZ + 0.9) return;
+          var lo = b.minY !== undefined ? b.minY : 0, hi = lo + (b.h || 0);
+          if (lo < y + 1.6 && hi > y + 0.3) out.solid.push(tag + ':' + (b.tag || ''));
+        });
+      });
+    } finally { if (!open0) GAME.isla.setOpen(false); }
+    return out;
+  });
+  check('parked: every spot is checked (anchor sanity)', pk.n > 100, String(pk.n));
+  check('parked: none in a traffic lane', pk.lane.length === 0, JSON.stringify(pk.lane));
+  check('parked: none in the water', pk.wet.length === 0, JSON.stringify(pk.wet));
+  check('parked: none inside a wall, a building or a prop', pk.solid.length === 0, JSON.stringify(pk.solid));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the

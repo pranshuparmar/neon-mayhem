@@ -2985,9 +2985,11 @@ GAME.city = (function () {
       }
     }
     // guarantee some key ones
-    // parked police cruisers outside the station (stealable)
-    city.parkedSpots.push({ x: -108, z: -95, heading: 0, police: true });
-    city.parkedSpots.push({ x: -108, z: -70, heading: 0, police: true });
+    // parked police cruisers outside the station (stealable), at the kerb of
+    // the street its door faces (one stood inside the tower next door, where
+    // nobody ever saw it)
+    city.parkedSpots.push({ x: -110, z: -144.7, heading: Math.PI / 2, police: true });
+    city.parkedSpots.push({ x: -90, z: -144.7, heading: Math.PI / 2, police: true });
     // an ambulance idling at each hospital (for paramedic jobs)
     city.pois.hospitals.forEach(function (H) {
       city.parkedSpots.push({ x: H.x + 22, z: H.spawn.z, heading: Math.PI / 2, vtype: 'ambulance' });
@@ -2997,8 +2999,10 @@ GAME.city = (function () {
     // motorcycles: a couple along the boardwalk and by the strip
     city.parkedSpots.push({ x: 360, z: 20, heading: 0, vtype: 'motorcycle' });
     city.parkedSpots.push({ x: 360, z: -40, heading: 0, vtype: 'motorcycle' });
-    city.parkedSpots.push({ x: 342, z: 200, heading: 0, vtype: 'motorcycle' });
-    city.parkedSpots.push({ x: -152, z: 150, heading: 0, vtype: 'motorcycle' });
+    // (and one by the hospital in Puerto Viejo, at the kerb mid-block: it was
+    // on the crown of the road at the crossing, in everybody's way)
+    city.parkedSpots.push({ x: 342, z: 207, heading: 0, vtype: 'motorcycle' });
+    city.parkedSpots.push({ x: -155.3, z: 168, heading: 0, vtype: 'motorcycle' });
     // a speedboat moored off each of the east piers, bow out to sea, close
     // enough alongside to step down into from the planks
     city.moorings.push({ x: 485, z: 238.5 }, { x: 445, z: -168.5 });
