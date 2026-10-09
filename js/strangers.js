@@ -268,7 +268,7 @@ GAME.strangers = (function () {
         if (done(p.def.id) && d2 < KEEP_R * KEEP_R) release(p); else takeIn(p);
       }
       if (p.ped && p.mark) {
-        p.mark.visible = !job;
+        p.mark.visible = !job && !GAME.onJob();
         p.mark.position.set(p.ped.pos.x, p.ped.pos.y + 2.5 + Math.sin(GAME.time * 3 + i) * 0.12, p.ped.pos.z);
         p.mark.rotation.y += dt * 1.6;
         // and they face whoever is coming up to them
@@ -1036,7 +1036,7 @@ GAME.strangers = (function () {
       var b = blipBuf[n] || (blipBuf[n] = { x: 0, z: 0, color: '', size: 0 });
       b.x = x; b.z = z; b.color = color; b.size = size; n++;
     }
-    if (people && !job) {
+    if (people && !job && !GAME.onJob()) {
       for (var i = 0; i < people.length; i++) {
         var q = people[i];
         if (done(q.def.id) || !avail(q.def)) continue;

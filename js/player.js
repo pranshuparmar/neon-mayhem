@@ -28,6 +28,14 @@ GAME.focus = function () {
   return P.inCar && P.car ? P.car.pos : P.pos;
 };
 
+// On a job of some kind: a mission, a stranger's favour, a part of the big
+// score, the toy race. While one is on, the rings and marks for the others
+// keep out of the street (they used to stand there lit up through the job).
+GAME.onJob = function () {
+  return !!((GAME.missions && GAME.missions.active) || (GAME.strangers && GAME.strangers.busy) ||
+    (GAME.heist && GAME.heist.busy) || (GAME.rc && GAME.rc.running));
+};
+
 GAME.initPlayer = function () {
   var P = GAME.player;
   // privateMats: the wardrobe re-tints this figure in place — shared
@@ -195,9 +203,9 @@ GAME.playerWasted = function (cause) {
   var ownsElsewhere = !home && GAME.shops && GAME.shops.ownsAny();
   var kept = GAME.jumpArsenal || GAME.unlimitedAmmo;   // the arsenal goes where you go
   var body = home
-    ? 'You wake up at your place. Cash and weapons intact.'
+    ? 'You wake up at the hospital. Your place kept your weapons safe — cash and weapons intact.'
     : ownsElsewhere
-      ? 'You wake up at the local hospital — your bed is on the other island. ' + (kept ? 'Cash and weapons intact.' : 'Weapons gone, cash intact.')
+      ? 'You wake up at the local hospital — your place is on the other island. ' + (kept ? 'Cash and weapons intact.' : 'Weapons gone, cash intact.')
       : 'You wake up at the hospital. ' + (kept ? 'Cash and weapons intact.' : 'Weapons gone, cash intact.');
   // An explosion death gets its beat: the banner used to slam on in the very
   // frame the blast spawned, so dying in a burning car read as "I suddenly
@@ -282,20 +290,12 @@ function respawnAfterScreen() {
       P.pos.set(sp.x, GAME.city.groundY(sp.x, sp.z), sp.z);
     } else {
       P.armor = 0;
-      // Property changes everything: own a safehouse and you wake up in your
-      // own bed with your arsenal untouched. Otherwise it's the nearest
-      // hospital YOU CAN BE IN — crash at the channel's edge and the island
-      // hospital is closest by distance, but a hospital behind a locked
-      // bridge cannot be where you wake up.
-      var home = GAME.shops && GAME.shops.homeSpawn(P.pos.x, P.pos.z);
-      if (home) {
-        P.pos.set(home.x, GAME.city.groundY(home.x, home.z), home.z);
-        // out of your own door the way a session starts there, not still
-        // facing however you fell — which could put the camera in the awning
-        P.heading = home.heading;
-        GAME.cam.yaw = P.heading; GAME.cam.pitch = 0.32;
-        GAME.cam.x = GAME.cam.y = GAME.cam.z = null;
-      } else {
+      // You wake at the nearest hospital YOU CAN BE IN — crash at the
+      // channel's edge and the island hospital is closest by distance, but a
+      // hospital behind a locked bridge cannot be where you wake up. (Owning
+      // a home used to mean waking at its front gate, which read as a respawn
+      // at a door; it still means your arsenal comes through untouched.)
+      {
         // the hospital on the island you went down on — an ambulance does
         // not carry you across the channel. Off-island beds only come into
         // it if this island somehow has none you can be in.

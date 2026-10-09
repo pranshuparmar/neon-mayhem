@@ -93,7 +93,7 @@ GAME.exporter = (function () {
     ring.material.opacity = 0.4 + 0.2 * Math.sin(GAME.time * 3);
     var P = GAME.player, f = GAME.focus();
     var d2 = U.dist2(f.x, f.z, site.x, site.z);
-    ring.visible = d2 < 300 * 300;
+    ring.visible = d2 < 300 * 300 && !GAME.onJob();
     if (d2 > 40 * 40 || P.state !== 'alive') { hint = ''; return; }
     var car = P.inCar && P.car;
     if (!car) { hint = 'EXPORT — bring a car off the board into the ring'; return; }

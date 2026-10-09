@@ -146,6 +146,7 @@ GAME.rc = (function () {
     if (run) { hint = ''; step(dt); return; }
     var P = GAME.player, s = site;
     ring.material.opacity = 0.5 + 0.2 * Math.sin(GAME.time * 3);
+    ring.visible = !GAME.onJob();
     var d2 = U.dist2(P.pos.x, P.pos.z, s.ring.x, s.ring.z);
     hint = '';
     if (d2 > (RING_R + 1.5) * (RING_R + 1.5)) armed = true;

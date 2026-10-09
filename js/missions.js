@@ -585,6 +585,7 @@ GAME.missions = (function () {
     // respray markers
     GAME.city.pois.resprays.forEach(function (g) {
       var rm = makeMarkerMesh(0xc86bff, 3.0);
+      rm.userData.respray = true;   // (a service, not a job: it stays out while you are on one)
       rm.position.set(g.door.x - 4, 1.7, g.door.z);
       GAME.scene.add(rm);
     });
@@ -2680,7 +2681,8 @@ GAME.missions = (function () {
       // a stranger's favour under way is finished (or walked away from)
       // before anything else starts (strangers.js)
       // (and so is a part of Lola's big score: heist.js)
-      if ((GAME.strangers && GAME.strangers.busy) || (GAME.heist && GAME.heist.busy)) { GAME.jobAvailable = null; GAME.retryAvailable = false; GAME.hud.setPoiHint(''); return; }
+      // (and the rings for the others are out of the street meanwhile)
+      if (GAME.onJob()) { setMarkersVisible(false); GAME.jobAvailable = null; GAME.retryAvailable = false; GAME.hud.setPoiHint(''); return; }
       // taxi / ambulance jobs start from within the vehicle
       var jobKind = null;
       if (P.inCar && P.car) {
@@ -3150,7 +3152,9 @@ GAME.missions = (function () {
       var rs = GAME.city.pois.resprays;
       for (var r = 0; r < rs.length; r++) putBlip(rs[r].door.x, rs[r].door.z, '#c86bff', 4, 'respray');
       if (!active) {
-        for (var i = 0; i < markers.length; i++) {
+        // (and not while a favour, a part of the big score or the toy race
+        // is on: the other jobs keep off the radar as off the street)
+        for (var i = 0; i < markers.length && !GAME.onJob(); i++) {
           var d = markers[i].def;
           if (!defAvailable(d)) continue;
           var kind = d.type === 'race' ? 'race' : d.type === 'courier' ? 'courier' : d.type === 'takedown' ? 'takedown' : 'rampage';

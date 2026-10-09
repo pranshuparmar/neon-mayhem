@@ -322,6 +322,8 @@
 //      you on foot, Ray gets out and goes in at the gate, Mrs. Albescu walks
 //      off with Biscuit at her heel; a race's field drives off; an exported
 //      car goes up on the hook.
+//  31. ONE JOB AT A TIME — on a job, the rings and marks for the others are
+//      out of the street and off the radar, and back when it is over.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -3688,13 +3690,14 @@ function withTimeout(p, ms) {
       GAME.test.fastForward(1);
       r[id] = homeCam();
     });
-    // and a respawn there: down nearby, facing along the house front the
-    // way the old start did
+    // and wasted near it: you wake at the hospital, not at its gate — and
+    // a place of your own still keeps your weapons safe
     GAME.prefs.safehouses = ['dock']; GAME.prefs.lastHome = 'dock';
     var d = GAME.shops.startSpawn();
     GAME.test.teleport(d.x + 30, d.z - 20);
     GAME.test.fastForward(0.3);
     P.heading = Math.PI / 2; GAME.cam.yaw = P.heading;
+    P.weapons.pistol = { have: true, ammo: 30 };
     window.__homeOwned = [owned0, last0];
     GAME.playerWasted('test');
     GAME.test.fastForward(0.5);
@@ -3709,8 +3712,10 @@ function withTimeout(p, ms) {
     var homeCam = new Function('return ' + homeCamSrc)();
     var P = GAME.player, d = GAME.shops.startSpawn();
     GAME.test.fastForward(1);
-    var r = homeCam();
-    r.atDoor = Math.hypot(P.pos.x - d.x, P.pos.z - d.z) < 1.5;
+    var r = {};
+    r.fromDoor = Math.round(Math.hypot(P.pos.x - d.x, P.pos.z - d.z));
+    r.toHospital = Math.round(Math.min.apply(null, GAME.city.pois.hospitals.map(function (h) { return Math.hypot(P.pos.x - h.spawn.x, P.pos.z - h.spawn.z); })));
+    r.kept = !!(P.weapons.pistol && P.weapons.pistol.have);
     GAME.prefs.safehouses = window.__homeOwned[0]; GAME.prefs.lastHome = window.__homeOwned[1];
     P.health = 100;
     GAME.test.teleport(400, 0);
@@ -3734,8 +3739,8 @@ function withTimeout(p, ms) {
     yard.near >= 45, 'nearest jump ' + yard.near + ' m from the door');
   check('answers: and the island still has its ten, numbered as before',
     yard.count === 10 && yard.nums === '0,1,2,3,4,5,6,7,8,9', JSON.stringify(yard));
-  check('answers: waking up at home after a wasted, too',
-    homeUp && woke.atDoor && woke.house && woke.gap >= 1.5, JSON.stringify({ up: homeUp, woke: woke }));
+  check('answers: wasted with a home, you wake at the hospital, not its gate — weapons kept',
+    homeUp && woke.toHospital < 3 && woke.fromDoor > 20 && woke.kept, JSON.stringify({ up: homeUp, woke: woke }));
 
   // ---------- 5g: from your play ----------
   // The map named Costa Rosa's districts and left Isla Verde blank. A patient
@@ -13451,6 +13456,71 @@ function withTimeout(p, ms) {
   check('strangers: Dani is nowhere near — she rings, no one stood in the street', nv.dani && nv.dani.scene && nv.dani.cast === '' && nv.dani.speaks === 'dani' && nv.dani.over, JSON.stringify(nv.dani));
   check('races: when it is over the field drives off with the traffic, not out of the world', nv.race && nv.race.n > 0 && nv.race.stay === nv.race.n && nv.race.traffic === nv.race.n, JSON.stringify(nv.race));
   check('export: a car that ships goes up on the hook, then it is gone', nv.exp && nv.exp.up && nv.exp.onFoot && nv.exp.gone, JSON.stringify(nv.exp));
+
+  // ---------- 31: one job at a time ----------
+  var oj = await page.evaluate(function () {
+    var r = {}, P = GAME.player, SG = GAME.strangers, M = GAME.missions, ff = function (t) { GAME.test.fastForward(t); };
+    var sg0 = SG.enabled, done0 = JSON.stringify(GAME.prefs.strangers || {});
+    function lit() {
+      var rings = 0, marks = 0;
+      GAME.scene.traverse(function (o) {
+        if (!o.visible || !o.isMesh) return;
+        if (o.geometry && o.geometry.type === 'CylinderGeometry' && o.material && o.material.transparent && o.material.blending === THREE.AdditiveBlending && !o.userData.respray) rings++;
+        if (o.geometry && o.geometry.type === 'OctahedronGeometry') marks++;
+      });
+      var blips = M.getBlips().filter(function (b) { return /race|courier|rampage|takedown/.test(b.kind); }).length;
+      return { rings: rings, marks: marks, blips: blips, strangerBlips: SG.blips().length, rc: GAME.rc && GAME.rc.site ? null : null };
+    }
+    try {
+      GAME.prefs.strangers = {};
+      SG.enabled = true;
+      var ray = SG.people().filter(function (q) { return q.def.id === 'ray'; })[0];
+      GAME.test.teleport(ray.at.x + 30, ray.at.z); ff(1.5);
+      r.idle = lit();
+      SG.ask('ray'); ff(0.5);
+      r.favour = lit();
+      r.favour.ring = { rc: !!(GAME.rc && GAME.rc.site) };
+      SG.abandon(); ff(0.5);
+      GAME.test.teleport(ray.at.x + 30, ray.at.z); ff(1.5);
+      r.after = lit();
+      // and on a mission, the strangers' marks are out too
+      var dog = SG.people().filter(function (q) { return q.def.id === 'rosa'; })[0];
+      GAME.test.teleport(dog.at.x + 25, dog.at.z); ff(1.5);
+      r.markNear = lit().marks;
+      // (a mission started from its ring a long way off — driven up to, as
+      // the playtest group does it — then back here)
+      var cj = M.DEFS.filter(function (d) { return d.id === 'courier2'; })[0];
+      var crp = GAME.city.nearestRoadPoint(cj.start.x, cj.start.z), cax = crp.axis === 'z' ? 0 : 1;
+      var cvx = cax ? cj.start.x - 30 : crp.x, cvz = cax ? crp.z : cj.start.z - 30;
+      GAME.test.teleport(cvx, cvz + 3); ff(0.3);
+      GAME.world.cars.slice().forEach(function (c) { if (Math.hypot(c.pos.x - cj.start.x, c.pos.z - cj.start.z) < 60) GAME.vehicles.removeCar(c); });
+      var ride = GAME.vehicles.spawnCar('sedan', cvx, cvz, cax ? Math.PI / 2 : 0, {});
+      GAME.test.enterNearestCar(ride); ff(1.5);
+      for (var dr = 0; dr < 90 && P.inCar && !M.active; dr++) {
+        P.car.pos.x += (cj.start.x - P.car.pos.x) * 0.06; P.car.pos.z += (cj.start.z - P.car.pos.z) * 0.06; P.car.speed = 0; ff(1 / 30);
+      }
+      ff(1.5);
+      if (P.inCar) { P.car.pos.set(dog.at.x + 25, GAME.city.groundY(dog.at.x + 25, dog.at.z), dog.at.z); P.car.speed = 0; }
+      ff(2);
+      r.mission = { on: !!M.active, marks: lit().marks, strangerBlips: SG.blips().length };
+      if (M.active) M.abandon();
+      if (P.inCar) GAME.exitCar();
+      ff(0.5);
+      GAME.vehicles.removeCar(ride);
+    } finally {
+      if (SG.busy) SG.abandon();
+      if (M.active) M.abandon();
+      GAME.prefs.strangers = JSON.parse(done0);
+      SG.reset(); SG.enabled = sg0;
+      GAME.police.clearWanted();
+      GAME.test.teleport(-60, 40); ff(0.5);
+    }
+    return r;
+  });
+  check('one job: idle, the rings and marks are out (anchor sanity)', oj.idle.rings > 3 && oj.idle.marks >= 1 && oj.idle.blips > 3, JSON.stringify(oj.idle));
+  check('one job: on a favour, no mission ring, no other stranger\'s mark, none on the radar', oj.favour.rings === 0 && oj.favour.marks === 0 && oj.favour.blips === 0 && oj.favour.strangerBlips === 0, JSON.stringify(oj.favour));
+  check('one job: and back when it is over', oj.after.rings > 3 && oj.after.marks >= 1 && oj.after.blips > 3, JSON.stringify(oj.after));
+  check('one job: on a mission, no stranger\'s mark in the street or on the radar', oj.markNear >= 1 && oj.mission.on && oj.mission.marks === 0 && oj.mission.strangerBlips === 0, JSON.stringify({ near: oj.markNear, mission: oj.mission }));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the
