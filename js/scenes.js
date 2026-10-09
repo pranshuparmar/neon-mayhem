@@ -15,7 +15,8 @@
 // A script is either a list of [who, line] — Lola and you at her lock-up — or
 // { shots: [{ set, cast: [left, right], lines: [[who, line], ...] }] }, where
 // each shot is a cut to somewhere else. A set nobody can stand on (the island
-// still shut, a lot not built) plays its lines over the frozen game instead.
+// still shut, a lot not built) plays its lines over the frozen game instead,
+// and so does a shot with no set at all: somebody on the phone.
 GAME.scenes = (function () {
   var enabled = true;
   var cur = null;           // the scene playing
@@ -74,7 +75,9 @@ GAME.scenes = (function () {
   // where a set is today, or null; the camera's side turned until nothing
   // solid stands between it and the two of them
   function stage(name) {
-    var at = SETS[name] ? SETS[name]() : null;
+    // (a set can be a place of its own: a function handing back the spot and
+    // the way to the camera, like the named ones above — a stranger's pitch)
+    var at = typeof name === 'function' ? name() : SETS[name] ? SETS[name]() : null;
     if (!at) return null;
     var C = GAME.city;
     if (C.isInWater(at.x, at.z)) return null;

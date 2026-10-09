@@ -314,7 +314,8 @@ GAME.cast = (function () {
     has: function (id) { return !!CAST[id]; },
     name: function (id) { return CAST[id] ? CAST[id].name : ''; },
     color: function (id) { return CAST[id] ? CAST[id].color : '#ffffff'; },
-    fig: function (id) { return CAST[id] ? CAST[id].fig || null : null; },
+    // (a stranger stands in a scene as they stand in the street: strangers.js)
+    fig: function (id) { return CAST[id] && CAST[id].fig ? CAST[id].fig : GAME.strangers && GAME.strangers.look ? GAME.strangers.look(id) : null; },
     ids: function () { return Object.keys(CAST); }
   };
 })();

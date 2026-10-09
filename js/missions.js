@@ -833,7 +833,11 @@ GAME.missions = (function () {
     // and away to the marina, where his boat and his men are (ACTS.hit2)
     if (d.flees && actsOn) {
       active.downAt = { x: ped.pos.x, z: ped.pos.z };
-      GAME.peds.removePed(ped);
+      // (off up the street at a run, not out of the world in front of you:
+      // the street lets him go once he is out of sight, and he is waiting
+      // on the marina when you get there)
+      ped.jobPed = false; ped.outlaw = true; ped.missionArmed = false; ped.missionFoe = false;
+      GAME.peds.startFlee(ped, GAME.player.pos.x, GAME.player.pos.z, 40);
       finish(true);
       return;
     }
@@ -1158,10 +1162,10 @@ GAME.missions = (function () {
     active.wonT = active.t;
     active.field = 1 + active.racers.length;
     active.lastAt = active.downAt || { x: f.x, z: f.z };
-    // (the race's field goes home, the rampage hands back its gun and cools
-    // off, a takedown lets the street have its cars back)
-    for (var i = 0; i < active.racers.length; i++) GAME.vehicles.removeCar(active.racers[i]);
-    active.racers = [];
+    // (the race's field goes home — driving off with the traffic, not
+    // vanishing off the finish line round you — the rampage hands back its
+    // gun and cools off, a takedown lets the street have its cars back)
+    releaseRacers();
     if (d.type === 'rampage') {
       reclaimGrant();
       if (GAME.police.wanted > RAMPAGE_HEAT_LEFT) GAME.police.setWanted(RAMPAGE_HEAT_LEFT);
@@ -1715,6 +1719,29 @@ GAME.missions = (function () {
     return !r || r.y <= 0.45;
   }
 
+  // Somebody still waiting on you when the shift ends: the arm comes down
+  // and they walk off (they used to blink out of the kerb where they stood)
+  function letGo(ped) {
+    if (!ped || ped.gone || ped.dead) return;
+    var j = ped.mesh.userData.joints;
+    if (j) { j.armR.rotation.x = 0; j.armR.rotation.z = 0; }
+    ped.jobPed = false; ped.state = 'walk'; ped.wpT = 0;
+  }
+  // The race's field, once it is over: off with the rest of the traffic (a
+  // boat to potter about the bay), and gone the usual way once out of sight
+  // (`keep` leaves them on the list — the result reads where they finished)
+  function releaseRacers(keep) {
+    if (!active) return;
+    for (var i = 0; i < active.racers.length; i++) {
+      var c = active.racers[i];
+      if (!c || c.gone) continue;
+      if (c.dead || c.spec.heli || c.spec.plane || c.occupied !== 'ai') { if (c.dead) { c.mission = false; continue; } GAME.vehicles.removeCar(c); continue; }
+      c.mission = false; c.path = null; c.hp = Math.min(c.hp, c.spec.hp);
+      if (c.spec.boat && GAME.sealife && GAME.sealife.adopt) GAME.sealife.adopt(c);
+      else c.ai = { mode: 'traffic', desired: 11, laneX: 0, laneZ: 0 };
+    }
+    if (!keep) active.racers = [];
+  }
   // someone standing at the kerb waiting — arm raised, and they stay put
   // (state 'wait' is handled by no movement branch in peds.update)
   function spawnWaitingPed(x, z) {
@@ -2000,8 +2027,7 @@ GAME.missions = (function () {
       dropArrow(active.targets[i]);
       var tp2 = active.targets[i].ped;
       if (!tp2 || tp2.dead) continue;
-      if (active.targets[i].walkUp) { tp2.jobPed = false; tp2.state = 'walk'; }
-      else GAME.peds.removePed(tp2);
+      letGo(tp2);
     }
     active.targets = [];
     if (count > 0) {
@@ -2430,7 +2456,7 @@ GAME.missions = (function () {
 
   function cleanup() {
     if (active) {
-      for (var i = 0; i < active.racers.length; i++) GAME.vehicles.removeCar(active.racers[i]);
+      releaseRacers(true);
       // a vigilante suspect still out there goes back to being ordinary
       // traffic, however the shift ended
       if (active.perp && !active.perp.gone) { active.perp.perp = false; active.perp.mission = false; }
@@ -2440,8 +2466,7 @@ GAME.missions = (function () {
           var tp = active.targets[ti].ped;
           dropArrow(active.targets[ti]);
           if (!tp || tp.dead) continue;
-          if (active.targets[ti].walkUp) { tp.jobPed = false; tp.state = 'walk'; }
-          else GAME.peds.removePed(tp);
+          letGo(tp);
         }
       }
       // reclaim the rampage loadout so the marker can't be farmed for ammo

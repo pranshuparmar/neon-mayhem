@@ -1840,6 +1840,28 @@ GAME.vehicles = (function () {
     car.vy *= 0.25;
   }
 
+  // Somebody else's now: up off the ground to `to.y`, then across to
+  // (to.x, to.z), swaying a little on the way, over `dur` seconds. Nobody
+  // aboard, nobody steering, nothing pushing it about.
+  function stow(car, to, dur) {
+    car.stow = { t: 0, dur: dur || 4, x0: car.pos.x, y0: car.pos.y, z0: car.pos.z, h0: car.heading, to: to };
+    car.speed = 0; car.vx = car.vz = car.vy = 0;
+    car.mission = true; car.ai = null;
+    if (car.occupied === 'ai') car.occupied = null;
+  }
+  function stepStow(car, dt) {
+    var s = car.stow;
+    s.t += dt;
+    var k = Math.min(1, s.t / s.dur), up = Math.min(1, k / 0.45), across = k < 0.45 ? 0 : (k - 0.45) / 0.55;
+    up = up * (2 - up); across = across * across * (3 - 2 * across);
+    car.pos.y = s.y0 + (s.to.y - s.y0) * up;
+    car.pos.x = s.x0 + (s.to.x - s.x0) * across;
+    car.pos.z = s.z0 + (s.to.z - s.z0) * across;
+    car.mesh.rotation.y = s.h0 + Math.sin(s.t * 1.7) * 0.12 * up;
+    car.mesh.rotation.z = Math.sin(s.t * 2.3) * 0.04 * up;
+    return k >= 1 && GAME.player.car !== car;
+  }
+
   // One tick of going under. True once it is gone and nobody is aboard.
   function stepSink(car, dt) {
     var P = GAME.player;
@@ -2390,6 +2412,12 @@ GAME.vehicles = (function () {
           if (car.abandonT > 18) { removeCar(car); continue; }
         } else car.abandonT = 0;
       }
+      // on its way off somewhere scripted (the export crane's hook): carried
+      // along out of the physics, and gone at the end of it
+      if (car.stow) {
+        if (stepStow(car, dt)) removeCar(car);
+        continue;
+      }
       // gone into the sea: down it goes, whatever else it was doing
       if (car.sinking) {
         if (stepSink(car, dt)) removeCar(car);
@@ -2565,6 +2593,7 @@ GAME.vehicles = (function () {
     ejectDriver: ejectDriver,
     shotAt: shotAt,
     seatOccupant: seatOccupant,
+    stow: stow,
     exposedRider: exposedRider,
     seatPos: seatPos,
     throwRider: throwRider,

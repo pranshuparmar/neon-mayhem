@@ -315,7 +315,13 @@
 //      job; a shop you own is on the house; a door mat by your parked car
 //      takes you in.
 //  29. PARKED         — every parked vehicle's spot is out of the traffic
-//      lanes, out of the water and clear of walls and props at its level.
+//      lanes, out of the water, clear of walls and props at its level, and
+//      not in front of a door.
+//  30. NOBODY VANISHES — a stranger asks face to face and thanks you face to
+//      face (or on the phone); then Tito rides off on his bike and leaves
+//      you on foot, Ray gets out and goes in at the gate, Mrs. Albescu walks
+//      off with Biscuit at her heel; a race's field drives off; an exported
+//      car goes up on the hook.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -8974,7 +8980,10 @@ function withTimeout(p, ms) {
     function last(re) { for (var i = msgs.length - 1; i >= 0; i--) if (re.test(msgs[i])) return msgs[i]; return ''; }
     function car(type, x, z) { var c = GAME.vehicles.spawnCar(type, x, z, 0); GAME.test.teleport(x + 2.5, z); ff(0.2); GAME.test.enterNearestCar(c); ff(1.3); return c; }
     function put(c, x, z) { c.pos.set(x, C.groundY(x, z), z); c.speed = 0; c.vx = c.vz = 0; }
-    function off() { if (L.isOpen) L.close(); if (P.inCar) GAME.exitCar(); GAME.police.clearWanted(); ff(0.3); }
+    // (and any ring the car was stood in when a favour ended — VINCE's
+    // lock-up is a random spot, and once it was NIGHT MAIL's ring, whose
+    // run then went on into every group after this one)
+    function off() { if (L.isOpen) L.close(); if (P.inCar) GAME.exitCar(); if (M.active) M.abandon(); GAME.police.clearWanted(); ff(0.3); }
     function near(id) { var q = K.people().filter(function (p) { return p.def.id === id; })[0]; GAME.test.teleport(q.at.x + 20, q.at.z); ff(0.4); return q; }
     try {
       GAME.prefs.strangers = {};
@@ -13009,7 +13018,7 @@ function withTimeout(p, ms) {
       var c1 = drive('sedan');
       var cash = P.cash;
       GAME.test.teleport(s.x, s.z); GAME.test.fastForward(0.5);
-      r.shipped = !P.inCar && P.cash > cash && !X.wanted('sedan') && c1.gone !== false;
+      r.shipped = !P.inCar && P.cash > cash && !X.wanted('sedan') && (!!c1.gone || !!c1.stow);
       // and the same again is not wanted
       GAME.test.teleport(s.x + 30, s.z); GAME.test.fastForward(0.3);
       drive('sedan');
@@ -13249,7 +13258,7 @@ function withTimeout(p, ms) {
   // than its kerbside lane (5.3 m) allows, not in the water, and nothing
   // solid stands where it would at its own level.
   var pk = await page.evaluate(function () {
-    var C = GAME.city, open0 = GAME.isla.isOpen(), out = { n: 0, lane: [], wet: [], solid: [] };
+    var C = GAME.city, open0 = GAME.isla.isOpen(), out = { n: 0, lane: [], wet: [], solid: [], door: [] };
     if (!open0) GAME.isla.setOpen(true);
     try {
       C.parkedSpots.forEach(function (sp) {
@@ -13262,6 +13271,12 @@ function withTimeout(p, ms) {
           if (Math.hypot(rp.x - sp.x, rp.z - sp.z) < 4.2) out.lane.push(tag);
           if (C.isInWater(sp.x, sp.z)) out.wet.push(tag);
         }
+        // (and not in front of a door: the condo's mat was blocked by a bike)
+        GAME.shops.locations().forEach(function (l) {
+          if (!sp.vtype && !sp.police) return;   // (the street's kerbside rows are the street's)
+          if (l.kind === 'cabs') return;          // (the cab firm's bays are inside its garage, by design)
+          if (Math.hypot(l.at.x - sp.x, l.at.z - sp.z) < 9) out.door.push(tag + ':' + l.id);
+        });
         C.hash.query(sp.x, sp.z, 1.6).forEach(function (b) {
           if (sp.x < b.minX - 0.9 || sp.x > b.maxX + 0.9 || sp.z < b.minZ - 0.9 || sp.z > b.maxZ + 0.9) return;
           var lo = b.minY !== undefined ? b.minY : 0, hi = lo + (b.h || 0);
@@ -13275,6 +13290,133 @@ function withTimeout(p, ms) {
   check('parked: none in a traffic lane', pk.lane.length === 0, JSON.stringify(pk.lane));
   check('parked: none in the water', pk.wet.length === 0, JSON.stringify(pk.wet));
   check('parked: none inside a wall, a building or a prop', pk.solid.length === 0, JSON.stringify(pk.solid));
+  check('parked: none stood in front of a door', pk.door.length === 0, JSON.stringify(pk.door));
+
+  // ---------- 30: nobody blinks out of the street ----------
+  var nv = await page.evaluate(function () {
+    var r = {}, P = GAME.player, SG = GAME.strangers, Sc = GAME.scenes, L = GAME.lola, M = GAME.missions, C = GAME.city;
+    var ff = function (t) { GAME.test.fastForward(t); };
+    var sg0 = SG.enabled, done0 = JSON.stringify((GAME.prefs || {}).strangers || {}), cash0 = P.cash, spawned = [];
+    var exp0 = JSON.stringify(GAME.prefs.exported || {});
+    function through() { for (var i = 0; i < 40 && Sc.active; i++) { Sc.advance(); ff(0.3); Sc.advance(); ff(0.1); } }
+    function person(id) { return SG.people().filter(function (q) { return q.def.id === id; })[0]; }
+    function settle() {
+      if (Sc.active) Sc.skip();
+      if (L.isOpen) L.close();
+      if (SG.busy) SG.abandon();
+      if (M.active) M.abandon();
+      if (P.inCar) GAME.exitCar();
+      GAME.police.clearWanted();
+      ff(0.5);
+    }
+    try {
+      settle();
+      GAME.prefs.strangers = {};
+      SG.enabled = true; Sc.enabled = true;
+      // --- walk up to Ray: he asks face to face, then yes or no ---
+      var ray = person('ray');
+      GAME.test.teleport(ray.at.x + 10, ray.at.z); ff(1);
+      for (var t = 0; t < 6 && !Sc.active && !L.isOpen; t += 1 / 60) {
+        P.heading = Math.atan2(ray.at.x - P.pos.x, ray.at.z - P.pos.z); GAME.cam.yaw = P.heading;
+        GAME.test.pressKey('KeyW', true); ff(1 / 60);
+      }
+      GAME.test.pressKey('KeyW', false); ff(0.5);
+      r.ask = { scene: Sc.active, cast: Sc.on.join(), hidden: !!ray.ped && !ray.ped.mesh.visible };
+      through();
+      r.ask.menu = L.isOpen && L.options().some(function (o) { return /DO IT/.test(o); });
+      if (L.isOpen) L.choose(/NOT RIGHT NOW/);
+      ff(0.3);
+      r.ask.back = !!ray.ped && ray.ped.mesh.visible;
+      // --- Ray in the car to the gate: thanks, then out and in at the gate ---
+      SG.ask('ray'); ff(0.2);
+      var car = GAME.vehicles.spawnCar('sedan', ray.at.x + 3, ray.at.z, 0, {}); spawned.push(car);
+      GAME.test.teleport(ray.at.x + 5, ray.at.z); ff(0.2); GAME.enterCar(car); ff(1.5);
+      r.ray = { aboard: SG.job && SG.job.away };
+      SG.finish('test'); ff(0.6);
+      r.ray.scene = Sc.active; r.ray.cast = Sc.on.join();
+      through(); ff(0.3);
+      var out = GAME.world.peds.filter(function (q) { return q.state === 'enter' && Math.hypot(q.pos.x - car.pos.x, q.pos.z - car.pos.z) < 6; });
+      r.ray.out = out.length; r.ray.over = !SG.busy;
+      settle();
+      // --- Tito's bike back to him: he rides off on it, you are on foot ---
+      var tito = person('tito');
+      GAME.test.teleport(tito.at.x + 8, tito.at.z); ff(1);
+      SG.ask('tito'); ff(0.5);
+      var j = SG.job, b = j && j.bike;
+      if (b) {
+        b.occupied = null; if (b.riderMesh) { b.mesh.remove(b.riderMesh); b.riderMesh = null; } b.ai = null; b.speed = 0;
+        GAME.test.teleport(b.pos.x + 1.5, b.pos.z); ff(0.2); GAME.enterCar(b); ff(1.5);
+        b.pos.set(tito.at.x + 4, C.groundY(tito.at.x + 4, tito.at.z), tito.at.z); b.speed = 0; ff(0.6);
+        r.tito = { scene: Sc.active, cast: Sc.on.join() };
+        through(); ff(2);
+        r.tito.onFoot = !P.inCar; r.tito.rides = b.occupied === 'ai' && !!b.riderMesh && !b.mission && !b.gone;
+        r.tito.off = Math.round(Math.hypot(b.pos.x - (tito.at.x + 4), b.pos.z - tito.at.z));
+      }
+      settle();
+      // --- Biscuit home: Mrs. Albescu walks off with him at her heel ---
+      var rosa = person('rosa');
+      GAME.test.teleport(rosa.at.x + 6, rosa.at.z); ff(1);
+      SG.ask('rosa'); ff(0.3);
+      var dog = SG.job && SG.job.dog;
+      if (dog) dog.position.set(rosa.at.x + 2, C.groundY(rosa.at.x + 2, rosa.at.z), rosa.at.z);
+      SG.finish('test'); through(); ff(3);
+      r.rosa = { leavers: SG.leavers, owner: !!rosa.ped === false, dogUp: !!dog && !!dog.parent };
+      var owner = GAME.world.peds.filter(function (q) { return Math.hypot(q.pos.x - rosa.at.x, q.pos.z - rosa.at.z) < 15 && q.state === 'walk'; }).length;
+      r.rosa.walking = owner > 0;
+      r.rosa.near = dog ? Math.round(Math.min.apply(null, GAME.world.peds.map(function (q) { return Math.hypot(q.pos.x - dog.position.x, q.pos.z - dog.position.z); }))) : -1;
+      settle();
+      // --- Dani rings: a scene with nobody stood in it ---
+      var dani = person('dani');
+      GAME.test.teleport(dani.at.x + 6, dani.at.z); ff(1);
+      SG.ask('dani'); ff(0.3);
+      SG.finish('A motel. Of course it is a motel.'); ff(0.6);
+      r.dani = { scene: Sc.active, cast: Sc.on.join(), speaks: Sc.line && Sc.line.who };
+      through();
+      r.dani.over = !SG.busy;
+      settle();
+      Sc.enabled = false;
+      // --- a race's field drives off with the traffic ---
+      var race = M.DEFS.filter(function (d) { return d.id === 'race0'; })[0];
+      var ride = GAME.test.spawnCar('taxi', 4, 0); spawned.push(ride);
+      ff(0.3); GAME.test.enterNearestCar(ride); ff(1.5);
+      GAME.test.teleport(race.start.x, race.start.z);
+      var a = null;
+      for (var f = 0; f < 900; f++) { ff(1 / 60); a = M.active; if (a && a.racers && a.racers.length) break; }
+      var field = a ? a.racers.slice() : [];
+      M.failActive('test'); ff(0.5);
+      r.race = { n: field.length, stay: field.filter(function (c) { return !c.gone; }).length,
+        traffic: field.filter(function (c) { return !c.gone && !c.mission && c.ai && c.ai.mode === 'traffic'; }).length };
+      settle();
+      // --- an exported car goes up on the hook, then it is gone ---
+      var X = GAME.exporter, site = X.site;
+      GAME.prefs.exported = {};
+      var ex = GAME.test.spawnCar('sedan', 4, 0); spawned.push(ex);
+      ff(0.2); GAME.test.enterNearestCar(ex); ff(1.5);
+      var y0 = P.car ? P.car.pos.y : 0, xc = P.car;
+      GAME.test.teleport(site.x, site.z); ff(0.6);
+      ff(1.5);
+      r.exp = { up: !!xc && !xc.gone && xc.pos.y > y0 + 2, onFoot: !P.inCar };
+      ff(5);
+      r.exp.gone = !!xc && !!xc.gone;
+    } finally {
+      Sc.enabled = false;
+      settle();
+      spawned.forEach(function (c) { if (!c.gone) GAME.vehicles.removeCar(c); });
+      GAME.prefs.strangers = JSON.parse(done0); GAME.prefs.exported = JSON.parse(exp0);
+      SG.reset(); SG.enabled = sg0;
+      P.cash = cash0;
+      GAME.test.teleport(-60, 40); ff(0.5);
+    }
+    return r;
+  });
+  check('strangers: walk up and they ask face to face — then yes or no; the real one stands back in after',
+    nv.ask && nv.ask.scene && nv.ask.cast === 'ray,you' && nv.ask.hidden && nv.ask.menu && nv.ask.back, JSON.stringify(nv.ask));
+  check('strangers: Ray thanks you face to face, then gets out and goes in at the gate', nv.ray && nv.ray.aboard && nv.ray.scene && nv.ray.cast === 'ray,you' && nv.ray.out >= 1 && nv.ray.over, JSON.stringify(nv.ray));
+  check('strangers: Tito takes his bike back and rides off on it; you are on foot', nv.tito && nv.tito.scene && nv.tito.onFoot && nv.tito.rides && nv.tito.off > 3, JSON.stringify(nv.tito));
+  check('strangers: Mrs. Albescu walks off with Biscuit at her heel', nv.rosa && nv.rosa.leavers === 1 && nv.rosa.dogUp && nv.rosa.walking && nv.rosa.near < 4, JSON.stringify(nv.rosa));
+  check('strangers: Dani is nowhere near — she rings, no one stood in the street', nv.dani && nv.dani.scene && nv.dani.cast === '' && nv.dani.speaks === 'dani' && nv.dani.over, JSON.stringify(nv.dani));
+  check('races: when it is over the field drives off with the traffic, not out of the world', nv.race && nv.race.n > 0 && nv.race.stay === nv.race.n && nv.race.traffic === nv.race.n, JSON.stringify(nv.race));
+  check('export: a car that ships goes up on the hook, then it is gone', nv.exp && nv.exp.up && nv.exp.onFoot && nv.exp.gone, JSON.stringify(nv.exp));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the

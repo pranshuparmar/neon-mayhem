@@ -3001,7 +3001,7 @@ GAME.city = (function () {
     city.parkedSpots.push({ x: 360, z: -40, heading: 0, vtype: 'motorcycle' });
     // (and one by the hospital in Puerto Viejo, at the kerb mid-block: it was
     // on the crown of the road at the crossing, in everybody's way)
-    city.parkedSpots.push({ x: 342, z: 207, heading: 0, vtype: 'motorcycle' });
+    city.parkedSpots.push({ x: 358, z: 176, heading: 0, vtype: 'motorcycle' });
     city.parkedSpots.push({ x: -155.3, z: 168, heading: 0, vtype: 'motorcycle' });
     // a speedboat moored off each of the east piers, bow out to sea, close
     // enough alongside to step down into from the planks

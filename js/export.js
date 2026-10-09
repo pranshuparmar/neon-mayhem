@@ -37,6 +37,8 @@ GAME.exporter = (function () {
     GAME.scene.add(ring);
     // the crane and the board on the kerb beside it
     var kx = site.x + sx * 9.4 - sz * 6, kz = site.z + sz * 9.4 + sx * 6, ky = C.groundY(kx, kz);
+    // (where the hook hangs: a car that ships goes up to it)
+    site.hook = { x: kx - sx * 11, y: ky + 7.2, z: kz - sz * 11 };
     var g = new THREE.Group();
     function piece(x, y, z, w, hh, d, col) {
       var m = new THREE.Mesh(sharedBoxGeo(w, hh, d), sharedLambert(col));
@@ -105,7 +107,9 @@ GAME.exporter = (function () {
     var pay = Math.round((PAY[type] || 500) * (0.5 + 0.5 * car.hp / car.spec.hp) / 10) * 10;
     prefs()[type] = true;
     GAME.exitCar();
-    GAME.vehicles.removeCar(car);
+    // up on the hook and over to the boat — it does not just blink out of
+    // the ring in front of you
+    GAME.vehicles.stow(car, site.hook || { x: car.pos.x, y: car.pos.y + 9, z: car.pos.z }, 4.5);
     GAME.addCash(pay);
     GAME.audio.sting('win');
     GAME.hud.message('EXPORTED: ' + label(type) + '  +$' + pay, 4);

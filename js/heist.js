@@ -300,6 +300,9 @@ GAME.heist = (function () {
     if (dist(car.pos, LOCKUP.x, LOCKUP.z) < 9 && Math.abs(car.speed) < 2) {
       prefs().car = { type: car.type, color: car.color };
       GAME.exitCar();
+      // and it does: a tarp where it stood (it used to blink out of the
+      // street in front of you), till you are well off
+      coverUp(car);
       GAME.vehicles.removeCar(car);
       done('It goes under a tarp.');
     }
@@ -490,8 +493,25 @@ GAME.heist = (function () {
 
   // ---------- each tick ----------
   var nudged = false;
+  var tarp = null;
+  function coverUp(car) {
+    dropTarp();
+    var s = car.spec, g = new THREE.Group(), cloth = sharedLambert(0x4e5a44);
+    var body = new THREE.Mesh(sharedBoxGeo(s.w + 0.35, (s.bodyH || 0.6) + (s.cabinH || 0.5) + 0.25, s.l + 0.3), cloth);
+    body.position.y = ((s.bodyH || 0.6) + (s.cabinH || 0.5) + 0.25) / 2 + 0.1;
+    g.add(body);
+    var hem = new THREE.Mesh(sharedBoxGeo(s.w + 0.6, 0.12, s.l + 0.55), cloth);
+    hem.position.y = 0.12;
+    g.add(hem);
+    g.position.set(car.pos.x, GAME.city.groundY(car.pos.x, car.pos.z), car.pos.z);
+    g.rotation.y = car.heading;
+    GAME.scene.add(g);
+    tarp = g;
+  }
+  function dropTarp() { if (tarp) { GAME.scene.remove(tarp); tarp = null; } }
   function update(dt) {
     if (!GAME.started) return;
+    if (tarp) { var f0 = GAME.focus(); if (U.dist2(f0.x, f0.z, tarp.position.x, tarp.position.z) > 160 * 160) dropTarp(); }
     if (!shed && GAME.city && GAME.city.hash) buildShed();
     // she pages once, when the bridges have opened and it is quiet
     if (enabled && !nudged && offered() && !prefs().told && !job && P().state === 'alive' && !(GAME.missions && GAME.missions.active) &&
@@ -570,6 +590,6 @@ GAME.heist = (function () {
     room: room,
     shed: function () { return shed; },
     // headless: back to before Lola ever asked
-    reset: function () { if (job) tidy(); GAME.prefs = GAME.prefs || {}; GAME.prefs.heist = { step: 0, told: true }; nudged = true; }
+    reset: function () { dropTarp(); if (job) tidy(); GAME.prefs = GAME.prefs || {}; GAME.prefs.heist = { step: 0, told: true }; nudged = true; }
   };
 })();
