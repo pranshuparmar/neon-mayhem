@@ -133,11 +133,11 @@ var VEHICLES = {
   sports: { label: 'Vulture GT', maxSpeed: 40, accel: 17, grip: 3.6, turn: 2.7, hp: 210, l: 4.3, w: 1.95, cabinH: 0.5, bodyH: 0.5, colors: [0xff2f7a, 0x38e8ff, 0xffe14f, 0xffffff, 0xb040ff] },
   sedan: { label: 'Cadenza', maxSpeed: 29, accel: 10, grip: 5.2, turn: 2.1, hp: 245, l: 4.5, w: 1.9, cabinH: 0.62, bodyH: 0.55, colors: [0x9fb4c8, 0xc0a0d8, 0x88c8a8, 0xd8d0c0, 0x8090b0] },
   taxi: { label: 'Taxi', maxSpeed: 30, accel: 10.5, grip: 5.2, turn: 2.2, hp: 245, l: 4.5, w: 1.9, cabinH: 0.62, bodyH: 0.55, colors: [0xf0c020], cab: true },
-  // VERDE CABS' own (shops.js), the Vice City way: cab yellow in black zebra
+  // VERDE CABS' own (shops.js): cab yellow in black tiger
   // stripes. A little quicker, surer and tougher than the fleet's, never in
   // traffic — it is in the middle bay of the firm's garage once the firm is
   // yours, and it takes fares like any cab
-  zebra: { label: 'Zebra Cab', maxSpeed: 35, accel: 13, grip: 5.6, turn: 2.4, hp: 300, l: 4.5, w: 1.9, cabinH: 0.62, bodyH: 0.55, colors: [0xf2c21a], cab: true },
+  tiger: { label: 'Tiger Cab', maxSpeed: 35, accel: 13, grip: 5.6, turn: 2.4, hp: 300, l: 4.5, w: 1.9, cabinH: 0.62, bodyH: 0.55, colors: [0xf2c21a], cab: true },
   van: { label: 'Cargo Van', maxSpeed: 23, accel: 7, grip: 6, turn: 1.7, hp: 360, l: 5.1, w: 2.1, cabinH: 1.0, bodyH: 0.9, colors: [0x9a8a78, 0x7888a0, 0xa87868] },
   police: { label: 'Cruiser', maxSpeed: 35, accel: 13.5, grip: 5.0, turn: 2.4, hp: 280, l: 4.6, w: 1.95, cabinH: 0.6, bodyH: 0.55, colors: [0xe8ecf2] },
   ambulance: { label: 'Ambulance', maxSpeed: 27, accel: 8.5, grip: 5.6, turn: 1.8, hp: 335, l: 5.3, w: 2.15, cabinH: 1.15, bodyH: 1.0, colors: [0xf2f2f6] },
@@ -170,6 +170,15 @@ var VEHICLES = {
   jetski: { label: 'Wave Rider', maxSpeed: 34, accel: 17, grip: 2.0, turn: 2.3, hp: 130, l: 3.1, w: 1.2, cabinH: 0, bodyH: 0.5, colors: [0xffe14f, 0xff2f7a, 0x38e8ff, 0xf0f0f4], boat: true, jetski: true },
   // the harbour patrol: a heavier launch in police white, a light bar on the
   // console, sent after you once you are wanted out on the water
+  // The army, at six stars (army.js), and nowhere else: a canvas-backed
+  // truck that unloads soldiers, and a tank — slow, near enough
+  // indestructible, crushing whatever it drives into, a turret that follows
+  // your aim and a cannon on LMB. Take one off them and it is yours.
+  // a toy: the MINI MAYHEM RACE's buggy (rc.js), a fifth the size of the real
+  // thing, driven from the controller at the stadium gate
+  rc: { label: 'Mini Mayhem', maxSpeed: 15, accel: 20, grip: 6.5, turn: 3.6, hp: 45, l: 0.72, w: 0.42, cabinH: 0, bodyH: 0.12, colors: [0x38e8ff], rc: true },
+  tank: { label: 'Mastodon', maxSpeed: 17, accel: 7, grip: 7.5, turn: 1.45, hp: 4200, l: 6.6, w: 3.3, cabinH: 0, bodyH: 1.0, colors: [0x4a5a36], tank: true, army: true },
+  armytruck: { label: 'Quartermaster', maxSpeed: 26, accel: 8, grip: 5.8, turn: 1.6, hp: 650, l: 6.4, w: 2.5, cabinH: 0.9, bodyH: 0.9, colors: [0x55603e], army: true },
   policeboat: { label: 'Harbour Patrol', maxSpeed: 32, accel: 12.5, grip: 1.8, turn: 1.6, hp: 340, l: 6.6, w: 2.2, cabinH: 0, bodyH: 0.7, colors: [0xf2f4f8], boat: true, police: true }
 };
 
@@ -435,17 +444,60 @@ function buildJetskiMesh(colorHex) {
   return g;
 }
 
-function buildCarMesh(type, colorHex) {
+// A tank: a long low hull on two tracks, and a turret with a long gun that
+// turns on its own (army.js points it). The turret is a group of its own on
+// top, so it can turn without the hull.
+function buildTankMesh(colorHex) {
+  var g = new THREE.Group();
+  var hull = new THREE.Mesh(cachedGeo('tank|' + colorHex, function (b) {
+    b.addBox(0, 0.85, 0, 2.7, 0.8, 6.0, 0, colorHex, 0);            // hull
+    b.addBox(0, 1.3, 0.5, 2.4, 0.18, 4.4, 0, colorHex, 0);          // deck
+    b.addBox(0, 0.9, 3.05, 2.5, 0.5, 0.3, 0.5, colorHex, 0);        // glacis
+    [1.42, -1.42].forEach(function (x) {
+      b.addBox(x, 0.5, 0, 0.62, 0.9, 6.4, 0, 0x22241c, 0);         // tracks
+      for (var w = 0; w < 6; w++) b.addBox(x * 1.02, 0.45, -2.5 + w, 0.6, 0.62, 0.62, 0, 0x3a3c30, 0);
+      b.addBox(x, 1.02, 0, 0.7, 0.08, 6.5, 0, 0x2e3226, 0);         // track guard
+    });
+    b.addBox(0.9, 1.45, -2.4, 0.5, 0.3, 0.9, 0, 0x2a2e22, 0);       // engine deck grilles
+    b.addBox(-0.9, 1.45, -2.4, 0.5, 0.3, 0.9, 0, 0x2a2e22, 0);
+  }), sharedVertexLambert());
+  g.add(hull);
+  var turret = new THREE.Group();
+  turret.position.set(0, 1.45, 0.3);
+  turret.add(new THREE.Mesh(cachedGeo('tankturret|' + colorHex, function (b) {
+    b.addBox(0, 0.42, 0, 2.0, 0.84, 2.4, 0, colorHex, 0);
+    b.addBox(0, 0.9, -0.4, 0.8, 0.2, 0.8, 0, 0x3a4a2e, 0);          // hatch
+    b.addBox(0, 0.48, 2.9, 0.26, 0.26, 3.6, 0, 0x2e3226, 0);        // the gun
+    b.addBox(0, 0.48, 1.4, 0.5, 0.5, 0.6, 0, colorHex, 0);          // mantlet
+  }), sharedVertexLambert()));
+  g.add(turret);
+  g.userData.turret = turret;
+  g.userData.bodyMesh = hull;
+  return g;
+}
+
+// `parts`: what has come off it (see wear below) — bit 1 the front bumper,
+// bit 2 the rear. A car that has lost one wears a body without it, from the
+// same cache, so the dent costs no more draw calls than the car did.
+function buildCarMesh(type, colorHex, parts) {
   var s = VEHICLES[type];
+  parts = parts || 0;
   if (s.jetski) return buildJetskiMesh(colorHex);
   if (s.boat) return buildBoatMesh(colorHex, !!s.police);
   if (s.monster) return buildMonsterMesh(colorHex);
+  if (s.tank) return buildTankMesh(colorHex);
+  if (s.rc) {
+    // the Dune Hopper's own body, shrunk to a toy
+    var toy = buildCarMesh('buggy', colorHex);
+    toy.scale.setScalar(0.21);
+    return toy;
+  }
   if (s.plane) return buildPlaneMesh(s.colors);
   if (s.heli) return buildHeliMesh(colorHex, s.gunship);
   if (s.bike) return buildBikeMesh(colorHex, s.trim);
   var g = new THREE.Group();
   var hl = s.l / 2, hw = s.w / 2;
-  var body = new THREE.Mesh(cachedGeo('car|' + type + '|' + colorHex, function (b) {
+  var body = new THREE.Mesh(cachedGeo('car|' + type + '|' + colorHex + (parts ? '|' + parts : ''), function (b) {
     b.addBox(0, 0.42, 0, s.w, s.bodyH, s.l, 0, colorHex, 0);
     if (type === 'ambulance') {
       // tall box body + red cross panels
@@ -494,7 +546,14 @@ function buildCarMesh(type, colorHex) {
     if (type === 'pickup') {
       b.addBox(0, 0.42 + s.bodyH / 2 + 0.22, -1.05, s.w, 0.45, s.l * 0.44, 0, 0x2a2a34, 0);   // bed walls
     }
-    if (type === 'zebra') {
+    if (type === 'armytruck') {
+      // the canvas back, ribbed, over the bed: a few centimetres wider than
+      // the body so their flanks never share a plane
+      b.addBox(0, 0.42 + s.bodyH / 2 + 0.8, -0.9, s.w + 0.06, 1.6, s.l * 0.6, 0, 0x6a6a48, 0);
+      for (var rb = 0; rb < 4; rb++) b.addBox(0, 0.42 + s.bodyH / 2 + 1.62, -0.9 - s.l * 0.27 + rb * s.l * 0.18, s.w + 0.1, 0.06, 0.08, 0, 0x4a4a32, 0);
+      b.addBox(hw - 0.4, 0.42 + s.bodyH / 2 + 0.05, -0.9, 0.3, 0.1, s.l * 0.5, 0, 0xf0f0e0, 0);   // a white star stencil, near enough
+    }
+    if (type === 'tiger') {
       // The stripes, black on the yellow: down both flanks, each one leaning
       // back as it climbs (three short steps of it, which is how a slanted
       // band is drawn in boxes) and no two the same width; and over the
@@ -515,8 +574,8 @@ function buildCarMesh(type, colorHex) {
         }
       });
     }
-    var cabL = s.l * (type === 'van' ? 0.85 : type === 'icecream' ? 0.34 : type === 'limo' ? 0.72 : 0.5);
-    var cabZ = type === 'sports' ? -0.35 : type === 'van' ? -0.1
+    var cabL = s.l * (type === 'armytruck' ? 0.3 : type === 'van' ? 0.85 : type === 'icecream' ? 0.34 : type === 'limo' ? 0.72 : 0.5);
+    var cabZ = type === 'armytruck' ? s.l * 0.3 : type === 'sports' ? -0.35 : type === 'van' ? -0.1
       : type === 'icecream' ? s.l * 0.28 : type === 'pickup' ? 0.35 : -0.15;
     if (s.buggy) {
       // no cabin at all: a roll hoop over an open tub. The cross bar is wider
@@ -528,8 +587,8 @@ function buildCarMesh(type, colorHex) {
     if (s.cabinH > 0) {
       b.addBox(0, 0.42 + s.bodyH / 2 + s.cabinH / 2 - 0.05, cabZ, s.w * 0.82, s.cabinH, cabL, 0, type === 'police' ? 0x20242e : 0x141824, 0);
     }
-    b.addBox(0, 0.28, hl * 0.72, s.w * 0.9, 0.32, 0.55, 0, 0x22262e, 0);
-    b.addBox(0, 0.28, -hl * 0.72, s.w * 0.9, 0.32, 0.55, 0, 0x22262e, 0);
+    if (!(parts & 1)) b.addBox(0, 0.28, hl * 0.72, s.w * 0.9, 0.32, 0.55, 0, 0x22262e, 0);
+    if (!(parts & 2)) b.addBox(0, 0.28, -hl * 0.72, s.w * 0.9, 0.32, 0.55, 0, 0x22262e, 0);
     var wy = 0.32, wx = hw - 0.12, wz = hl * 0.56;
     [[wx, wz], [-wx, wz], [wx, -wz], [-wx, -wz]].forEach(function (w) {
       b.addBox(w[0], wy, w[1], 0.32, 0.64, 0.72, 0, 0x0c0c10, 0);
@@ -626,6 +685,12 @@ GAME.vehicles = (function () {
       // a job's car (missions.js): a takedown's target, locked while he is in
       // it, and the car of Rico's men that comes after the ledger
       perp: false, locked: false, heavy: false,
+      // a side's car (gangs.js), and the law's top end (police.js tactics,
+      // army.js): declared here so every car keeps the one shape
+      gang: null, tactic: null, armyUnit: false, pitT: 0, pitDir: 0, pitCool: 0, gunT: 0,
+      // what the knocks have done to it (wear): damage taken at either end,
+      // the parts gone, the tyres burst, the bonnet sprung
+      dmgFront: 0, dmgRear: 0, parts: 0, burst: 0, hood: null, sparkT: 0,
       aiSteer: 0, aiTX: NaN, aiTZ: NaN, aiAir: false, airLights: null,
       copsOut: NaN, shootT: NaN, aimSkill: NaN, deployT: 0, fireT: 0, bailT: 0,
       heliSpeed: 0, rotorSpin: 0, mgT: 0, rkT: 0, pitch: 0, roll: 0, sinkV: 0,
@@ -643,11 +708,20 @@ GAME.vehicles = (function () {
   function repaint(car, color) {
     var bm = car && car.mesh && car.mesh.userData.bodyMesh;
     if (!bm || car.spec.plane || car.dead) return false;
-    var fresh = buildCarMesh(car.type, color).userData.bodyMesh;
+    var fresh = buildCarMesh(car.type, color, car.parts).userData.bodyMesh;
     if (!fresh) return false;
     bm.geometry = fresh.geometry;
     car.color = color;
+    if (car.hood) car.hood.children[0].material = sharedLambert(color);
     return true;
+  }
+  // Mended, the way the paint shop mends (missions.js): bumpers back on,
+  // the bonnet shut, four good tyres, and the ledger of knocks wiped
+  function mend(car) {
+    if (car.hood) { car.mesh.remove(car.hood); car.hood = null; }
+    car.dmgFront = car.dmgRear = 0;
+    car.burst = 0;
+    if (car.parts) { car.parts = 0; repaint(car, car.color); }
   }
 
   function removeCar(car) {
@@ -877,12 +951,13 @@ GAME.vehicles = (function () {
     susp.v += (-140 * (susp.p - load) - 16 * susp.v) * dt;
     susp.p += susp.v * dt;
 
-    car.mesh.rotation.x = car.bodyPitch + susp.p;
+    var lean = tyreLean(car);
+    car.mesh.rotation.x = car.bodyPitch + susp.p + lean.pitch;
     // Roll is left exactly as it was. Leaning out of a corner already exists
     // here — lateral slip IS the cornering load — and swapping its ease for a
     // spring would change how the car reads in a direction change without
     // adding anything the body was not already doing.
-    car.mesh.rotation.z = U.lerp(car.mesh.rotation.z, -car.lat * 0.02, dt * 6);
+    car.mesh.rotation.z = U.lerp(car.mesh.rotation.z, -car.lat * 0.02 + lean.roll, dt * 6);
     car.lastHeading = car.heading;
 
     collideStatic(car, dt);
@@ -1475,6 +1550,122 @@ GAME.vehicles = (function () {
     return true;
   }
 
+  // ---------- wear: the knocks you can see ----------
+  // Which end took it: a car going forwards hits with its nose, one in
+  // reverse with its tail, and a round or a blast lands anywhere. Past a
+  // third of the car's strength at one end, that bumper is off and lies in
+  // the road; past half its strength overall the bonnet has sprung and
+  // flaps as it goes. Tyres burst to spike strips and to rounds that land
+  // by a wheel (shotTyre): that corner drops, sparks on the tarmac, and the
+  // car pulls toward it.
+  function dents(car) {
+    var s = car.spec;
+    return !(s.bike || s.boat || s.heli || s.plane || s.tank || s.monster);
+  }
+  var BUMPER_AT = 0.3, HOOD_AT = 0.55, MAX_DEBRIS = 10, debris = [];
+  // (the suite measures cars that kept their shape and their tyres; its wear
+  // group switches this back on)
+  var wearOn = true;
+  function knocked(car, amt, source) {
+    var front = source === 'gun' || source === 'shot' || source === 'fist' ? Math.random() < 0.5 : car.speed >= 0;
+    if (front) car.dmgFront += amt; else car.dmgRear += amt;
+    var hp = car.spec.hp;
+    if (car.dmgFront > hp * BUMPER_AT && !(car.parts & 1)) loseBumper(car, 1);
+    if (car.dmgRear > hp * BUMPER_AT && !(car.parts & 2)) loseBumper(car, 2);
+    if (car.hp < hp * HOOD_AT && !car.hood) springHood(car);
+  }
+  function loseBumper(car, bit) {
+    var bm = car.mesh && car.mesh.userData.bodyMesh;
+    if (!bm || car.spec.plane) return;
+    car.parts |= bit;
+    bm.geometry = buildCarMesh(car.type, car.color, car.parts).userData.bodyMesh.geometry;
+    // and there it is, in the road
+    var hl = car.spec.l / 2, dir = bit === 1 ? 1 : -1;
+    var x = car.pos.x + Math.sin(car.heading) * hl * 0.9 * dir, z = car.pos.z + Math.cos(car.heading) * hl * 0.9 * dir;
+    var piece = new THREE.Mesh(sharedBoxGeo(car.spec.w * 0.9, 0.32, 0.55), sharedLambert(0x22262e));
+    piece.position.set(x, GAME.city.groundY(x, z) + 0.16, z);
+    piece.rotation.y = car.heading + (Math.random() - 0.5) * 1.2;
+    GAME.scene.add(piece);
+    debris.push({ mesh: piece, t: 30 });
+    if (debris.length > MAX_DEBRIS) GAME.scene.remove(debris.shift().mesh);
+    GAME.audio.crash(0.4, x, z);
+  }
+  function springHood(car) {
+    var s = car.spec, hl = s.l / 2;
+    if (s.cabinH <= 0 || car.type === 'icecream' || car.type === 'armytruck') return;
+    // a panel on its hinge at the screen, over the bonnet, in the car's paint
+    var len = s.l * 0.26, hinge = new THREE.Group();
+    hinge.position.set(0, 0.42 + s.bodyH / 2 + 0.015, hl * 0.18);
+    var panel = new THREE.Mesh(sharedBoxGeo(s.w * 0.86, 0.04, len), sharedLambert(car.color));
+    panel.position.z = len / 2;
+    hinge.add(panel);
+    car.mesh.add(hinge);
+    car.hood = hinge;
+  }
+  // a round that landed at (hx, hz) on this car: by a wheel, it is that tyre
+  function shotTyre(car, hx, hz) {
+    if (!wearOn || !dents(car)) return false;
+    var fx = Math.sin(car.heading), fz = Math.cos(car.heading);
+    var ox = hx - car.pos.x, oz = hz - car.pos.z;
+    var lz = ox * fx + oz * fz, lx = ox * fz - oz * fx;
+    var wz = car.spec.l / 2 * 0.56, wx = car.spec.w / 2;
+    if (Math.abs(Math.abs(lz) - wz) > 0.85 || Math.abs(lx) < wx * 0.35) return false;
+    burstTyre(car, (lz > 0 ? 0 : 2) + (lx > 0 ? 0 : 1));
+    return true;
+  }
+  // tyres 0 front-left, 1 front-right, 2 rear-left, 3 rear-right (as the
+  // car's own x and z have them)
+  function burstTyre(car, i) {
+    var bit = 1 << i;
+    if (!wearOn) { car.spiked = true; return; }
+    if (car.burst & bit) return;
+    car.burst |= bit;
+    car.spiked = true;
+    GAME.audio.crash(0.35, car.pos.x, car.pos.z);
+    GAME.fx.spawn(car.pos.x, car.pos.y + 0.4, car.pos.z, { count: 5, color: 0x30303a, spread: 1, life: 0.4 });
+  }
+  function count(bits, mask) { var n = 0; for (var i = 0; i < 4; i++) if ((bits & mask) & (1 << i)) n++; return n; }
+  // the lean of a car on its burst tyres: down at that corner
+  function tyreLean(car) {
+    if (!car.burst) return { roll: 0, pitch: 0 };
+    var left = count(car.burst, 5), right = count(car.burst, 10), fr = count(car.burst, 3), rr = count(car.burst, 12);
+    return { roll: (right - left) * 0.045, pitch: (rr - fr) * 0.035 };
+  }
+  function wear(car, dt) {
+    if (car.hood) {
+      // sprung: up off its catch, and flapping at speed
+      var sp = Math.min(1, Math.abs(car.speed) / 22);
+      car.hood.rotation.x = -0.12 - 0.22 * sp - 0.18 * sp * Math.abs(Math.sin(GAME.time * 9 + car.serial));
+    }
+    // (parked, nothing else poses it: settle it onto the flat ones here)
+    if (car.burst && Math.abs(car.speed) < 0.5) {
+      var ln = tyreLean(car);
+      car.mesh.rotation.z = U.lerp(car.mesh.rotation.z, ln.roll, Math.min(1, dt * 6));
+      car.mesh.rotation.x = U.lerp(car.mesh.rotation.x, ln.pitch, Math.min(1, dt * 6));
+    }
+    if (car.burst && Math.abs(car.speed) > 5) {
+      car.sparkT -= dt;
+      if (car.sparkT <= 0) {
+        car.sparkT = 0.07;
+        var fx = Math.sin(car.heading), fz = Math.cos(car.heading), wz = car.spec.l / 2 * 0.56, wx = car.spec.w / 2;
+        for (var i = 0; i < 4; i++) {
+          if (!(car.burst & (1 << i))) continue;
+          var lz = i < 2 ? wz : -wz, lx = i % 2 ? -wx : wx;
+          GAME.fx.spawn(car.pos.x + fx * lz + fz * lx, car.pos.y + 0.1, car.pos.z + fz * lz - fx * lx, FX_RIM);
+        }
+      }
+      // and it pulls toward the side that is down
+      var pull = count(car.burst, 10) - count(car.burst, 5);
+      if (pull) car.heading += pull * 0.05 * dt * Math.min(1, Math.abs(car.speed) / 10) * (car.speed > 0 ? 1 : -1);
+    }
+  }
+  var FX_RIM = { count: 2, color: 0xffd080, spread: 0.4, life: 0.18, vy: 1 };
+  function stepDebris(dt) {
+    for (var i = debris.length - 1; i >= 0; i--) {
+      if ((debris[i].t -= dt) <= 0) { GAME.scene.remove(debris[i].mesh); debris.splice(i, 1); }
+    }
+  }
+
   function damageCar(car, amt, source, byPlayer) {
     if (car.dead) return;
     var pc = GAME.player.car;
@@ -1482,6 +1673,7 @@ GAME.vehicles = (function () {
     if (byPlayer || source === 'gun' || source === 'fist' ||
       (source === pc && pc && Math.abs(pc.speed) > 9)) car.byPlayer = true;
     car.hp -= amt;
+    if (wearOn && dents(car)) knocked(car, amt, source);
     if (car.hp < car.spec.hp * 0.35 && car.stage < 1) car.stage = 1;
     if (car.hp < car.spec.hp * 0.14 && car.stage < 2) { car.stage = 2; car.fireFuse = 5.5; }
     // The hull tells its driver out loud. Scraping uphill through the grass
@@ -1646,6 +1838,35 @@ GAME.vehicles = (function () {
     GAME.fx.spawn(car.pos.x, 0.5, car.pos.z, { count: 14, color: 0x88bbdd, spread: 3, vy: 3, life: 0.8 });
     // the water takes most of a fall rather than the car punching on down
     car.vy *= 0.25;
+  }
+
+  // squared distance from (px, pz) to the segment (ax, az)-(bx, bz)
+  function segDist2(ax, az, bx, bz, px, pz) {
+    var dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
+    var t = l2 > 0 ? U.clamp(((px - ax) * dx + (pz - az) * dz) / l2, 0, 1) : 0;
+    var qx = ax + dx * t - px, qz = az + dz * t - pz;
+    return qx * qx + qz * qz;
+  }
+  // Somebody else's now: up off the ground to `to.y`, then across to
+  // (to.x, to.z), swaying a little on the way, over `dur` seconds. Nobody
+  // aboard, nobody steering, nothing pushing it about.
+  function stow(car, to, dur) {
+    car.stow = { t: 0, dur: dur || 4, x0: car.pos.x, y0: car.pos.y, z0: car.pos.z, h0: car.heading, to: to };
+    car.speed = 0; car.vx = car.vz = car.vy = 0;
+    car.mission = true; car.ai = null;
+    if (car.occupied === 'ai') car.occupied = null;
+  }
+  function stepStow(car, dt) {
+    var s = car.stow;
+    s.t += dt;
+    var k = Math.min(1, s.t / s.dur), up = Math.min(1, k / 0.45), across = k < 0.45 ? 0 : (k - 0.45) / 0.55;
+    up = up * (2 - up); across = across * across * (3 - 2 * across);
+    car.pos.y = s.y0 + (s.to.y - s.y0) * up;
+    car.pos.x = s.x0 + (s.to.x - s.x0) * across;
+    car.pos.z = s.z0 + (s.to.z - s.z0) * across;
+    car.mesh.rotation.y = s.h0 + Math.sin(s.t * 1.7) * 0.12 * up;
+    car.mesh.rotation.z = Math.sin(s.t * 2.3) * 0.04 * up;
+    return k >= 1 && GAME.player.car !== car;
   }
 
   // One tick of going under. True once it is gone and nobody is aboard.
@@ -1826,7 +2047,11 @@ GAME.vehicles = (function () {
     var tx = ai.node.x + ai.laneX, tz = ai.node.z + ai.laneZ;
     var dx = tx - car.pos.x, dz = tz - car.pos.z;
     var distN = Math.sqrt(dx * dx + dz * dz);
-    if (distN < 6) {
+    // (or gone by it: flat out — a man on the run swinging round a van at the
+    // junction — a car went wide of the six metres, and its turning circle
+    // was bigger than that, so it circled the node and never reached it)
+    var overshot = car.speed > 6 && distN < 18 && dx * Math.sin(car.heading) + dz * Math.cos(car.heading) < 0;
+    if (distN < 6 || overshot) {
       // a closed bridge is closed to traffic too: while the channel gates are
       // down, span nodes don't exist as far as a wandering car cares — else
       // it turned onto the approach and nosed into the police line forever
@@ -1849,6 +2074,18 @@ GAME.vehicles = (function () {
       }).sort(function (a, b) { return a.turn - b.turn; });
       // a near-U-turn is only for the cornered (dead ends)
       var options = scored.filter(function (s) { return s.turn < 2.4; });
+      // Turned round from where it was boxed in, it does not take the first
+      // road back to it: for a while, any road that runs past that spot is
+      // out (a man on the run, making for somewhere beyond a van across the
+      // road, turned round, came to the next corner, chose the same street
+      // as the way nearest his goal, and was boxed in again — for ever).
+      if (ai.avoidT && GAME.time < ai.avoidT) {
+        var node0 = ai.node;
+        var clearOf = function (s) { return segDist2(node0.x, node0.z, s.n.x, s.n.z, ai.avoidX, ai.avoidZ) > 14 * 14; };
+        var safe = options.filter(clearOf);
+        if (!safe.length) safe = scored.filter(clearOf);
+        if (safe.length) options = safe;
+      }
       var next;
       // Somewhere to be: a car with a place to make for, or a car to keep
       // after (streetlife.js — a getaway heading your way, a cruiser on its
@@ -1896,11 +2133,15 @@ GAME.vehicles = (function () {
     // wedged against something: back out
     // (a man on the run — a takedown's target, missions.js — does not sit
     // there thinking about it)
-    if (Math.abs(car.speed) < 0.8 && distN > 8) car.unstickT += dt; else car.unstickT = 0;
+    // (and so is one shoving a car down the road in front of him that he
+    // cannot get round — crawling, nose to its side, for a second and a half
+    // (see `shoving` below): pushing a van across both lanes along at walking
+    // pace, he never counted as stopped)
+    if ((Math.abs(car.speed) < 0.8 && distN > 8) || ai.shoving) car.unstickT += dt; else car.unstickT = 0;
     // (clear of where he was boxed in, and it is forgotten)
     if (ai.wedged && U.dist2(car.pos.x, car.pos.z, ai.wedgeX, ai.wedgeZ) > 25 * 25) ai.wedged = 0;
     if (car.unstickT > (ai.bolt ? 0.6 : 1.6)) {
-      car.reverseT = 1.1; car.unstickT = 0;
+      car.reverseT = 1.1; car.unstickT = 0; ai.shoving = false; ai.shoveT = 0;
       // boxed in across the whole road — the second lane no better than the
       // first — he stops trying the same gap: he turns round and goes back
       // the way he came
@@ -1908,7 +2149,21 @@ GAME.vehicles = (function () {
         if (!ai.wedged) { ai.wedgeX = car.pos.x; ai.wedgeZ = car.pos.z; }
         ai.wedged = (ai.wedged || 0) + 1;
         var back = ai.prev || city.nearestNode(car.pos.x - Math.sin(car.heading) * 40, car.pos.z - Math.cos(car.heading) * 40);
-        if (ai.wedged >= 2 && back && back !== ai.node) {
+        // (with no corner he came from, the nearest one to a point behind
+        // him can be the very one ahead — and then he never turned round at
+        // all, pushing a van along a whole block. The way back is whichever
+        // road off the corner ahead runs furthest behind him.)
+        if (!back || back === ai.node) {
+          var hbx = Math.sin(car.heading), hbz = Math.cos(car.heading), nbb = ai.node ? city.neighbors(ai.node) : [], bestB = 0;
+          back = null;
+          for (var bi = 0; bi < nbb.length; bi++) {
+            var behind = -((nbb[bi].x - car.pos.x) * hbx + (nbb[bi].z - car.pos.z) * hbz);
+            if (behind > bestB) { bestB = behind; back = nbb[bi]; }
+          }
+        }
+        // (at once if he was already going round it: that gap was tried)
+        if ((ai.wedged >= 2 || ai.passT > 0) && back && back !== ai.node) {
+          ai.avoidX = ai.wedgeX; ai.avoidZ = ai.wedgeZ; ai.avoidT = GAME.time + 25;
           ai.wedged = 0;
           ai.prev = ai.node; ai.node = back;
           setLane(ai, back.x - ai.prev.x, back.z - ai.prev.z);
@@ -1971,6 +2226,20 @@ GAME.vehicles = (function () {
         if (fd < blockD) { blockD = fd; blockCar = o; }
       }
     }
+    // (the car he is going round counts too: it is left out of `blocked` while
+    // he passes it, so a van across both lanes — no way round on either side
+    // — was pushed along the road pass after pass, for good. Across the road
+    // it is as wide as it is long.)
+    var shoveCar = blockCar && blockD < 6.5 ? blockCar : null;
+    var pc0 = ai.passT > 0 ? ai.passCar : null;
+    if (!shoveCar && pc0 && !pc0.gone) {
+      var px0 = pc0.pos.x - car.pos.x, pz0 = pc0.pos.z - car.pos.z, pfd0 = px0 * fx + pz0 * fz;
+      if (pfd0 > 0 && pfd0 < 7 && Math.abs(px0 * fz - pz0 * fx) < (car.spec.w + Math.max(pc0.spec.w, pc0.spec.l)) / 2 + 0.3) shoveCar = pc0;
+    }
+    if (ai.bolt && shoveCar && Math.abs(car.speed) < 4.5) {
+      ai.shoveT = (ai.shoveT || 0) + dt;
+      if (ai.shoveT > 1.5) ai.shoving = true;
+    } else { ai.shoveT = 0; ai.shoving = false; }
     var P = GAME.player;
     var byPlayer = !!blockCar && blockCar === P.car && P.inCar;
     // ...and you standing in the road in front of him is your problem: he
@@ -2115,7 +2384,7 @@ GAME.vehicles = (function () {
       // pad kept the tower's find hidden the whole time.
       var pcar = (P.inCar && P.car) || (P.entering && P.entering.car) || null;
       if (sp.vtype && !sp.live && pcar && pcar.fromSpot === sp) continue;
-      // (a spot can wait on something: the Zebra Cab's bay, on the firm being yours)
+      // (a spot can wait on something: the Tiger Cab's bay, on the firm being yours)
       if (sp.need && !sp.live && !sp.need()) continue;
       var minD = special ? 0 : 40 * 40;
       // a spot can ask to exist at longer range: the helipad finds sit on
@@ -2176,6 +2445,7 @@ GAME.vehicles = (function () {
     var P = GAME.player;
     var fc = GAME.focus();
     var cars = world.cars;
+    if (debris.length) stepDebris(dt);
     for (var i = cars.length - 1; i >= 0; i--) {
       var car = cars[i];
       // despawn far traffic
@@ -2193,6 +2463,12 @@ GAME.vehicles = (function () {
           if (car.abandonT > 18) { removeCar(car); continue; }
         } else car.abandonT = 0;
       }
+      // on its way off somewhere scripted (the export crane's hook): carried
+      // along out of the physics, and gone at the end of it
+      if (car.stow) {
+        if (stepStow(car, dt)) removeCar(car);
+        continue;
+      }
       // gone into the sea: down it goes, whatever else it was doing
       if (car.sinking) {
         if (stepSink(car, dt)) removeCar(car);
@@ -2208,6 +2484,7 @@ GAME.vehicles = (function () {
         if (car.deadT > 14 && car !== P.car) { removeCar(car); continue; }
         continue;
       }
+      if (car.hood || car.burst) wear(car, dt);
       if (car.stage >= 1) {
         car.smokeT -= dt;
         if (car.smokeT <= 0) {
@@ -2358,10 +2635,16 @@ GAME.vehicles = (function () {
     TYPES: VEHICLES,
     spawnCar: spawnCar, fillSpot: fillSpot,
     repaint: repaint,
+    mend: mend,
+    get wear() { return wearOn; },
+    set wear(v) { wearOn = !!v; },
+    shotTyre: shotTyre,
+    burstTyre: burstTyre,
     removeCar: removeCar,
     ejectDriver: ejectDriver,
     shotAt: shotAt,
     seatOccupant: seatOccupant,
+    stow: stow,
     exposedRider: exposedRider,
     seatPos: seatPos,
     throwRider: throwRider,

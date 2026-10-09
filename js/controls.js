@@ -12,7 +12,7 @@ GAME.controls = (function () {
     ['KeyW', 'Forward / throttle'], ['KeyS', 'Back / brake'], ['KeyA', 'Left'], ['KeyD', 'Right'],
     ['Space', 'Jump · climb · handbrake'], ['ShiftLeft', 'Sprint · descend'], ['KeyF', 'Enter / exit vehicle'],
     ['KeyQ', 'Target left · drive-by left'], ['KeyE', 'Target right · drive-by right'], ['Tab', 'Aim lock (toggle)'],
-    ['KeyJ', 'Start a job'], ['KeyX', 'Abandon the mission (twice)'], ['KeyC', 'Take a photo'], ['KeyV', 'View your last photo'], ['KeyL', 'Call Lola'], ['KeyG', 'Horn · siren'], ['Comma', 'Radio back'], ['Period', 'Radio next'],
+    ['KeyJ', 'Start a job'], ['KeyX', 'Abandon the mission (twice)'], ['KeyZ', 'Weapon wheel (hold) · next weapon (tap)'], ['KeyC', 'Take a photo'], ['KeyV', 'View your last photo'], ['KeyL', 'Call Lola'], ['KeyG', 'Horn · siren'], ['Comma', 'Radio back'], ['Period', 'Radio next'],
     ['KeyY', 'Retry a failed run'], ['KeyP', 'Map'], ['KeyM', 'Mute'], ['KeyH', 'Hide the hints'], ['KeyT', 'CRT filter'],
     ['KeyR', 'Continue after WASTED / BUSTED']
   ];
@@ -67,7 +67,7 @@ GAME.controls = (function () {
   // or null where the pad reaches it some other way (Lola, abandon, mute and
   // the rest are on the pause screen).
   var PAD_NAME = { Space: 'A', ShiftLeft: 'B', KeyJ: 'X', KeyF: 'Y', KeyQ: 'LB', KeyE: 'RB', KeyP: 'BACK',
-    Escape: 'START', KeyC: 'L3', KeyG: 'R3', KeyY: 'D-PAD ↑', Comma: 'D-PAD ←', Period: 'D-PAD →',
+    Escape: 'START', KeyC: 'L3', KeyG: 'R3', KeyY: 'D-PAD ↑', KeyZ: 'D-PAD ↓', Comma: 'D-PAD ←', Period: 'D-PAD →',
     KeyR: 'A', Tab: 'LT', Enter: 'A' };
   function padName(code) { return PAD_NAME[code] || null; }
   // What a prompt calls an action: the button in your hands while you are
@@ -115,7 +115,7 @@ GAME.controls = (function () {
   // ASK LOLA on the pause screen.
   var BUTTONS = {
     0: 'Space', 1: 'ShiftLeft', 2: 'KeyJ', 3: 'KeyF', 4: 'KeyQ', 5: 'KeyE',
-    8: 'KeyP', 9: 'Escape', 10: 'KeyC', 11: 'KeyG', 12: 'KeyY', 14: 'Comma', 15: 'Period'
+    8: 'KeyP', 9: 'Escape', 10: 'KeyC', 11: 'KeyG', 12: 'KeyY', 13: 'KeyZ', 14: 'Comma', 15: 'Period'
   };
   // what the buttons mean on a menu (pause screen arrows and Enter)
   var MENU = { 0: 'Enter', 1: 'Escape', 9: 'Escape', 12: 'ArrowUp', 13: 'ArrowDown', 14: 'ArrowLeft', 15: 'ArrowRight' };
@@ -178,7 +178,7 @@ GAME.controls = (function () {
     var inp = GAME.input, P = GAME.player;
     // an in-world dialog (the hud's modal) is a menu too: A answers it
     var dialog = !!(GAME.hud && GAME.hud.dialogOpen && GAME.hud.dialogOpen());
-    var menu = dialog || open || GAME.paused || GAME.mapOpen || GAME.shopOpen || GAME.shareOpen || GAME.lolaOpen || !GAME.started;
+    var menu = dialog || open || GAME.paused || GAME.mapOpen || GAME.shopOpen || GAME.shareOpen || GAME.lolaOpen || GAME.sceneOpen || !GAME.started;
     var touched = pad.lx || pad.ly || pad.rx || pad.ry || pad.lt > 0.2 || pad.rt > 0.2;
     for (var bi = 0; bi < bt.length && !touched; bi++) if (bt[bi] && bt[bi].pressed) touched = true;
     if (touched) noteDevice(true);
@@ -210,7 +210,6 @@ GAME.controls = (function () {
         sent[b] = null;
         continue;
       }
-      if (!menu && b === 13) inp.touch.weaponCycle = true;   // d-pad down: next weapon
       var code = codeFor(b, menu);
       sent[b] = code;
       if (code) keyDown(code);
@@ -250,7 +249,7 @@ GAME.controls = (function () {
   }
   // the whole pad, said once where the keys are listed (it is not rebindable)
   var PAD_LAYOUT = 'left stick move · right stick look · RT fire / throttle · LT aim / brake · A jump, handbrake · ' +
-    'B sprint · X job · Y get in / out · LB / RB target, drive-by · L3 photo · R3 horn · D-pad ↑ retry, ↓ weapon, ← → radio · ' +
+    'B sprint · X job · Y get in / out · LB / RB target, drive-by · L3 photo · R3 horn · D-pad ↑ retry, ↓ weapon (hold for the wheel), ← → radio · ' +
     'BACK map · START pause (Lola, abandon, full screen and the rest are there).';
   // The screen's own buttons, for the arrows and a pad's D-pad: a pad could
   // open this screen and not change a thing on it — invert-Y and the look

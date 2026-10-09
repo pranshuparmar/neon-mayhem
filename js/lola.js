@@ -32,6 +32,7 @@ GAME.lola = (function () {
     casino: 'The Lucky Gull. The wheel\'s honest, mostly, the horses run on the screens down the right, and the bar patches you up. Spend what you can afford to lose.',
     derby: 'Gull Downs! Pick a horse and a stake. The odds are on the board: a 4/1 shot pays four times your stake plus your money back, and the long shots pay big because they mostly lose. Then watch it run.',
     wardrobe: 'Everything you own hangs in here, and changing is free. Buy something at THREADS and it turns up in every place you own.',
+    robbery: 'Holding up a shop? Keep the gun on him and don\'t blink — the till empties for as long as you do. The alarm went the second his hands did, so have a way out.',
     business: 'A business of your own. The till fills through the day — three days of it, no more — and sits there till you come and empty it at the counter. Leave it too long and somebody with a mask will empty it for you.',
     photo: function () { return 'Nice shot. Your photos are kept in the album — ' + (touch() ? 'PAUSE' : 'Esc') + ', then PHOTOS — and you can download the ones you like.'; }
   };
@@ -252,6 +253,12 @@ GAME.lola = (function () {
     // (somebody else asking — a stranger on the pavement: strangers.js)
     $('lola-from').textContent = v.from || '📟 LOLA';
     $('lola-say').textContent = v.say;
+    // whose face it is: hers, or the stranger asking (cast.js)
+    var fc = $('lola-face'), id = v.face || (v.from ? GAME.cast && GAME.cast.idFor(v.from) : 'lola');
+    if (fc && fc.getAttribute('data-who') !== String(id)) {
+      fc.innerHTML = id && GAME.cast ? GAME.cast.portrait(id) : '';
+      fc.setAttribute('data-who', String(id));
+    }
     opts = (v.list || []).slice();
     (v.acts || []).forEach(function (a) { opts.push(a); });
     if (!v.top) {
@@ -272,7 +279,12 @@ GAME.lola = (function () {
     if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest' });
     $('lola-hint').textContent = touch() ? 'Tap one' : '↑↓ and Enter, or click  ·  Esc ' + (v.escSays || 'to go back');
   }
-  function show(v) { view = v; sel = 0; render(); }
+  function show(v) {
+    view = v; sel = 0; render();
+    // a word or two of it in their voice, as the card comes up
+    var id = v.face || (v.from ? GAME.cast && GAME.cast.idFor(v.from) : 'lola');
+    if (id && GAME.cast) GAME.cast.say(id, v.say, 1.4);
+  }
   function answer(v) { if (GAME.audio) GAME.audio.cashTick(); show(v); }
   // a choice is an answer: whatever it does, closing after it is not a no
   function pick() { var o = opts[sel]; if (o) { onClose = null; o.fn(); } }
@@ -304,6 +316,7 @@ GAME.lola = (function () {
     onClose = null;
     GAME.lolaOpen = false;
     $('lola-screen').style.display = 'none';
+    if (GAME.cast) GAME.cast.hush();
     if (GAME.syncOverlayMusic) GAME.syncOverlayMusic();
     if (GAME.regainPointer) GAME.regainPointer();
     if (then) then();

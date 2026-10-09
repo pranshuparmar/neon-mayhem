@@ -98,8 +98,9 @@ function buildPedMesh(opts) {
   // opts.look pins the whole appearance — the same person can step out of
   // the same car twice instead of a stranger wearing his job
   var look = opts.look || null;
-  var shirt = opts.cop ? 0x2a4a8a : look ? look.shirt : U.pick(Math.random, PED_SHIRTS);
-  var pants = opts.cop ? 0x1a2a4a : look ? look.pants : U.pick(Math.random, PED_PANTS);
+  // (a soldier is a cop in olive: army.js sends them at six stars)
+  var shirt = opts.cop ? (opts.army ? 0x4a5a36 : 0x2a4a8a) : look ? look.shirt : U.pick(Math.random, PED_SHIRTS);
+  var pants = opts.cop ? (opts.army ? 0x3a4428 : 0x1a2a4a) : look ? look.pants : U.pick(Math.random, PED_PANTS);
   var skin = look ? look.skin : U.pick(Math.random, PED_SKINS);
   g.userData.look = { shirt: shirt, pants: pants, skin: skin };
   // The town shares its wardrobe: constant colors, constant box sizes, one
@@ -173,7 +174,7 @@ GAME.peds = (function () {
       state: 'walk', speed: 0,
       walkPhase: Math.random() * 6,
       hp: opts.cop ? 60 : 30,
-      isCop: !!opts.cop,
+      isCop: !!opts.cop, army: !!opts.army,
       armed: !!opts.cop,
       // how quick this one is to swing back rather than run
       temper: Math.random(),
@@ -204,6 +205,7 @@ GAME.peds = (function () {
       stolenCar: null, hadDriver: undefined, yankT: 0, yankWarned: false, leftCar: 0,
       jobPed: false, iceServed: false, carrying: undefined,
       missionArmed: false, missionFoe: false,   // a job's armed man (missions.js), and one to mark
+      gang: null, boss: false,                  // a side's man (gangs.js), a crew's boss (missions.js)
       patrol: false, onCase: null, beatX: 0, beatZ: 0, beatT: 0, grabbing: false,
       aimSkill: NaN, lastShotT: 0,
       enterX: NaN, enterZ: NaN, enterT: 0   // a door they are making for (walkInto)
@@ -849,6 +851,7 @@ GAME.peds = (function () {
         var car2 = world.cars[c2];
         var sp2 = Math.abs(car2.speed);
         if (sp2 < 4) continue;
+        if (car2.spec.rc) continue;   // a toy runs into your ankles, not over you
         if (ped.knockT > 0 && ped.knockedBy === car2) continue;   // already on the bonnet
         if (Math.abs(car2.pos.y - ped.pos.y) > 3) continue;   // it's up on a roof
         // The bodywork, not a circle around it. This was `dist2 < 5.2` — a
@@ -1011,6 +1014,9 @@ GAME.peds = (function () {
     // not stop them to have it out (streetlife.js, strangers.js)
     if (ped.outlaw && ped.state === 'flee') return false;
     if (foe && foe.kind === 'ped' && (!foe.ped || foe.ped.dead || foe.ped.gone || foe.ped === ped)) return false;
+    // a crew does not fight its own (gangs.js): stood about shoulder to
+    // shoulder, a jostle is just a jostle
+    if (foe && foe.kind === 'ped' && ped.gang && foe.ped.gang === ped.gang) return false;
     // An existing brawler is already counted; a fresh one has to fit. But
     // SWINGING BACK is not a new fight, it is the other half of one that is
     // already running — and counting it as new was most of the reason fights

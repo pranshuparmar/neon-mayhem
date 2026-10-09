@@ -1,5 +1,5 @@
 GAME.audio = (function () {
-  var ctx = null, master, sfxBus, radioBus, engineBus, ambBus, verb;
+  var ctx = null, master, sfxBus, radioBus, engineBus, ambBus, verb, musicDuck, talkBus;
   var sfxSwitch = null, musicSwitch = null;
   var muted = false, musicOn = true, sfxOn = true;
   var noiseBuf = null, brownBuf = null;
@@ -72,7 +72,12 @@ GAME.audio = (function () {
     musicSwitch = ctx.createGain(); musicSwitch.gain.value = musicOn ? 1 : 0; musicSwitch.connect(master);
     sfxSwitch = ctx.createGain(); sfxSwitch.gain.value = sfxOn ? 1 : 0; sfxSwitch.connect(master);
     sfxBus = ctx.createGain(); sfxBus.gain.value = 0.72; sfxBus.connect(sfxSwitch);
-    radioBus = ctx.createGain(); radioBus.gain.value = 0; radioBus.connect(musicSwitch);
+    radioBus = ctx.createGain(); radioBus.gain.value = 0;
+    // (the DJ dips the songs under the talk: dj.js)
+    musicDuck = ctx.createGain(); musicDuck.gain.value = 1;
+    radioBus.connect(musicDuck); musicDuck.connect(musicSwitch);
+    // and the talk on a bus of its own, at the radio's volume but not ducked
+    talkBus = ctx.createGain(); talkBus.gain.value = 0; talkBus.connect(musicSwitch);
     // the engine sits under everything else and is gently rolled off up top so
     // it doesn't mask the radio
     engineBus = ctx.createGain(); engineBus.gain.value = 0;
@@ -191,6 +196,40 @@ GAME.audio = (function () {
     o.connect(g); g.connect(bus || sfxBus);
     o.start(t); o.stop(t + dur + 0.05);
     o.onended = function () { try { o.disconnect(); g.disconnect(); } catch (e) { } };
+  }
+
+  // A voice with no words (cast.js): one syllable of somebody talking. The
+  // letter picks the note off a scale round their pitch, so the same word
+  // comes out the same way twice, and a vowel opens the filter a little
+  // wider than a consonant. Nothing at all is made while muted or with the
+  // effects off — a silent blip is still three nodes, a line is forty of them.
+  var VOWEL = { a: 1.0, e: 1.35, i: 1.7, o: 0.8, u: 0.65, y: 1.5 };
+  var SCALE = [0, 2, 4, 7, 9, 12, -3, 5];
+  var lastBlipT = -9, voiceNodes = 0;
+  function babble(v, ch) {
+    if (!ctx || muted || !sfxOn || !v) return 0;
+    var t = ctx.currentTime;
+    // (a fast-forwarded scene would stack a sentence into one instant)
+    if (t - lastBlipT < 0.035) return 0;
+    lastBlipT = t;
+    var c = String(ch || 'a').toLowerCase(), code = c.charCodeAt(0) || 97;
+    var semi = SCALE[code % SCALE.length] * (v.spread || 6) / 12 + (Math.random() - 0.5) * 0.6;
+    var f = v.base * Math.pow(2, semi / 12), dur = 0.055 + Math.random() * 0.025;
+    var o = ctx.createOscillator(); o.type = v.wave || 'square';
+    o.frequency.setValueAtTime(f, t);
+    o.frequency.exponentialRampToValueAtTime(f * 0.93, t + dur);
+    var bp = ctx.createBiquadFilter(); bp.type = 'bandpass';
+    bp.frequency.value = (v.formant || 1200) * (VOWEL[c] || 1.15);
+    bp.Q.value = v.q || 1.8;
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(v.wave === 'sine' || v.wave === 'triangle' ? 0.34 : 0.2, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(bp); bp.connect(g); g.connect(sfxBus);
+    o.start(t); o.stop(t + dur + 0.03);
+    o.onended = function () { try { o.disconnect(); bp.disconnect(); g.disconnect(); } catch (e) { } };
+    voiceNodes += 3;
+    return 3;
   }
 
   // A note held flat and let go cleanly, where tone() strikes and dies away.
@@ -386,8 +425,56 @@ GAME.audio = (function () {
         step++;
       }
     }
+    // The DJ's hooks (dj.js): the music dipped under talk, a station's
+    // jingle, and a voice on the radio's own bus, so MUSIC: OFF and the
+    // radio's volume take them like the songs
+    var duckG = 1, jingles = 0, talkNodes = 0;
+    function duck(level, secs) {
+      if (!ctx) return;
+      var t = ctx.currentTime;
+      musicDuck.gain.cancelScheduledValues(t);
+      musicDuck.gain.setTargetAtTime(level, t, 0.15);
+      musicDuck.gain.setTargetAtTime(1, t + secs, 0.4);
+    }
+    function jingle(notes, wave) {
+      if (!ctx || radioSilent() || current === OFF) return false;
+      var t = ctx.currentTime + 0.05;
+      for (var i = 0; i < notes.length; i++) {
+        tone(midi(notes[i]), 0.22, 0.16, wave || 'square', 0, t + i * 0.13, radioBus);
+        tone(midi(notes[i] - 12), 0.22, 0.08, 'sine', 0, t + i * 0.13, radioBus);
+      }
+      tone(midi(notes[notes.length - 1] + 12), 0.6, 0.06, 'triangle', 0, t + notes.length * 0.13, verb);
+      jingles++;
+      return true;
+    }
+    function talk(v, ch) {
+      if (!ctx || radioSilent() || current === OFF || !v) return 0;
+      var t = ctx.currentTime;
+      var c = String(ch || 'a').toLowerCase(), code = c.charCodeAt(0) || 97;
+      var SC = [0, 2, 4, 7, 9, 12, -3, 5];
+      var f = v.base * Math.pow(2, SC[code % SC.length] * (v.spread || 6) / 12 / 12);
+      var o = ctx.createOscillator(); o.type = v.wave || 'square';
+      o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 0.93, t + 0.07);
+      var bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = v.formant || 1200; bp.Q.value = v.q || 1.8;
+      var g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.32, t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+      // (a radio voice is band-limited: the bandpass above, and no reverb)
+      o.connect(bp); bp.connect(g); g.connect(talkBus);
+      o.start(t); o.stop(t + 0.1);
+      o.onended = function () { try { o.disconnect(); bp.disconnect(); g.disconnect(); } catch (e) { } };
+      talkNodes += 3;
+      return 3;
+    }
     return {
       stations: stations,
+      duck: duck,
+      jingle: jingle,
+      talk: talk,
+      get jingles() { return jingles; },
+      get talkNodes() { return talkNodes; },
+      get audible() { return !!ctx && !radioSilent() && current !== OFF; },
       get name() { return nameOf(current); },
       get index() { return current; },
       get off() { return current === OFF; },
@@ -416,6 +503,7 @@ GAME.audio = (function () {
         if (v <= 0 && radioVol > 0) noteQuiet();
         radioVol = v;
         radioBus.gain.setTargetAtTime(v, ctx.currentTime, 0.3);
+        talkBus.gain.setTargetAtTime(v, ctx.currentTime, 0.3);
       }
     };
   })();
@@ -579,7 +667,51 @@ GAME.audio = (function () {
       if (type === 'pistol') { noiseBurst(0.12, 2500, 0.5, null, null, b); tone(160, 0.08, 0.4, 'square', 60, null, b); }
       else if (type === 'smg') { noiseBurst(0.07, 3200, 0.35, null, null, b); tone(220, 0.05, 0.3, 'square', 90, null, b); }
       else if (type === 'shotgun') { noiseBurst(0.3, 1200, 0.8, null, null, b); tone(90, 0.2, 0.6, 'square', 40, null, b); }
+      // the sniper's crack carries, and rolls back off the buildings
+      else if (type === 'sniper') { noiseBurst(0.08, 5200, 0.7, 'highpass', null, b); noiseBurst(0.6, 700, 0.45, null, ctx.currentTime + 0.05, b); tone(140, 0.12, 0.5, 'square', 50, null, b); }
+      // a rocket leaving the tube: a thump, then the motor's hiss
+      else if (type === 'rocket') { tone(70, 0.25, 0.7, 'sine', 35, null, b); noiseBurst(0.9, 2400, 0.35, 'bandpass', null, b); }
       else { tone(120, 0.07, 0.3, 'square', 70, null, b); }
+    },
+    // A swing through the air: a short filtered rush, longer for a blade.
+    // The chainsaw is its two-stroke snarl instead, a burst per tick held.
+    swing: function (kind) {
+      if (!ctx) return;
+      var t = ctx.currentTime;
+      if (kind === 'chainsaw') {
+        tone(92 + Math.random() * 10, 0.11, 0.16, 'sawtooth', 0, t);
+        tone(184 + Math.random() * 20, 0.11, 0.07, 'square', 0, t);
+        noiseBurst(0.1, 1800, 0.1, 'bandpass', t);
+        return;
+      }
+      var len = kind === 'katana' ? 0.22 : kind === 'bat' ? 0.18 : 0.1;
+      noiseBurst(len, kind === 'bat' ? 900 : 2600, 0.32, 'bandpass', t);
+      if (kind === 'katana') tone(2400, 0.25, 0.04, 'sine', 3200, t + 0.05);
+    },
+    // and landing it: wood on somebody, or a blade
+    thud: function (kind) {
+      if (!ctx) return;
+      if (kind === 'bat') { tone(110, 0.12, 0.45, 'sine', 55); noiseBurst(0.07, 700, 0.4); tone(620, 0.05, 0.08, 'triangle', 300); }
+      else if (kind !== 'chainsaw') noiseBurst(0.08, 1600, 0.35, 'bandpass');
+    },
+    // something thrown leaving your hand
+    whoosh: function (len) { if (ctx) noiseBurst(len || 0.3, 1400, 0.25, 'bandpass'); },
+    // a grenade bouncing on the street
+    tick: function (x, z) { if (ctx) tone(1700, 0.04, 0.12, 'square', 900, null, spatialBus(x, z, 0.3)); },
+    // a bottle breaking, and the whump of what was in it going up
+    glass: function (x, z) {
+      if (!ctx) return;
+      var b = spatialBus(x, z, 0.9), t = ctx.currentTime;
+      noiseBurst(0.18, 5200, 0.5, 'highpass', t, b);
+      for (var i = 0; i < 4; i++) tone(2400 + Math.random() * 2600, 0.12, 0.05, 'sine', 0, t + i * 0.03, b);
+      noiseBurst(0.6, 320, 0.5, null, t + 0.05, b);
+    },
+    // fire: a crackle now and then while it burns
+    crackle: function (x, z) {
+      if (!ctx) return;
+      var b = spatialBus(x, z, 0.5), t = ctx.currentTime;
+      for (var i = 0; i < 3; i++) noiseBurst(0.03, 3000, 0.12, 'bandpass', t + Math.random() * 0.25, b);
+      noiseBurst(0.4, 500, 0.08, null, t, b);
     },
     ricochet: function () { if (ctx) tone(2400, 0.09, 0.12, 'sine', 700); },
     punch: function () { if (ctx) { noiseBurst(0.06, 500, 0.4); tone(90, 0.07, 0.4, 'sine', 45); } },
@@ -645,6 +777,10 @@ GAME.audio = (function () {
       tone(1318, 0.5, 0.11, 'sine', 0, t);
       tone(1046, 0.7, 0.1, 'sine', 0, t + 0.22);
     },
+    // a syllable of somebody talking (cast.js), and how many nodes that has
+    // made so far (headless)
+    babble: babble,
+    get voiceNodes() { return voiceNodes; },
     // a pager going off: two short chirps
     pagerBeep: function () {
       if (!ctx) return;

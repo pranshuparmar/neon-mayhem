@@ -474,7 +474,7 @@ function sitIn(car) {
     : 'Plane — W throttle up the runway, Space to climb once fast · A/D turn · F to bail out', 4.5);
   else if (car.spec.heli) GAME.hud.message(pad ? 'Heli — RT up · LT down · stick fly · Y to exit (bail with a chute if high up)'
     : 'Heli — Space up · Shift down · WASD fly · F to exit (bail with a chute if high up)', 4);
-  else if (car.spec.cab) GAME.hud.message((car.type === 'zebra' ? 'The Zebra Cab' : 'Cab') + ' — press ' + jobKey() + ' to start a fare', 3);
+  else if (car.spec.cab) GAME.hud.message((car.type === 'tiger' ? 'The Tiger Cab' : 'Cab') + ' — press ' + jobKey() + ' to start a fare', 3);
   else if (car.type === 'ambulance') GAME.hud.message('Ambulance — press ' + jobKey() + ' for a paramedic run', 3);
   else if (car.type === 'icecream') GAME.hud.message('Ice cream truck — press ' + jobKey() + ' to start a round', 3);
   else if (car.type === 'police') GAME.hud.message('Cruiser — G for lights and siren, J (or JOB) for vigilante work', 3.5);
@@ -1288,7 +1288,7 @@ function updateOnFoot(dt) {
 // G (or the horn button): a stolen cruiser's lights and siren go on and off;
 // anything else has a horn. Neither existed — a cruiser was a white car with
 // a dead lightbar, and nobody could honk at anybody. The ice cream truck's
-// horn is its chimes, as the van's was in Vice City: on a round, the jingle
+// horn is its chimes: on a round, the jingle
 // is what brings people to the hatch (missions.js).
 var hornSounding = false;
 function playerHorn(on, low) {
@@ -1488,6 +1488,10 @@ function updateCamera(dt) {
   if (Cs) { mdx *= Cs.sens; mdy *= Cs.sens * (Cs.invertY ? -1 : 1); }
 
   var aiming = GAME.combat.aiming && !P.inCar;
+  // the weapon wheel takes the mouse (and the right stick) while it is open,
+  // and the sniper's scope is a camera of its own (arsenal.js)
+  if (GAME.arsenal && GAME.arsenal.wheelOpen) { GAME.arsenal.wheelMove(mdx, mdy); mdx = 0; mdy = 0; }
+  if (GAME.arsenal && GAME.arsenal.scopeCam(mdx, mdy)) return;
 
   if (P.inCar && P.car) {
     // any mouse action holds the free look; two idle seconds and the camera
@@ -1507,8 +1511,10 @@ function updateCamera(dt) {
     }
     var heli = P.car.spec.heli, plane = P.car.spec.plane;
     var sp = heli ? Math.abs(P.car.heliSpeed || 0) : Math.abs(P.car.speed);
-    var base = plane ? 16 : heli ? 13 : 7.2;
-    cam.dist = U.damp(cam.dist, base + sp * (plane ? 0.06 : 0.13), 3, dt);
+    // (the RC buggy: down at its own level, close behind — rc.js)
+    var toy = !!P.car.spec.rc;
+    var base = plane ? 16 : heli ? 13 : toy ? 2.4 : 7.2;
+    cam.dist = U.damp(cam.dist, base + sp * (plane ? 0.06 : toy ? 0.04 : 0.13), 3, dt);
   } else {
     cam.yaw -= mdx * 0.0032;
     cam.pitch = U.clamp(cam.pitch + mdy * 0.002, -0.15, 1.2);
@@ -1516,7 +1522,7 @@ function updateCamera(dt) {
   }
 
   var focus = P.inCar && P.car ? P.car.pos : P.pos;
-  var fy = focus.y + (P.inCar ? 1.7 : 1.55);
+  var fy = focus.y + (P.inCar ? (P.car && P.car.spec.rc ? 0.45 : 1.7) : 1.55);
   var fx = focus.x, fz = focus.z;
   if (aiming) {
     // over-the-shoulder offset — as far as the wall beside you allows: with a

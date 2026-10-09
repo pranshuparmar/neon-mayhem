@@ -3,7 +3,7 @@ GAME.police = (function () {
   var heat = 0, lastSeen = 0, pinTimer = 0, grabTimer = 0, haulTimer = 0, lastCrime = -99;
   var peak = 0;   // the most stars this run of heat has reached (the papers notice a big one slipped)
   var crimeCooldown = {};
-  var roadblockT = 0, spikes = [];
+  var roadblockT = 0, spikes = [], announcedArmy = false;
   // What each star COSTS, in offences. The gaps used to be 50/70/90/110/120
   // against a 70-heat pedestrian death, so every level was one more body: run
   // down five people and you had five stars, and a single one you never meant
@@ -18,15 +18,17 @@ GAME.police = (function () {
   // — twenty to earn a five-star manhunt from a standing start, against five
   // before. The escalation below is folded into the arithmetic, so those are
   // the counts you actually get and not the counts before it is applied.
-  var THRESH = [0, 138, 366, 698, 1148, 1730];
-  var HEAT_CEIL = 2200;
+  // ...and the sixth: the army. Seven more past five: something you
+  // have to really keep at.
+  var THRESH = [0, 138, 366, 698, 1148, 1730, 2450];
+  var HEAT_CEIL = 2900, MAX_STARS = 6;
   // Offending while already wanted still counts for a little more — the
   // response is ramping up and so is their patience — but at 0.22 it was
   // undoing the ladder faster than the gaps built it.
   var ESCALATION = 0.10;
-  var CAR_CAP = [0, 1, 2, 3, 4, 6];
+  var CAR_CAP = [0, 1, 2, 3, 4, 6, 6];
   // and on the water, the harbour patrol's launches (see spawnLaunch)
-  var BOAT_CAP = [0, 1, 1, 2, 3, 3];
+  var BOAT_CAP = [0, 1, 1, 2, 3, 3, 3];
   // how long one star lasts after the offence (see the cooling in update):
   // ONE_STAR_HOLD whatever happens, ONE_STAR_CHASE while a unit has had you
   // in sight in the last ONE_STAR_SEEN seconds
@@ -34,7 +36,7 @@ GAME.police = (function () {
 
   function stars() {
     var s = 0;
-    for (var i = 5; i >= 1; i--) { if (heat >= THRESH[i]) { s = i; break; } }
+    for (var i = MAX_STARS; i >= 1; i--) { if (heat >= THRESH[i]) { s = i; break; } }
     return s;
   }
 
@@ -122,7 +124,7 @@ GAME.police = (function () {
   }
 
   function setWanted(n) {
-    n = U.clamp(Math.floor(n), 0, 5);
+    n = U.clamp(Math.floor(n), 0, MAX_STARS);
     // (cleared by hand — busted, dead, bribed, slept off — is not an escape)
     if (n === 0) peak = 0;
     heat = n === 0 ? 0 : THRESH[n] + 25;
@@ -449,6 +451,19 @@ GAME.police = (function () {
     }
   }
 
+  // ---- how a unit drives at you ----------------------------------------
+  // Below three stars they follow at a distance. From three, some of them
+  // stop being polite: one RAMS, flat out into you; one goes for the PIT —
+  // alongside your back wheel and a nudge that spins you round; and one
+  // BOXES you in when you slow, parking across your nose or your doors so
+  // there is nowhere to go but the cuffs. The rest still follow.
+  var tactics = true, unitN = 0;
+  var TACTIC_CYCLE = ['ram', 'pit', 'box', 'chase'];
+  function tacticFor(s) {
+    unitN++;
+    if (!tactics || s < 3) return 'chase';
+    return TACTIC_CYCLE[unitN % TACTIC_CYCLE.length];
+  }
   function spawnCruiser() {
     // sent to where they think you are: you, while somebody can see you,
     // otherwise the search — a unit dispatched straight at a suspect nobody
@@ -474,9 +489,13 @@ GAME.police = (function () {
       }
       if (!clear) continue;
       var heading = Math.atan2(px - rp.x, pz - rp.z);
-      var car = GAME.vehicles.spawnCar('police', rp.x, rp.z, heading, { occupied: 'ai', ai: { mode: 'chase' } });
+      // at six stars every other unit is the army's (army.js)
+      var army = stars() >= 6 && (unitN % 2 === 0);
+      var car = GAME.vehicles.spawnCar(army ? 'armytruck' : 'police', rp.x, rp.z, heading, { occupied: 'ai', ai: { mode: 'chase' } });
       car.copsOut = 0;
       car.shootT = U.randRange(Math.random, 0.6, 1.6);
+      if (army) { car.isPolice = true; car.armyUnit = true; }
+      car.tactic = tacticFor(stars());
       return car;
     }
     return null;
@@ -507,9 +526,11 @@ GAME.police = (function () {
     return null;
   }
 
-  function spawnFootCop(x, z) {
-    var cop = GAME.peds.spawnPed(x, z, { cop: true });
+  function spawnFootCop(x, z, army) {
+    var cop = GAME.peds.spawnPed(x, z, { cop: true, army: army === undefined ? stars() >= 6 : !!army });
     cop.state = 'chase';
+    // a soldier takes more stopping
+    if (cop.army) cop.hp = 90;
     return cop;
   }
 
@@ -522,7 +543,7 @@ GAME.police = (function () {
     footSpawnT = U.randRange(Math.random, 1.6, 3.2);
     var footCount = 0;
     for (var i = 0; i < GAME.world.peds.length; i++) if (GAME.world.peds[i].isCop && !GAME.world.peds[i].dead) footCount++;
-    if (footCount >= Math.min(1 + s, 6)) return;
+    if (footCount >= Math.min(1 + s, s >= 6 ? 8 : 6)) return;
     // officers come in on foot around where they think you are. This ring was
     // centred on you every couple of seconds whatever anybody knew, so one of
     // them always turned up within sight of wherever you had hidden.
@@ -778,6 +799,10 @@ GAME.police = (function () {
       return;
     }
 
+    // the tactics, for a unit that can see a driver (see tacticFor)
+    if (tactics && s >= 3 && spotted && P.inCar && P.car && !P.car.spec.heli && !P.car.spec.plane && !P.car.spec.boat &&
+        car.tactic && car.tactic !== 'chase' && tacticControls(car, dt, P.car)) return;
+
     // keep a pursuit gap rather than gluing to the bumper
     var gap = s === 1 ? 22 : 9;
     var throttle;
@@ -789,6 +814,70 @@ GAME.police = (function () {
     if (Math.abs(dh) > 0.7 && car.speed > 16) throttle = Math.min(throttle, -0.2);
     else if (Math.abs(dh) > 0.4 && car.speed > 24) throttle = Math.min(throttle, 0.2);
     setControls(car.controls, throttle, steer, false);
+  }
+
+  // Where the tactic wants the unit, and how it gets there. True when it
+  // has driven this tick; false hands it back to the ordinary chase.
+  function tacticControls(car, dt, pc) {
+    var fx = Math.sin(pc.heading), fz = Math.cos(pc.heading), rx = fz, rz = -fx;
+    var side = car.serial % 2 ? 1 : -1, tx, tz, stopAt = 0;
+    var pSpeed = Math.abs(pc.speed);
+    var rel = U.dist(car.pos.x, car.pos.z, pc.pos.x, pc.pos.z);
+    if (car.tactic === 'box' && pSpeed < 7) {
+      // three slots round you: across your nose, and at either door
+      var slot = car.serial % 3;
+      tx = pc.pos.x + (slot === 0 ? fx * 6.5 : rx * 4.2 * (slot === 1 ? 1 : -1));
+      tz = pc.pos.z + (slot === 0 ? fz * 6.5 : rz * 4.2 * (slot === 1 ? 1 : -1));
+      stopAt = 2.2;
+    } else if (car.tactic === 'pit') {
+      // up alongside the back wheel, a little behind it, then into it
+      var lead = 0.25;
+      var bx = pc.pos.x + (pc.vx || 0) * lead, bz = pc.pos.z + (pc.vz || 0) * lead;
+      var into = rel < 7 ? 0.9 : 2.1;
+      tx = bx - fx * 2.1 + rx * side * into; tz = bz - fz * 2.1 + rz * side * into;
+    } else if (car.tactic === 'ram') {
+      var lead2 = 0.35;
+      tx = pc.pos.x + (pc.vx || 0) * lead2; tz = pc.pos.z + (pc.vz || 0) * lead2;
+    } else return false;
+    var dx = tx - car.pos.x, dz = tz - car.pos.z, d = Math.sqrt(dx * dx + dz * dz);
+    var dh = U.wrapPI(Math.atan2(dx, dz) - car.heading);
+    car.aiSteer = U.lerp(car.aiSteer || 0, U.clamp(dh * 1.8, -1, 1), Math.min(1, dt * 6));
+    var thr = 1;
+    if (stopAt) thr = d > 12 ? 1 : d > stopAt ? 0.4 : (car.speed > 1 ? -1 : 0);
+    else if (Math.abs(dh) > 0.9 && car.speed > 14) thr = -0.2;
+    // matching speed for the PIT: no faster than you plus a little
+    if (car.tactic === 'pit' && rel < 10 && car.speed > pSpeed + 4) thr = 0.2;
+    setControls(car.controls, thr, car.aiSteer, !!stopAt && d < stopAt);
+    return true;
+  }
+  // The PIT itself: a unit at your back wheel, moving with you, turns you
+  // round. Checked from the update, after everybody has moved.
+  function checkPit(dt) {
+    var P = GAME.player, pc = P.inCar && P.car;
+    if (!pc || pc.spec.heli || pc.spec.plane || pc.spec.boat || pc.spec.tank) return;
+    if (pc.pitT > 0) {
+      pc.pitT -= dt;
+      pc.heading += pc.pitDir * 2.6 * dt;
+      pc.speed *= Math.max(0, 1 - 0.9 * dt);
+      return;
+    }
+    if (Math.abs(pc.speed) < 9) return;
+    var fx = Math.sin(pc.heading), fz = Math.cos(pc.heading), rx = fz, rz = -fx;
+    var cars = GAME.world.cars;
+    for (var i = 0; i < cars.length; i++) {
+      var c = cars[i];
+      if (c.tactic !== 'pit' || c.dead || !c.ai || c.ai.mode !== 'chase') continue;
+      var ox = c.pos.x - pc.pos.x, oz = c.pos.z - pc.pos.z;
+      var along = ox * fx + oz * fz, across = ox * rx + oz * rz;
+      if (along > -0.6 || along < -4.2 || Math.abs(across) > 2.6 || Math.abs(across) < 0.8) continue;
+      if (Math.abs(c.speed) < 8) continue;
+      pc.pitT = 0.65; pc.pitDir = across > 0 ? 1 : -1;
+      c.pitCool = 6; c.tactic = 'chase';   // (one go each, then it follows)
+      GAME.audio.crash(0.6, pc.pos.x, pc.pos.z);
+      GAME.hud.message('PIT! They\'ve spun you round.', 2);
+      if (GAME.haptics && GAME.haptics.hit) GAME.haptics.hit();
+      return;
+    }
   }
 
   // A launch after you: straight for you while somebody has eyes on you, the
@@ -915,7 +1004,7 @@ GAME.police = (function () {
       j.armR.rotation.x = -Math.PI / 2;
       cop.shootT -= dt;
       if (cop.shootT <= 0) {
-        GAME.combat.npcShoot(cop.pos.x, cop.pos.y + 1.35, cop.pos.z, 0.3 + s * 0.06, 5 + s, cop);
+        GAME.combat.npcShoot(cop.pos.x, cop.pos.y + 1.35, cop.pos.z, 0.3 + s * 0.06, (5 + s) * (cop.army ? 1.4 : 1), cop);
         cop.shootT = U.randRange(Math.random, 0.9, 1.8);
       }
     } else {
@@ -937,13 +1026,21 @@ GAME.police = (function () {
     var node = GAME.city.nearestNode(nx, nz);
     if (!node || U.dist2(node.x, node.z, P.car.pos.x, P.car.pos.z) < 70 * 70) return;
     var perp = Math.atan2(vx, vz) + Math.PI / 2;
+    // (at six stars it is the army's: two trucks across the road, and more
+    // soldiers out of them than a cruiser carries officers)
+    var armyBlock = s >= 6;
     for (var k = -1; k <= 1; k += 2) {
       var cx = node.x + Math.sin(perp) * 2.6 * k, cz = node.z + Math.cos(perp) * 2.6 * k;
-      var car = GAME.vehicles.spawnCar('police', cx, cz, perp, { occupied: 'ai', ai: { mode: 'roadblock' } });
+      var car = GAME.vehicles.spawnCar(armyBlock ? 'armytruck' : 'police', cx, cz, perp, { occupied: 'ai', ai: { mode: 'roadblock' } });
       car.copsOut = 2;
       car.shootT = 1;
+      if (armyBlock) { car.isPolice = true; car.armyUnit = true; }
     }
-    spawnFootCop(node.x + Math.sin(perp) * 8, node.z + Math.cos(perp) * 8);
+    spawnFootCop(node.x + Math.sin(perp) * 8, node.z + Math.cos(perp) * 8, armyBlock);
+    if (armyBlock) {
+      spawnFootCop(node.x - Math.sin(perp) * 8, node.z - Math.cos(perp) * 8, true);
+      spawnFootCop(node.x + Math.sin(perp + 0.3) * 6, node.z + Math.cos(perp + 0.3) * 6, true);
+    }
     if (s >= 4) {
       var toward = Math.atan2(P.car.pos.x - node.x, P.car.pos.z - node.z);
       var sx = node.x + Math.sin(toward) * 10, sz = node.z + Math.cos(toward) * 10;
@@ -1061,6 +1158,12 @@ GAME.police = (function () {
     if (anyGrab) { grabTimer += dt; if (grabTimer > 0.6) { grabTimer = 0; GAME.playerBusted(); } }
     else grabTimer = Math.max(0, grabTimer - dt * 2);
 
+    checkPit(dt);
+    // the army, at six (army.js sends its tank)
+    if (s >= 6 && !announcedArmy) {
+      announcedArmy = true;
+      GAME.hud.message('SIX STARS — THE ARMY HAS BEEN CALLED IN', 4);
+    } else if (s < 6) announcedArmy = false;
     // roadblocks
     if (s >= 3) {
       roadblockT -= dt;
@@ -1078,6 +1181,8 @@ GAME.police = (function () {
       for (var sp = 0; sp < spikes.length; sp++) {
         if (U.dist2(P.car.pos.x, P.car.pos.z, spikes[sp].x, spikes[sp].z) < 27) {
           P.car.spiked = true;
+          // all four, and you can see it (vehicles.js wear)
+          for (var tb = 0; tb < 4; tb++) GAME.vehicles.burstTyre(P.car, tb);
           GAME.fx.spawn(P.car.pos.x, 0.4, P.car.pos.z, { count: 10, color: 0xffe0a0, spread: 3, life: 0.4 });
           GAME.audio.crash(0.5, P.car.pos.x, P.car.pos.z);
           GAME.hud.message('Tires shredded!', 2);
@@ -1210,6 +1315,12 @@ GAME.police = (function () {
 
   return {
     get wanted() { return stars(); },
+    MAX_STARS: MAX_STARS,
+    // (the suite plays the chase as it was, at a polite distance; its
+    // tactics group turns the ramming, the PIT and the boxing back on)
+    get tactics() { return tactics; },
+    set tactics(v) { tactics = !!v; },
+    spawnUnit: function () { return spawnCruiser(); },
     get heat() { return heat; },
     get peak() { return peak; },
     reportCrime: reportCrime,

@@ -222,11 +222,24 @@ GAME.shops = (function () {
       if (GAME.jumpArsenal && have) return { id: id, name: name + '  ·  ammo +' + ammo, ds: 'On the house — you found every jump in the city.', price: 0 };
       return { id: id, name: name + (have ? '  ·  ammo +' + ammo : ''), ds: ds, price: price };
     }
+    // one hand-to-hand weapon at a time: buying another trades it in
+    function blade(id, name, price, ds) {
+      var have = P.weapons[id] && P.weapons[id].have;
+      return { id: id, name: name, ds: have ? 'In your hand already.' : ds, price: price, off: !!have };
+    }
     return [
       gun('pistol', 'PISTOL', 400, 40, 'Reliable. Forty rounds in the box.'),
       gun('smg', 'SMG', 2500, 120, 'Spray-friendly, drive-by approved.'),
       gun('shotgun', 'SHOTGUN', 1500, 24, 'Ends conversations at close range.'),
       gun('rifle', 'RIFLE', 5000, 30, 'The observatory special, over the counter.'),
+      gun('sniper', 'SNIPER RIFLE', 9000, 10, 'A scope you can count a man\'s change through.'),
+      gun('rocket', 'ROCKET LAUNCHER', 18000, 4, 'For the car that will not stop.'),
+      gun('grenade', 'GRENADES', 1200, 5, 'Pull, count, throw. In that order.'),
+      gun('molotov', 'MOLOTOVS', 700, 5, 'Bottles, rags, and a bad attitude.'),
+      blade('bat', 'BASEBALL BAT', 150, 'Little league, big league.'),
+      blade('knife', 'KNIFE', 250, 'Quiet. Close.'),
+      blade('katana', 'KATANA', 1800, 'Somebody\'s grandfather\'s. Sharp as the day.'),
+      blade('chainsaw', 'CHAINSAW', 3000, 'For the yard. Mostly.'),
       { id: 'armor', name: 'BODY ARMOR', ds: 'Takes the hits so you don’t.', price: 800, off: P.armor >= 100 },
       { id: 'medkit', name: 'FIRST-AID KIT', ds: 'Patches you back to full.', price: 150, off: P.health >= 100 }
     ];
@@ -365,7 +378,7 @@ GAME.shops = (function () {
     if (id === 'armor') { P.armor = 100; note('Strapped in.'); }
     else if (id === 'medkit') { P.health = 100; note('Good as new.'); }
     else {
-      var packs = { pistol: 40, smg: 120, shotgun: 24, rifle: 30 };
+      var packs = { pistol: 40, smg: 120, shotgun: 24, rifle: 30, sniper: 10, rocket: 4, grenade: 5, molotov: 5 };
       GAME.combat.giveWeapon(id, packs[id]);
       note('Bagged, no questions asked.');
     }
@@ -734,7 +747,7 @@ GAME.shops = (function () {
     // a room — you walk in (or drive in) under the header, past the cabs in
     // their bays, to the dispatch desk at the back. Three bays, nose out: a
     // cab either side for anybody to take, and the middle one kept for the
-    // Zebra Cab, which is there once the firm is yours (zebraBay).
+    // Tiger Cab, which is there once the firm is yours (tigerBay).
     function buildGarage(loc, placed, S, gy, fx, fz, px2) {
       var dir = placed.dir, flip = dir.x !== 0;
       var HW = S.w / 2, IN = HW - 0.5, BACK = S.d - 0.5;
@@ -805,7 +818,7 @@ GAME.shops = (function () {
       // ---- the bays (parked spots: vehicles.js keeps them stocked)
       var nose = Math.atan2(-dir.x, -dir.z);
       loc.bays = [-8, 0, 8].map(function (a) {
-        var sp = { x: X(a, 6.5), z: Z(a, 6.5), heading: nose, vtype: a === 0 ? 'zebra' : 'taxi', isla: !!loc.isla };
+        var sp = { x: X(a, 6.5), z: Z(a, 6.5), heading: nose, vtype: a === 0 ? 'tiger' : 'taxi', isla: !!loc.isla };
         if (a === 0) sp.need = function () { return !!(GAME.business && GAME.business.owns(loc.id)); };
         GAME.city.parkedSpots.push(sp);
         return sp;
@@ -1549,7 +1562,19 @@ GAME.shops = (function () {
   function items(loc) {
     // (and, at a counter that can be bought, the business itself: business.js)
     var biz = GAME.business ? GAME.business.rows(loc) : [];
-    return tradeItems(loc).concat(biz);
+    var trade = tradeItems(loc);
+    // and in a shop that is yours, what it sells is yours too: the cut, the
+    // shirt, the round at the bar, a box of rounds — on the house
+    if (GAME.business && GAME.business.owns(loc.id)) trade = trade.map(onTheHouse);
+    return trade.concat(biz);
+  }
+  function onTheHouse(it) {
+    if (!(it.price > 0) || it.noPrice) return it;
+    var c = {};
+    for (var k in it) c[k] = it[k];
+    c.price = 0;
+    c.ds = (it.ds ? it.ds + '  ' : '') + 'On the house — it\'s your shop.';
+    return c;
   }
   function tradeItems(loc) {
     switch (loc.kind) {
@@ -1565,8 +1590,8 @@ GAME.shops = (function () {
       case 'derby': return GAME.derby.items();
       case 'cabs': return [{ id: 'cabs_yard', name: 'THE GARAGE', noPrice: true, off: true, chip: ' ',
         ds: GAME.business && GAME.business.owns('cabs0')
-          ? 'The cabs in the bays are yours to take — and the Zebra Cab in the middle one. Every fare you drive puts more on the board.'
-          : 'The cabs in the bays are the firm\'s; take one out and start a shift. Own the firm and the Zebra Cab is in the middle bay, and every fare you drive puts more on its board.' }];
+          ? 'The cabs in the bays are yours to take — and the Tiger Cab in the middle one. Every fare you drive puts more on the board.'
+          : 'The cabs in the bays are the firm\'s; take one out and start a shift. Own the firm and the Tiger Cab is in the middle bay, and every fare you drive puts more on its board.' }];
     }
     return [];
   }
@@ -1873,10 +1898,10 @@ GAME.shops = (function () {
     // the place itself, or what is in its till (business.js)
     if (id.indexOf('biz_') === 0) {
       GAME.business.act(openShop, id);
-      // the cab firm's: the Zebra Cab is in its bay as you sign
+      // the cab firm's: the Tiger Cab is in its bay as you sign
       if (id === 'biz_buy' && openShop && openShop.kind === 'cabs' && openShop.bays) {
         GAME.vehicles.fillSpot(openShop.bays[1]);
-        GAME.hud.message('And the Zebra Cab in the middle bay is yours — take it out.', 4);
+        GAME.hud.message('And the Tiger Cab in the middle bay is yours — take it out.', 4);
       }
       if (openShop) render();
       GAME.audio.pickup();
@@ -1994,8 +2019,14 @@ GAME.shops = (function () {
     // multi-metre move between scans is a teleport — waking up at your own
     // condo, a mission repositioning you, a loaded save — and any mat you
     // land on stays shut until you step off and come back meaning it
+    // (Feet, not wheels: your own position stays where you got in while you
+    // drive, and getting out at the door put you there in one step — read as
+    // a teleport, the mat you parked by stayed shut until you walked five
+    // metres off and came back. Driving up to a door and stepping off is
+    // meaning it.)
+    if (P.inCar) lastWX = null;
     var jumped = lastWX !== null && U.dist2(P.pos.x, P.pos.z, lastWX, lastWZ) > 12 * 12;
-    lastWX = P.pos.x; lastWZ = P.pos.z;
+    if (!P.inCar) { lastWX = P.pos.x; lastWZ = P.pos.z; }
     var unlocked = !GAME.isla || GAME.isla.isOpen();
     // the bridges opening adds the island lots — re-plan the fleet then
     if (unlocked !== lastUnlocked) { lastUnlocked = unlocked; refreshGarageSpots(); }

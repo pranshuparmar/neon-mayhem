@@ -19,7 +19,8 @@ GAME.hud = (function () {
   var dmgFlash = null;
   var PICKUP_BLIP = {
     pistol: '#eef0ff', smg: '#ffe14f', shotgun: '#ff8a3d',
-    health: '#ff4d6a', armor: '#4a6cff', rifle: '#8dffd8'
+    health: '#ff4d6a', armor: '#4a6cff', rifle: '#8dffd8',
+    bat: '#ffd24a', knife: '#ffd24a', katana: '#ffd24a', chainsaw: '#ffd24a', grenade: '#ff8a3d', molotov: '#ff8a3d', sniper: '#8dffd8', rocket: '#ff6fb8'
   };
 
   function $(id) { return document.getElementById(id); }
@@ -28,10 +29,10 @@ GAME.hud = (function () {
     ['minimap', 'clock', 'cash', 'wanted-stars', 'health-fill', 'armor-fill', 'weapon-line', 'radio-popup', 'zone-popup',
       'msg-line', 'count-big', 'poi-hint', 'mission-hud', 'mission-title', 'mission-obj', 'mission-timer', 'title-screen', 'pause-screen',
       'wasted-screen', 'busted-screen', 'fade-layer', 'crt-layer', 'press-enter', 'title-best', 'pause-controls',
-      'controls-bar', 'map-screen', 'bigmap', 'map-clear', 'map-close', 'pager', 'pager-from', 'pager-text', 'enter-hint']
+      'controls-bar', 'map-screen', 'bigmap', 'map-clear', 'map-close', 'pager', 'pager-face', 'pager-from', 'pager-text', 'enter-hint']
       .forEach(function (id) { el[id] = $(id); });
     var stars = '';
-    for (var i = 0; i < 5; i++) stars += '<span>★</span>';
+    for (var i = 0; i < 6; i++) stars += '<span>★</span>';
     el['wanted-stars'].innerHTML = stars;
     paintKeyHelp();
 
@@ -123,6 +124,8 @@ GAME.hud = (function () {
     pauseBtn('pause-map', function () { if (GAME.paused) GAME.togglePause(); api.toggleMap(true); });
     // Lola, called up (lola.js): the way a touchscreen reaches her
     pauseBtn('pause-lola', function () { if (GAME.lola) GAME.lola.open(); });
+    // the cheat box (cheats.js): codes typed in
+    pauseBtn('pause-cheats', function () { if (GAME.cheats) GAME.cheats.open(); });
     // walking away from a run, for the pad and the touchscreen as much as
     // anybody (X on a keyboard): shown only with one going, and asks once
     var abandonSure = false;
@@ -884,7 +887,7 @@ GAME.hud = (function () {
     var wasd = K('KeyW') + K('KeyA') + K('KeyS') + K('KeyD');
     var txt = {
       car: '<b>' + wasd + '</b> drive · <b>' + K('Space') + '</b> handbrake · <b>' + K('KeyQ') + '/' + K('KeyE') + '</b> drive-by · <b>' + K('KeyF') + '</b> exit · <b>' + K('KeyG') + '</b> horn · <b>' + K('Comma') + '/' + K('Period') + '</b> radio · <b>' + K('KeyP') + '</b> map · <b>' + K('KeyH') + '</b> hide',
-      foot: '<b>' + wasd + '</b> move · <b>' + K('ShiftLeft') + '</b> sprint · <b>' + K('Space') + '</b> jump · <b>RMB</b> aim · <b>LMB</b> fire · <b>1-5</b> weapons · <b>' + K('KeyF') + '</b> enter car · <b>' + K('KeyP') + '</b> map · <b>' + K('KeyH') + '</b> hide',
+      foot: '<b>' + wasd + '</b> move · <b>' + K('ShiftLeft') + '</b> sprint · <b>' + K('Space') + '</b> jump · <b>RMB</b> aim · <b>LMB</b> fire · <b>1-9</b> · <b>' + K('KeyZ') + '</b> (hold) weapons · <b>' + K('KeyF') + '</b> enter car · <b>' + K('KeyP') + '</b> map · <b>' + K('KeyH') + '</b> hide',
       heli: '<b>' + K('Space') + '</b> up · <b>' + K('ShiftLeft') + '</b> down · <b>' + K('KeyW') + '/' + K('KeyS') + '</b> forward · <b>' + K('KeyA') + '/' + K('KeyD') + '</b> yaw · <b>' + K('KeyF') + '</b> exit / bail out · <b>' + K('KeyP') + '</b> map',
       plane: '<b>' + K('KeyW') + '/' + K('KeyS') + '</b> throttle · <b>' + K('Space') + '</b> climb · <b>' + K('ShiftLeft') + '</b> dive · <b>' + K('KeyA') + '/' + K('KeyD') + '</b> turn · <b>' + K('KeyQ') + '/' + K('KeyE') + '</b> barrel roll · <b>' + K('KeyF') + '</b> bail out',
       chute: '<b>' + wasd + '</b> steer your descent · glide down to land',
@@ -1129,6 +1132,12 @@ GAME.hud = (function () {
     // and the strangers with a favour to ask (strangers.js)
     var kb = GAME.strangers ? GAME.strangers.blips() : [];
     for (var ki = 0; ki < kb.length; ki++) blip(kb[ki].x, kb[ki].z, kb[ki].color, kb[ki].size);
+    // and the export crane on the harbour (export.js)
+    var xb = GAME.exporter && GAME.exporter.blip();
+    if (xb) blip(xb.x, xb.z, xb.color, 3.4 / zoom);
+    // and both sides' people on the corners near you (gangs.js)
+    var gb = GAME.gangs ? GAME.gangs.blips() : [];
+    for (var gi = 0; gi < gb.length; gi++) blip(gb[gi].x, gb[gi].z, gb[gi].color, gb[gi].size / zoom);
     // and where Lola's big score goes next (heist.js)
     var hb = GAME.heist ? GAME.heist.blips() : [];
     for (var hi = 0; hi < hb.length; hi++) blip(hb[hi].x, hb[hi].z, hb[hi].color, hb[hi].size);
@@ -1401,6 +1410,9 @@ GAME.hud = (function () {
     pageT = p.dur;
     el['pager-from'].textContent = '📟 ' + p.from;
     el['pager-text'].textContent = p.text;
+    // and who it is from, by their face (cast.js)
+    var id = GAME.cast && GAME.cast.idFor(p.from);
+    if (el['pager-face']) el['pager-face'].innerHTML = id ? GAME.cast.portrait(id) : '';
     // under the radar on a phone, where it moves up into this corner
     el.pager.style.top = GAME.isTouch ? '152px' : '';
     el.pager.classList.add('on');
@@ -1523,7 +1535,7 @@ GAME.hud = (function () {
     cashChanged: function () { targetCash = GAME.player.cash; },
     wantedChanged: function (n) {
       var spans = el['wanted-stars'].children;
-      for (var i = 0; i < 5; i++) spans[i].className = i < n ? 'lit' : '';
+      for (var i = 0; i < spans.length; i++) spans[i].className = i < n ? 'lit' : '';
       // Both police.js paths already funnel through here, so this is the one
       // place that sees every change — but neither of them passes the level
       // you were ON, and the direction is the whole message. Keep it here.
@@ -1533,9 +1545,12 @@ GAME.hud = (function () {
       else if (n === 0 && wantedShown > 0) GAME.haptics.wantedClear();
       wantedShown = n;
     },
-    setWeapon: function (name, ammo) {
+    setWeapon: function (name, ammo, iconSvg) {
       if (!el['weapon-line']) return; // may fire before the HUD is wired up
       el['weapon-line'].textContent = name + (ammo === '' ? '' : '  ·  ' + ammo);
+      // and what it looks like, beside it (arsenal.js draws them)
+      var wi = $('weapon-icon');
+      if (wi && iconSvg !== undefined && wi.getAttribute('data-w') !== name) { wi.innerHTML = iconSvg; wi.setAttribute('data-w', name); }
     },
     message: function (text, dur) { pushMessage(String(text), dur || 2.5); },
     // Letterbox for a moment that plays itself (the glass lift): black bars
@@ -1554,6 +1569,8 @@ GAME.hud = (function () {
       e.style.opacity = text ? 1 : 0;
     },
     get pagerText() { return paging && el['pager-text'] ? el['pager-text'].textContent : ''; },
+    get pagerFrom() { return paging && el['pager-from'] ? el['pager-from'].textContent : ''; },
+    get pagerFace() { return paging && el['pager-face'] ? el['pager-face'].innerHTML : ''; },
     // the huge centre numeral for mission countdowns. Callers repeat it every
     // frame while the count runs; it lets go of the screen on its own once
     // they stop (which is how "GO!" gets its moment and then clears itself)
@@ -1566,8 +1583,10 @@ GAME.hud = (function () {
     },
     radioPopup: function (name) {
       el['radio-popup'].textContent = '♪ ' + name;
+      // where it is on the dial and what it plays, and its jingle (dj.js)
+      if (GAME.dj) GAME.dj.tuned(name);
       el['radio-popup'].style.opacity = 1;
-      radioT = 2.2;
+      radioT = 2.6;
     },
     damageFlash: function () {
       GAME.haptics.hurt();
@@ -1781,7 +1800,33 @@ GAME.nav = (function () {
     if (pSeen[goal.id] !== g) return [];
     var out = [], cur = goal.id;
     while (cur >= 0) { out.push({ x: nodes[cur].x, z: nodes[cur].z }); cur = pPrev[cur]; }
-    return out.reverse();
+    out.reverse();
+    // The search runs junction to junction, and the junction nearest a place
+    // is as often past it as short of it: the line ran on by the destination
+    // to the next corner and came back for it, a U-turn at the lights nobody
+    // makes. The same at the start, back to the corner behind you first.
+    // A place that lies along the last block is reached on it; a start that
+    // lies along the first block sets off on it.
+    if (out.length >= 2 && along(out[out.length - 1], out[out.length - 2], x1, z1)) out.pop();
+    if (out.length >= 2 && along(out[0], out[1], x0, z0)) out.shift();
+    // down to one corner, with you and the place on the same street the same
+    // side of it: nothing to turn at, straight there
+    if (out.length === 1) {
+      var n0 = out[0], ax = x0 - n0.x, az = z0 - n0.z, bx = x1 - n0.x, bz = z1 - n0.z;
+      var la = Math.sqrt(ax * ax + az * az), lb = Math.sqrt(bx * bx + bz * bz);
+      if (la > 1 && lb > 1 && (ax * bx + az * bz) / (la * lb) > 0.8) out[0] = { x: x1, z: z1 };
+    }
+    return out;
+  }
+  // p lies along the block from corner n toward corner a: between them, and
+  // on (or by) that road rather than a street over
+  function along(n, a, px, pz) {
+    var sx = a.x - n.x, sz = a.z - n.z, l2 = sx * sx + sz * sz;
+    if (l2 < 1) return false;
+    var t = ((px - n.x) * sx + (pz - n.z) * sz) / l2;
+    if (t <= 0 || t > 1) return false;
+    var ox = px - (n.x + sx * t), oz = pz - (n.z + sz * t);
+    return ox * ox + oz * oz < 18 * 18;
   }
 
   function computePath() {

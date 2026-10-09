@@ -179,7 +179,8 @@ GAME.touch = (function () {
     btns.aim = mkBtn('AIM', 34, 132, 68, { flag: 'aim', toggle: true });
     btns.enter = mkBtn('ENTER', 122, 122, 62, { flag: 'enter' });
     btns.run = mkBtn('RUN', 228, 30, 62, { flag: 'run', toggle: true });
-    btns.wpn = mkBtn('WPN', 116, 200, 54, { press: function () { T.weaponCycle = true; } });
+    // a tap steps to the next weapon; held, it is the weapon wheel (arsenal.js)
+    btns.wpn = mkBtn('WPN', 116, 200, 54, { flag: 'wpnHeld', press: function () { T.wpnTap = true; } });
     footBtns.push(btns.fire, btns.jump, btns.aim, btns.enter, btns.run, btns.wpn);
     // in car: GAS in the corner, BRAKE right next to it (never stacked above)
     btns.gas = mkBtn('GAS', 24, 24, 96, { flag: 'gas' });

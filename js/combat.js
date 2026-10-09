@@ -7,14 +7,30 @@ var WEAPONS = {
   // Verde — but the hardware counters sell it over the counter for $5,000
   // (with refills), and the all-25-jumps arsenal includes it. Scarce as a
   // find, not as a purchase.
-  rifle: { name: 'RIFLE', slot: 5, damage: 68, range: 150, rate: 0.85, auto: false, spread: 0.002 }
+  rifle: { name: 'RIFLE', slot: 5, damage: 68, range: 150, rate: 0.85, auto: false, spread: 0.002 },
+  // Hand-to-hand, one at a time (a new one replaces the old, as in Vice
+  // City): `reach` in metres, and the chainsaw keeps cutting while held.
+  bat: { name: 'BASEBALL BAT', melee: true, damage: 26, reach: 2.2, rate: 0.62, swing: 'bat' },
+  knife: { name: 'KNIFE', melee: true, damage: 34, reach: 1.8, rate: 0.42, swing: 'knife', blood: true },
+  katana: { name: 'KATANA', melee: true, damage: 55, reach: 2.5, rate: 0.58, swing: 'katana', blood: true },
+  chainsaw: { name: 'CHAINSAW', melee: true, damage: 12, reach: 2.1, rate: 0.09, auto: true, swing: 'chainsaw', blood: true },
+  // thrown, one kind at a time, by the count (arsenal.js flies them)
+  grenade: { name: 'GRENADES', thrown: 'grenade', rate: 0.9 },
+  molotov: { name: 'MOLOTOVS', thrown: 'molotov', rate: 0.9 },
+  // the heavy end: a scoped rifle that drops anybody it hits, and a rocket
+  sniper: { name: 'SNIPER RIFLE', damage: 140, range: 280, rate: 1.25, auto: false, spread: 0, scope: true },
+  rocket: { name: 'ROCKET LAUNCHER', heavy: true, range: 200, rate: 1.5 }
 };
-var WEAPON_ORDER = ['fist', 'pistol', 'smg', 'shotgun', 'rifle'];
+var WEAPON_ORDER = ['fist', 'bat', 'knife', 'katana', 'chainsaw', 'pistol', 'smg', 'shotgun', 'rifle', 'sniper', 'rocket', 'grenade', 'molotov'];
+// one of each of these at a time: a new one replaces whatever you had
+var WEAPON_GROUP = { bat: 'melee', knife: 'melee', katana: 'melee', chainsaw: 'melee', grenade: 'thrown', molotov: 'thrown' };
 // how long the gun stays up after a shot from the hip (player.js), and which
 // guns take both hands
-var SHOT_POSE = 0.6, TWO_HANDED = { smg: true, shotgun: true, rifle: true };
-// the number keys that pick them, spelled out once rather than every tick
-var WEAPON_KEYS = WEAPON_ORDER.map(function (w, i) { return 'Digit' + (i + 1); });
+var SHOT_POSE = 0.6, TWO_HANDED = { smg: true, shotgun: true, rifle: true, sniper: true, rocket: true, chainsaw: true };
+// The number keys: 1-5 as they always were, then the hand-to-hand weapon
+// you carry, the thing you throw, the sniper rifle and the rocket launcher.
+var WEAPON_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9'];
+var WEAPON_KEY_SLOT = ['fist', 'pistol', 'smg', 'shotgun', 'rifle', 'melee', 'thrown', 'sniper', 'heavy'];
 
 GAME.combat = (function () {
   var aiming = false, lockTarget = null, lockIdx = 0;
@@ -273,6 +289,8 @@ GAME.combat = (function () {
         } else if (res.hit.kind === 'car') {
           GAME.haptics.hit();
           GAME.vehicles.damageCar(res.hit.obj, wd.damage * 0.8, 'gun');
+          // by a wheel, it is the tyre that goes
+          if (GAME.vehicles.shotTyre) GAME.vehicles.shotTyre(res.hit.obj, hx, hz);
           GAME.vehicles.shotAt(res.hit.obj);   // and whoever is driving it reacts (vehicles.js)
           GAME.fx.spawn(hx, 0.8, hz, { count: 3, color: 0xffe0a0, spread: 2, life: 0.3 });
           if (res.hit.obj.isPolice && !res.hit.obj.mission) GAME.police.reportCrime('hit_cop_car', P.pos);
@@ -309,18 +327,23 @@ GAME.combat = (function () {
     return 'fist';
   }
 
-  function punch() {
-    var P = GAME.player;
+  // a fist, or whatever hand-to-hand weapon is in it
+  function punch(w) {
+    var P = GAME.player, wd = WEAPONS[w || 'fist'];
+    var reach = wd.reach || 1.3;
     P.punchT = 0.26; // drives the swing animation in player.js
-    GAME.audio.punch();
+    if (wd.swing) GAME.audio.swing(wd.swing); else GAME.audio.punch();
     var fx = Math.sin(P.heading), fz = Math.cos(P.heading);
-    var px = P.pos.x + fx * 1.2, pz = P.pos.z + fz * 1.2;
+    var px = P.pos.x + fx * (reach - 0.1), pz = P.pos.z + fz * (reach - 0.1);
+    var hitR2 = 1.7 * (reach / 1.3);
     var peds = GAME.world.peds;
     for (var i = 0; i < peds.length; i++) {
       var p = peds[i];
       if (p.dead) continue;
-      if (U.dist2(p.pos.x, p.pos.z, px, pz) < 1.7) {
-        GAME.peds.damage(p, WEAPONS.fist.damage, true);
+      if (U.dist2(p.pos.x, p.pos.z, px, pz) < hitR2) {
+        GAME.peds.damage(p, wd.damage, true);
+        if (wd.swing) GAME.audio.thud(wd.swing);
+        if (wd.blood) GAME.fx.spawn(p.pos.x, p.pos.y + 1.2, p.pos.z, { count: 4, color: 0xaa1020, spread: 0.6, vy: 1.5, life: 0.4, grav: 6 });
         // (an outlaw — a thief on the run — is fair game: streetlife.js)
         if (!p.outlaw) GAME.police.reportCrime('hit_ped', P.pos);
         GAME.missions.notifyChaos(20);
@@ -331,13 +354,13 @@ GAME.combat = (function () {
     // a rider is within reach where a driver behind glass is not
     var rider = car && GAME.vehicles.throwRider(car);
     if (rider) {
-      GAME.peds.damage(rider, WEAPONS.fist.damage, true);
+      GAME.peds.damage(rider, wd.damage, true);
       if (!rider.outlaw) GAME.police.reportCrime('hit_ped', P.pos);
       GAME.missions.notifyChaos(20);
       return;
     }
     if (car) {
-      GAME.vehicles.damageCar(car, 6, 'fist');
+      GAME.vehicles.damageCar(car, wd.melee ? wd.damage * 0.5 : 6, 'fist');
       GAME.fx.spawn(px, 1, pz, { count: 3, color: 0xffe0a0, spread: 1, life: 0.3 });
     }
   }
@@ -346,18 +369,23 @@ GAME.combat = (function () {
     var P = GAME.player, inp = GAME.input, T = inp.touch;
     cooldown -= dt;
     // (and no gunplay in the water: both hands are swimming)
-    if (P.state !== 'alive' || P.entering || P.swimming || P.interior) { setAiming(false); aimToggle = false; inp.lmbPressed = false; return; }
+    // (indoors only where a gun means something: a shop's till, robbery.js)
+    var indoorsOk = P.interior && GAME.robbery && GAME.robbery.armedRoom();
+    if (P.state !== 'alive' || P.entering || P.swimming || (P.interior && !indoorsOk)) { setAiming(false); aimToggle = false; inp.lmbPressed = false; return; }
 
-    // weapon select
-    for (var i = 0; i < WEAPON_ORDER.length; i++) {
-      if (GAME.keyPressed(WEAPON_KEYS[i])) selectWeapon(WEAPON_ORDER[i]);
+    // weapon select: the number keys, by slot (arsenal.js), a step to the
+    // next, and the wheel (which steps on a tap and opens on a hold)
+    for (var i = 0; i < WEAPON_KEYS.length; i++) {
+      if (GAME.keyPressed(WEAPON_KEYS[i])) {
+        var slotted = GAME.arsenal ? GAME.arsenal.inSlot(WEAPON_KEY_SLOT[i]) : WEAPON_KEY_SLOT[i];
+        if (slotted) selectWeapon(slotted);
+      }
     }
     if (T.weaponCycle) {
       T.weaponCycle = false;
-      var have = WEAPON_ORDER.filter(function (w) { return P.weapons[w] && P.weapons[w].have; });
-      var idx = have.indexOf(P.currentWeapon);
-      selectWeapon(have[(idx + 1) % have.length]);
+      cycle(1);
     }
+    if (GAME.arsenal && GAME.arsenal.wheelOpen) { inp.lmbPressed = false; return; }
 
     if (GAME.keyPressed('Tab')) aimToggle = !aimToggle;
     // A Tab-latched aim must never outlive the moment: releasing RMB ends
@@ -399,9 +427,13 @@ GAME.combat = (function () {
       }
       if (!lockTarget && GAME.frame % 20 === 0) lockTarget = bestCandidate();
     } else {
+      // (not aiming, the mouse wheel steps through what you carry)
+      if (inp.wheel !== 0 && !P.inCar) cycle(inp.wheel > 0 ? 1 : -1);
       inp.wheel = 0;
     }
 
+    // down the scope there is no lock: the round goes where the crosshair is
+    if (GAME.arsenal && GAME.arsenal.scoped) lockTarget = null;
     if (reticle) {
       if (aiming && lockTarget) {
         reticle.visible = true;
@@ -425,7 +457,8 @@ GAME.combat = (function () {
       // no drive-by from an aircraft: the TALON's own weapons read LMB/FIRE,
       // and the SMG going off alongside the chin gun was a double trigger —
       // every burst of gunship fire also burned drive-by ammo sideways
-      var airCar = P.car && (P.car.spec.heli || P.car.spec.plane);
+      // (nor from a tank, whose LMB is its cannon: army.js)
+      var airCar = P.car && (P.car.spec.heli || P.car.spec.plane || P.car.spec.tank);
       var hasSMG = !airCar && P.weapons.smg && P.weapons.smg.have && P.weapons.smg.ammo > 0;
       var left = GAME.key('KeyQ') || T.driveByL;
       var right = GAME.key('KeyE') || T.driveByR;
@@ -442,7 +475,8 @@ GAME.combat = (function () {
           fireGun('smg', yaw, true);
         }
       }
-      inp.lmbPressed = false;
+      // (a tank's trigger is its cannon's, read after this: army.js)
+      if (!P.car.spec.tank) inp.lmbPressed = false;
       return;
     }
 
@@ -453,10 +487,29 @@ GAME.combat = (function () {
     var wantFire = wd.auto ? fireHeld : firePressed;
     if (wantFire && cooldown <= 0) {
       cooldown = wd.rate;
-      if (w === 'fist') punch();
-      else {
+      var scoped = GAME.arsenal && GAME.arsenal.scoped;
+      if (w === 'fist' || wd.melee) punch(w);
+      else if (wd.thrown || wd.heavy) {
+        var inv2 = P.weapons[w];
+        if (!inv2 || inv2.ammo <= 0) { P.currentWeapon = fallbackFrom(w); refreshWeaponHud(); return; }
+        var ty = aiming && lockTarget ? Math.atan2(lockTarget.pos.x - P.pos.x, lockTarget.pos.z - P.pos.z) : GAME.cam.yaw;
+        P.heading = ty; P.shotT = SHOT_POSE; P.shotYaw = ty;
+        if (wd.heavy) GAME.arsenal.fireRocket(ty, aiming ? lockTarget : null);
+        else GAME.arsenal.throwIt(wd.thrown, ty, aiming ? lockTarget : null);
+        if (!GAME.unlimitedAmmo) inv2.ammo--;
+        if (inv2.ammo <= 0) {
+          var nx = fallbackFrom(w);
+          P.currentWeapon = nx;
+          if (wd.thrown) inv2.have = false;
+          GAME.hud.message('Out of ' + wd.name.toLowerCase() + ' — ' + WEAPONS[nx].name + ' up.', 2);
+        }
+        refreshWeaponHud();
+      } else {
         var yaw;
-        if (aiming && lockTarget) {
+        if (scoped) {
+          yaw = GAME.cam.yaw;
+          P.heading = yaw;
+        } else if (aiming && lockTarget) {
           yaw = Math.atan2(lockTarget.pos.x - P.pos.x, lockTarget.pos.z - P.pos.z);
           P.heading = yaw;
         } else {
@@ -477,13 +530,35 @@ GAME.combat = (function () {
     P.currentWeapon = w;
     refreshWeaponHud();
   }
+  // the next (or last) thing you carry that can be used, round the order
+  function cycle(dir) {
+    var P = GAME.player;
+    var have = WEAPON_ORDER.filter(function (w) {
+      var v = P.weapons[w];
+      return v && v.have && (w === 'fist' || WEAPONS[w].melee || v.ammo > 0);
+    });
+    if (!have.length) return;
+    var idx = have.indexOf(P.currentWeapon);
+    selectWeapon(have[(idx + (dir < 0 ? have.length - 1 : 1)) % have.length]);
+  }
 
   function giveWeapon(id, ammo) {
     var P = GAME.player;
     if (!WEAPONS[id]) return;
+    // one of a kind: a new hand-to-hand weapon, or a new thing to throw,
+    // takes the place of the one you had
+    var grp = WEAPON_GROUP[id];
+    if (grp) {
+      for (var o in WEAPON_GROUP) {
+        if (o === id || WEAPON_GROUP[o] !== grp || !P.weapons[o]) continue;
+        P.weapons[o].have = false; P.weapons[o].ammo = 0;
+      }
+    }
     if (!P.weapons[id]) P.weapons[id] = { have: true, ammo: 0 };
     P.weapons[id].have = true;
-    if (id !== 'fist') P.weapons[id].ammo += (ammo || 30);
+    // (a club does not run out: it is counted as one, so the save keeps it)
+    if (WEAPONS[id].melee) P.weapons[id].ammo = 1;
+    else if (id !== 'fist') P.weapons[id].ammo += (ammo || 30);
     P.currentWeapon = id;
     refreshWeaponHud();
   }
@@ -508,9 +583,24 @@ GAME.combat = (function () {
     // the reward for all 25 jumps stops the decrement but leaves the count
     // parked on its starting 999, which reads as "999 bullets left", not
     // "never reload again". Say what it actually is.
-    GAME.hud.setWeapon(wd.name, P.currentWeapon === 'fist' ? ''
+    GAME.hud.setWeapon(wd.name, P.currentWeapon === 'fist' || wd.melee ? ''
       : GAME.unlimitedAmmo ? '∞'
-      : (inv ? inv.ammo : 0));
+      : (inv ? inv.ammo : 0), GAME.arsenal ? GAME.arsenal.icon(P.currentWeapon) : '');
+    dressProp(P.currentWeapon);
+  }
+
+  // what is in your hand, roughly the shape of it (player.js hangs it there)
+  var PROPS = {
+    bat: [0.8, 0.6, 2.4, 0xc89858], knife: [0.4, 0.25, 0.8, 0xd8dce8], katana: [0.3, 0.22, 3.0, 0xe8ecf4],
+    chainsaw: [2.2, 2.0, 2.4, 0xff8a2a], grenade: [1.4, 1.4, 0.45, 0x3a5a2a], molotov: [1, 1.6, 0.45, 0x3a7a4a],
+    sniper: [0.8, 0.9, 3.2, 0x2a2a34], rocket: [1.8, 1.6, 3.2, 0x5a6a3a]
+  };
+  function dressProp(w) {
+    var m = GAME.player.weaponMesh;
+    if (!m) return;
+    var p = PROPS[w];
+    m.scale.set(p ? p[0] : 1, p ? p[1] : 1, p ? p[2] : 1);
+    m.material.color.setHex(p ? p[3] : 0x222228);
   }
 
   // ---------- pickups ----------
@@ -521,7 +611,17 @@ GAME.combat = (function () {
     smg: { color: 0xffe14f, label: 'SMG AMMO' },
     shotgun: { color: 0xff8a3d, label: 'SHOTGUN AMMO' },
     rifle: { color: 0x8dffd8, label: 'RIFLE' },
-    cash: { color: 0x8dffd8, label: 'CASH' }
+    cash: { color: 0x8dffd8, label: 'CASH' },
+    // the rest of the arsenal (arsenal.js), out in the city: on corners,
+    // for whoever looks
+    bat: { color: 0xffd24a, label: 'BASEBALL BAT' },
+    knife: { color: 0xffd24a, label: 'KNIFE' },
+    katana: { color: 0xffd24a, label: 'KATANA' },
+    chainsaw: { color: 0xffd24a, label: 'CHAINSAW' },
+    grenade: { color: 0xff8a3d, label: 'GRENADES' },
+    molotov: { color: 0xff8a3d, label: 'MOLOTOVS' },
+    sniper: { color: 0x8dffd8, label: 'SNIPER RIFLE' },
+    rocket: { color: 0xff6fb8, label: 'ROCKET LAUNCHER' }
   };
 
   // A shape, its halo and their materials are fixed by type and colour, so
@@ -577,6 +677,30 @@ GAME.combat = (function () {
       b.addBox(0, 0.16, 0, 0.46, 0.34, 0.14, 0, color, 0);      // shield body
       b.addBox(0, -0.10, 0, 0.26, 0.26, 0.14, 0, color, 0);     // tapered point
       b.addBox(0, 0.16, 0.08, 0.16, 0.16, 0.04, 0, 0xffffff, 0);   // emblem
+    } else if (type === 'bat' || type === 'katana') {
+      var kat = type === 'katana';
+      b.addBox(0, 0.10, 0.12, kat ? 0.04 : 0.09, kat ? 0.07 : 0.1, kat ? 0.9 : 0.8, 0, kat ? 0xe8ecf4 : color, 0);
+      b.addBox(0, 0.10, -0.38, 0.07, 0.08, 0.26, 0, kat ? 0x2a2a34 : 0x8a6a3a, 0);
+      if (kat) b.addBox(0, 0.10, -0.24, 0.16, 0.12, 0.04, 0, color, 0);
+    } else if (type === 'knife') {
+      b.addBox(0, 0.10, 0.10, 0.04, 0.09, 0.34, 0, 0xe8ecf4, 0);
+      b.addBox(0, 0.10, -0.14, 0.07, 0.1, 0.16, 0, color, 0);
+    } else if (type === 'chainsaw') {
+      b.addBox(0, 0.10, -0.12, 0.2, 0.24, 0.32, 0, color, 0);
+      b.addBox(0, 0.10, 0.28, 0.05, 0.12, 0.5, 0, 0xe8ecf4, 0);
+    } else if (type === 'grenade' || type === 'molotov') {
+      var mol = type === 'molotov';
+      b.addBox(-0.12, 0.10, 0, 0.16, mol ? 0.3 : 0.2, 0.16, 0, mol ? 0x3a7a4a : 0x3a5a2a, 0);
+      b.addBox(0.12, 0.10, 0, 0.16, mol ? 0.3 : 0.2, 0.16, 0, mol ? 0x3a7a4a : 0x3a5a2a, 0);
+      b.addBox(0, 0.30, 0, 0.36, 0.05, 0.05, 0, color, 0);
+    } else if (type === 'sniper') {
+      b.addBox(0, 0.11, 0.26, 0.06, 0.07, 1.2, 0, color, 0);
+      b.addBox(0, 0.04, -0.2, 0.09, 0.16, 0.5, 0, 0x2a2a34, 0);
+      b.addBox(0, 0.24, 0.0, 0.08, 0.1, 0.4, 0, 0xffffff, 0);
+    } else if (type === 'rocket') {
+      b.addBox(0, 0.12, 0.05, 0.18, 0.18, 1.1, 0, 0x5a6a3a, 0);
+      b.addBox(0, 0.12, 0.66, 0.12, 0.12, 0.14, 0, color, 0);
+      b.addBox(0, -0.06, -0.1, 0.07, 0.2, 0.1, 0, 0x2a2a34, 0);
     } else { // cash bundle
       b.addBox(0, 0.06, 0, 0.52, 0.10, 0.30, 0, color, 0);
       b.addBox(0, 0.17, 0, 0.50, 0.09, 0.28, 0.16, color, 0);
@@ -650,6 +774,7 @@ GAME.combat = (function () {
     }
   }
 
+  var PICKUP_AMMO = { pistol: 24, smg: 50, rifle: 20, shotgun: 10, grenade: 5, molotov: 5, sniper: 10, rocket: 4 };
   function checkPickups() {
     var P = GAME.player;
     var ps = GAME.world.pickups;
@@ -664,7 +789,7 @@ GAME.combat = (function () {
       if (p.type === 'health') { if (P.health >= 100) continue; P.health = Math.min(100, P.health + 50); }
       else if (p.type === 'armor') { if (P.armor >= 100) continue; P.armor = Math.min(100, P.armor + 50); }
       else if (p.type === 'cash') { var amt = p.amount || 10 + Math.floor(Math.random() * 30); GAME.addCash(amt); label = '$' + amt; }
-      else giveWeapon(p.type, p.type === 'pistol' ? 24 : p.type === 'smg' ? 50 : p.type === 'rifle' ? 20 : 10);
+      else giveWeapon(p.type, PICKUP_AMMO[p.type] || 10);
       GAME.audio.pickup();
       GAME.haptics.pickup();
       GAME.hud.message(label, 1.2);
@@ -775,6 +900,9 @@ GAME.combat = (function () {
     giveAllWeapons: giveAllWeapons,
     FULL_LOAD: FULL_LOAD,
     selectWeapon: selectWeapon,
+    select: selectWeapon,
+    cycle: cycle,
+    melee: punch,
     dropPickup: dropPickup,
     pickupShape: pickupShape,
     refreshWeaponHud: refreshWeaponHud,

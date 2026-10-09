@@ -54,6 +54,38 @@
   #cash { font-size:26px; font-weight:800; font-style:italic; color:#8dffd8; text-shadow:0 0 8px rgba(70,255,190,.8), 2px 2px 0 #06281c; letter-spacing:1px; }
   #wanted-stars { font-size:24px; letter-spacing:3px; color:rgba(255,255,255,.22); text-shadow:none; margin-top:2px; }
   #wanted-stars .lit { color:#ffd24a; text-shadow:0 0 10px rgba(255,190,40,.9); }
+  #weapon-row { display:flex; align-items:center; justify-content:flex-end; gap:6px; margin-top:4px; }
+  #weapon-icon { width:34px; height:34px; line-height:0; filter:drop-shadow(0 0 4px rgba(255,80,170,.7)); }
+  #weapon-icon:empty { display:none; }
+  #weapon-icon svg, .wslot svg { width:100%; height:100%; }
+  /* the weapon wheel (arsenal.js): the slots round a ring, the world slowed behind it */
+  #weapon-wheel { position:fixed; inset:0; z-index:30; display:none; align-items:center; justify-content:center; pointer-events:auto;
+    background:radial-gradient(circle at 50% 50%, rgba(10,4,20,.25) 0, rgba(10,4,20,.25) 100px, rgba(10,4,20,.55) 200px, rgba(10,4,20,.15) 60%); }
+  #wheel-ring { position:absolute; left:50%; top:50%; width:0; height:0; }
+  .wslot { position:absolute; width:64px; height:64px; margin:-32px 0 0 -32px; border-radius:50%; background:rgba(16,6,30,.86);
+    border:2px solid rgba(255,150,210,.4); display:flex; align-items:center; justify-content:center; box-sizing:border-box; padding:9px; cursor:pointer; }
+  .wslot span { position:absolute; bottom:-16px; left:0; right:0; text-align:center; font:700 11px 'Segoe UI', Arial, sans-serif; color:#ffe8f6; text-shadow:0 1px 2px #000; }
+  .wslot.empty { opacity:.35; }
+  .wslot.cur { border-color:rgba(141,255,216,.7); }
+  .wslot.sel { border-color:#ff4fa3; background:rgba(255,79,163,.3); transform:scale(1.15); box-shadow:0 0 18px rgba(255,79,163,.6); }
+  #wheel-name { position:relative; font:900 18px 'Segoe UI', Arial, sans-serif; letter-spacing:3px; color:#ffe8f6; text-shadow:0 0 10px rgba(255,79,163,.9); }
+  /* the cheat box (cheats.js), over the pause screen */
+  #cheat-box { position:fixed; inset:0; z-index:70; display:none; align-items:center; justify-content:center; padding:16px; background:rgba(6,2,14,.6);
+    font-family:'Segoe UI', Arial, Helvetica, sans-serif; }
+  #cheat-card { width:min(420px,100%); background:rgba(10,4,20,.96); border:1px solid rgba(255,79,163,.85); border-radius:10px; padding:16px; text-align:center;
+    box-shadow:0 0 26px rgba(255,79,163,.4); }
+  #cheat-title { color:#ffe8f6; font-weight:900; letter-spacing:3px; font-size:18px; }
+  #cheat-sub { color:#9fd8ff; font-size:12.5px; margin:6px 0 10px; }
+  #cheat-input { width:100%; box-sizing:border-box; padding:10px 12px; font:800 18px 'Segoe UI', Arial, sans-serif; letter-spacing:3px; text-transform:uppercase;
+    background:#14081f; color:#8dffd8; border:1px solid rgba(141,255,216,.6); border-radius:6px; outline:none; }
+  #cheat-said { min-height:20px; margin:8px 0 4px; color:#ffe14f; font-weight:700; font-size:13px; }
+  #cheat-btns { display:flex; gap:8px; justify-content:center; }
+  /* down the sniper's scope */
+  #scope { position:fixed; inset:0; z-index:9; display:none; pointer-events:none;
+    background:radial-gradient(circle at 50% 50%, transparent 0, transparent min(36vh,36vw), #000 calc(min(36vh,36vw) + 2px)); }
+  #scope .scope-x, #scope .scope-y { position:absolute; background:rgba(0,0,0,.85); }
+  #scope .scope-x { left:calc(50% - min(36vh,36vw)); right:calc(50% - min(36vh,36vw)); top:50%; height:1px; }
+  #scope .scope-y { top:calc(50% - min(36vh,36vw)); bottom:calc(50% - min(36vh,36vw)); left:50%; width:1px; }
   #weapon-line { margin-top:4px; font-size:15px; font-weight:700; color:#ffb3e2; text-shadow:0 0 8px rgba(255,80,170,.8); }
   #vehicle-line { margin-top:2px; font-size:13px; font-weight:800; letter-spacing:1px; display:none;
     text-shadow:0 0 8px rgba(0,0,0,.7); }
@@ -65,6 +97,13 @@
 
   #radio-popup { left:50%; top:16%; transform:translateX(-50%); font-size:22px; font-weight:800; font-style:italic;
     color:#9df3ff; text-shadow:0 0 12px rgba(60,220,255,.9); opacity:0; transition:opacity .4s; }
+  #radio-popup .rsub { font-size:12px; font-style:normal; letter-spacing:2px; margin-top:2px; text-align:center; }
+  /* the DJ or an ad, under the station (dj.js) */
+  #radio-talk { left:50%; top:calc(16% + 52px); transform:translateX(-50%); width:min(560px, 80vw); text-align:center; font-size:14px; color:#f4ecff;
+    text-shadow:0 1px 3px #000; opacity:0; transition:opacity .4s; pointer-events:none; line-height:1.35;
+    background:rgba(10,4,20,.62); padding:6px 12px; border-radius:6px; box-sizing:border-box; }
+  #radio-talk.on { opacity:.95; }
+  #radio-talk b { letter-spacing:1px; }
   #zone-popup { left:50%; top:12px; transform:translateX(-50%); text-align:center; font-size:22px; font-weight:800; font-style:italic; color:#ffd9f2;
     text-shadow:0 0 12px rgba(255,100,200,.9), 2px 2px 0 #3a0f33; opacity:0; transition:opacity .6s; }
 
@@ -94,6 +133,12 @@
     border:1px solid rgba(255,79,163,.85); border-radius:6px; box-shadow:0 0 16px rgba(255,79,163,.4);
     opacity:0; transform:translateY(-8px); transition:opacity .35s, transform .35s; pointer-events:none; }
   #pager.on { opacity:1; transform:none; }
+  /* the sender's face (cast.js), left of what they paged */
+  #pager { display:flex; align-items:flex-start; gap:10px; }
+  #pager-face { flex:0 0 52px; width:52px; height:52px; border-radius:5px; overflow:hidden; border:1px solid rgba(255,255,255,.35); line-height:0; }
+  #pager-face:empty { display:none; }
+  #pager-face svg, #lola-face svg, #scene-face svg { width:100%; height:100%; display:block; }
+  #pager-body { min-width:0; }
   /* the morning paper's front page (herald.js): newsprint, a little askew */
   #herald { position:fixed; left:50%; top:62px; z-index:8; width:min(460px,74vw); padding:10px 14px 12px;
     background:#ece5d3; color:#1a1814; font-family:Georgia,"Times New Roman",serif; border:1px solid #b8ae98;
@@ -276,6 +321,10 @@
     background:rgba(6,2,14,.6); font-family:'Segoe UI', Arial, Helvetica, sans-serif; }
   #lola-card { width:min(560px, 100%); max-height:calc(100vh - 32px); display:flex; flex-direction:column; background:rgba(10,4,20,.95);
     border:1px solid rgba(255,79,163,.85); border-radius:10px; box-shadow:0 0 26px rgba(255,79,163,.4); padding:14px 16px 12px; }
+  #lola-head { display:flex; gap:12px; align-items:flex-start; }
+  #lola-face { flex:0 0 64px; width:64px; height:64px; border-radius:6px; overflow:hidden; border:1px solid rgba(255,150,210,.6); line-height:0; }
+  #lola-face:empty { display:none; }
+  #lola-words { min-width:0; flex:1; }
   #lola-from { font-size:12px; font-weight:800; letter-spacing:2px; color:#ff8fc8; }
   #lola-say { font-size:16px; color:#f4ecff; line-height:1.45; margin:6px 0 12px; text-shadow:0 1px 2px #000; }
   #lola-opts { overflow-y:auto; display:flex; flex-direction:column; gap:6px; min-height:0; }
@@ -293,6 +342,21 @@
   body.cine #cine { pointer-events:auto; }
   body.cine #cine .cine-bar { height:11vh; }
   body.cine #cine-skip { opacity:.8; }
+  /* a talking-head scene (scenes.js): who is talking, their face, the words typing out */
+  #scene-sub { position:absolute; left:50%; bottom:calc(11vh + 14px); transform:translate(-50%, 8px); width:min(720px, calc(100% - 32px));
+    display:flex; gap:14px; align-items:flex-start; padding:10px 14px 12px; border-radius:8px; background:linear-gradient(90deg, rgba(10,4,20,.88), rgba(10,4,20,.72));
+    border:1px solid #ff6fb8; box-shadow:0 0 22px rgba(0,0,0,.5); opacity:0; transition:opacity .25s, transform .25s; pointer-events:none;
+    font-family:'Segoe UI', Arial, Helvetica, sans-serif; }
+  #scene-sub.on { opacity:1; transform:translate(-50%, 0); }
+  #scene-face { flex:0 0 76px; width:76px; height:76px; border-radius:6px; overflow:hidden; border:1px solid rgba(255,255,255,.4); line-height:0; }
+  #scene-words { min-width:0; flex:1; }
+  #scene-name { font-size:13px; font-weight:900; letter-spacing:3px; }
+  #scene-text { font-size:18px; color:#f4ecff; line-height:1.4; margin-top:4px; min-height:3.1em; text-shadow:0 1px 2px #000; }
+  #cine-skip { pointer-events:auto; cursor:pointer; padding:8px 0; white-space:pre; }
+  .talk .face .mo { display:inline !important; }
+  .talk .face .mc { display:none; }
+  @media (max-height:520px) { #scene-sub { bottom:calc(11vh + 6px); padding:7px 10px 8px; gap:10px; } #scene-face { flex-basis:56px; width:56px; height:56px; }
+    #scene-text { font-size:15px; min-height:2.8em; } }
   body.cine #hud, body.cine #controls-bar, body.cine #touch-layer, body.cine #fs-btn, body.cine #pager, body.cine #herald, body.cine #derby-tv {
     opacity:0 !important; pointer-events:none !important; transition:opacity .4s; }
   /* your race at Gull Downs (derby.js), on a set of your own while it runs */
@@ -368,7 +432,7 @@
   #shop-items::-webkit-scrollbar { display:none; }
   /* the pane scales with the screen height; the render buffer stays 300x340 */
   #shop-preview { display:block; height:min(340px,42vh); width:auto; aspect-ratio:300/340;
-    border-radius:12px; background:radial-gradient(90% 90% at 50% 40%, #241640 0%, #0d0818 100%);
+    border-radius:12px; background:linear-gradient(180deg, #b8b4c8 0%, #9692aa 52%, #57536b 100%);
     border:1px solid rgba(255,150,210,.4); box-shadow:0 0 18px rgba(255,105,180,.25); }
   #shop-preview-tag { color:#9fd8ff; font-size:11.5px; letter-spacing:2px; text-align:center; margin-top:6px; }
   @media (max-width:760px) { #shop-body { flex-direction:column-reverse; align-items:center; } #shop-items { width:88vw; max-height:34vh; } }
@@ -451,15 +515,16 @@
     <div id="wanted-stars"></div>
     <div class="bar"><div id="health-fill"></div></div>
     <div class="bar"><div id="armor-fill"></div></div>
-    <div id="weapon-line"></div>
+    <div id="weapon-row"><div id="weapon-icon"></div><div id="weapon-line"></div></div>
     <div id="vehicle-line"></div>
   </div>
   <div class="panel" id="radio-popup"></div>
+    <div class="panel" id="radio-talk"></div>
   <div class="panel" id="zone-popup"></div>
   <div class="panel" id="poi-hint"></div>
   <div class="panel" id="msg-line"></div>
   <div class="panel" id="enter-hint"></div>
-  <div class="panel" id="pager"><div id="pager-from"></div><div id="pager-text"></div></div>
+  <div class="panel" id="pager"><div id="pager-face"></div><div id="pager-body"><div id="pager-from"></div><div id="pager-text"></div></div></div>
   <div id="herald"><div class="hd-mast">The Costa Rosa Herald</div><div class="hd-date"></div><div class="hd-head"></div><div class="hd-body"><div class="hd-photo"></div><div class="hd-sub"></div></div></div>
   <div class="panel" id="count-big"></div>
   <div class="panel" id="mission-hud">
@@ -512,6 +577,7 @@
     <span class="mbtn" id="pause-chaos">🌆 CITY: LIVELY</span>
     <span class="mbtn" id="pause-day">🕓 TIME: AUTO</span>
     <span class="mbtn" id="pause-weather">🌧 WEATHER: AUTO</span>
+    <span class="mbtn" id="pause-cheats">🕹 CHEATS</span>
     <span class="mbtn" id="pause-export">💾 EXPORT SAVE</span>
     <span class="mbtn" id="pause-import">📂 IMPORT SAVE</span>
     <span class="mbtn" id="pause-reset">🗑 RESET PROGRESS</span>
@@ -525,8 +591,15 @@
 
 <div id="shutter"></div>
 <div id="derby-tv"></div>
-<div id="lola-screen"><div id="lola-card"><div id="lola-from">📟 LOLA</div><div id="lola-say"></div><div id="lola-opts"></div><div id="lola-hint"></div></div></div>
-<div id="cine"><div class="cine-bar cine-top"></div><div class="cine-bar cine-bot"><span id="cine-skip"></span></div></div>
+<div id="lola-screen"><div id="lola-card"><div id="lola-head"><div id="lola-face"></div><div id="lola-words"><div id="lola-from">📟 LOLA</div><div id="lola-say"></div></div></div><div id="lola-opts"></div><div id="lola-hint"></div></div></div>
+<div id="weapon-wheel"><div id="wheel-ring"></div><div id="wheel-name"></div></div>
+<div id="scope"><div class="scope-x"></div><div class="scope-y"></div></div>
+<div id="cheat-box"><div id="cheat-card"><div id="cheat-title">🕹 CHEATS</div>
+  <div id="cheat-sub">Type a code and press Enter.</div>
+  <input id="cheat-input" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="32">
+  <div id="cheat-said"></div>
+  <div id="cheat-btns"><span class="mbtn" id="cheat-ok">ENTER</span><span class="mbtn" id="cheat-close">CLOSE</span></div></div></div>
+<div id="cine"><div class="cine-bar cine-top"></div><div class="cine-bar cine-bot"><span id="cine-skip"></span></div><div id="scene-sub"><div id="scene-face"></div><div id="scene-words"><div id="scene-name"></div><div id="scene-text"></div></div></div></div>
 <div id="photo-toast"><img id="photo-toast-img" alt=""><div id="photo-toast-text"></div></div>
 <div id="photo-view">
   <img id="photo-view-img" alt="">
@@ -656,12 +729,14 @@ window.addEventListener('load', function () {
 <script src="js/haptics.js"></script>
 <script src="js/chaos.js"></script>
 <script src="js/audio.js"></script>
+<script src="js/cast.js"></script>
 <script src="js/city.js"></script>
 <script src="js/isla.js"></script>
 <script src="js/vehicles.js"></script>
 <script src="js/peds.js"></script>
 <script src="js/player.js"></script>
 <script src="js/combat.js"></script>
+<script src="js/arsenal.js"></script>
 <script src="js/aircraft.js"></script>
 <script src="js/weather.js"></script>
 <script src="js/ambience.js"></script>
@@ -669,18 +744,27 @@ window.addEventListener('load', function () {
 <script src="js/streetlife.js"></script>
 <script src="js/herald.js"></script>
 <script src="js/strangers.js"></script>
+<script src="js/gangs.js"></script>
 <script src="js/heist.js"></script>
 <script src="js/business.js"></script>
+<script src="js/export.js"></script>
 <script src="js/police.js"></script>
+<script src="js/army.js"></script>
 <script src="js/missions.js"></script>
 <script src="js/tapes.js"></script>
 <script src="js/lola.js"></script>
 <script src="js/photo.js"></script>
 <script src="js/hud.js"></script>
+<script src="js/dj.js"></script>
+<script src="js/scenes.js"></script>
+<script src="js/cheats.js"></script>
 <script src="js/share.js"></script>
 <script src="js/shops.js"></script>
 <script src="js/derby.js"></script>
 <script src="js/interiors.js"></script>
+<script src="js/landmarks.js"></script>
+<script src="js/rc.js"></script>
+<script src="js/robbery.js"></script>
 <script src="js/guide.js"></script>
 <script src="js/touch.js"></script>
 <script src="js/controls.js"></script>

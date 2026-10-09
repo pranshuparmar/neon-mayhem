@@ -7,14 +7,19 @@
 // astronomer, the ice cream factory, a fisherman's lost brother, a film star
 // with a photographer on her tail, and a man owed money down at the port.
 //
-// Walk up (or pull up) and they ask. A favour runs like a job: a title, an
-// objective, a route on the map; X twice walks away from it. Done is done —
-// they thank you and are not there again — and Lola keeps the tally.
+// Walk up (or pull up) and they ask — face to face, the way Lola's jobs
+// open (scenes.js). A favour runs like a job: a title, an objective, a route
+// on the map; X twice walks away from it. Done is done — they thank you,
+// face to face again, and go about their business: out of your car and off
+// up the street, through the door they were making for, or away on what you
+// brought back. Nobody blinks out of the street in front of you. Lola keeps
+// the tally.
 GAME.strangers = (function () {
   var NEAR_R = 120, KEEP_R = 170, TALK_R = 4.5, CAR_TALK_R = 8;
   var people = null;        // { def, at, ped, mark, asked }
   var job = null;           // the favour under way
   var routeT = 0, route = null, ring = null, abandonAsk = 0;
+  var leavers = [];         // a dog at its owner's heel, or running off
   // (the regression suite stands them down, the way it pins the CITY knob)
   var enabled = true;
 
@@ -135,6 +140,89 @@ GAME.strangers = (function () {
   ];
   function def(id) { for (var i = 0; i < DEFS.length; i++) if (DEFS[i].id === id) return DEFS[i]; return null; }
 
+  // Marco's date, and the two Vince brought along
+  var GINA = { shirt: 0xe86a8a, pants: 0x2a2a34, skin: 0xc89878, hair: 'ponytail', hairCol: 0xa8482a };
+  var CREW = [{ shirt: 0x3a3a46, pants: 0x2a2a34, skin: 0xc89878, hair: 'crew', hairCol: 0x1c1a18 },
+    { shirt: 0x4a3a2a, pants: 0x2a2a34, skin: 0x8a6848, hair: 'mullet', hairCol: 0x2e2018 }];
+  // the two who are nowhere near you when it is done: they ring
+  var PHONE = { dani: true, nina: true };
+  // what they say when it is done
+  var THANKS = {
+    ray: function () { return [['ray', 'The airport — with time to spare! I don\'t believe it.'], ['you', 'Go on. Run.'], ['ray', 'For the ride. And the driving — don\'t ever change.']]; },
+    dani: function (j, line) {
+      return /motel/i.test(line || '')
+        ? [['dani', 'Well? Where did he go?'], ['you', 'A motel. Off the boulevard.'], ['dani', 'Of course it\'s a motel. ... Thank you. Really. I\'ll wire you the money.']]
+        : [['dani', 'Well? Where did he go?'], ['you', 'Round in circles, mostly. Nowhere.'], ['dani', 'Nowhere. Well — that\'s a relief. I think. I\'ll wire you the money.']];
+    },
+    tito: function () { return [['tito', 'My bike! Not a scratch on her — well, hardly.'], ['you', 'That creep won\'t be taking anything else today.'], ['tito', 'You\'re the best, man. Here — and I\'m buying a better lock.']]; },
+    rosa: function () { return [['rosa', 'Biscuit! Oh, you naughty, naughty boy.'], ['rosa', 'Thank you, dear. No, I insist — he\'d have been halfway to the harbour by now.']]; },
+    vince: function () { return [['vince', 'Clean as a whistle. You drive like you were born behind the wheel.'], ['you', 'Just don\'t ask me again.'], ['vince', 'Your cut. Same time next year?']]; },
+    marco: function () { return [['marco', 'There she is. Gina, you look — wow.'], ['marco', 'And you: not a scratch, right on time. I owe you one, friend.']]; },
+    nina: function () { return [['nina', 'I\'m looking at it now — the whole tower, the light just right.'], ['nina', 'That\'s the cover. The money\'s yours. If you ever want a job, call the magazine.']]; },
+    sal: function () { return [['sal', 'Look — there! Just over the ridge. Forty years.'], ['you', 'I see it.'], ['sal', 'Thank you, my friend. Thank you.']]; },
+    cookie: function () { return [['cookie', 'Still frozen! Listen to them — a beach full of happy kids.'], ['cookie', 'You\'re a hero to every one of them. Here — and a cone on me.']]; },
+    gus: function () { return [['gus', 'You brought him back! Soaked through and grinning like an idiot.'], ['gus', 'Thank you. I\'m keeping the dinghy keys myself from now on.']]; },
+    lupe: function () { return [['lupe', 'Gone. Not a single picture. Darling, you\'re wasted on this island.'], ['lupe', 'Something for your trouble. And if anybody asks — you never saw me.']]; },
+    walt: function () { return [['walt', 'Every cent? Let me count it. ... Every cent.'], ['walt', 'Been after that fella since spring. Your share — and then some.']]; }
+  };
+  // and then they go about their business
+  var AFTER = {
+    ray: function (j) {
+      var car = inLand() || j.car, r = car && outOf(car, LOOK.ray, 1, 0);
+      if (r) goIn(r, GATE.x, GATE.z + 12, 8);
+    },
+    sal: function (j) {
+      var car = inLand() || j.car, r = car && outOf(car, LOOK.sal, 1, 0), O = GAME.city.islaPois.observatory;
+      if (r) goIn(r, O.x, O.z, 14);
+    },
+    cookie: function (j) {
+      var car = inLand() || j.car, r = car && outOf(car, LOOK.cookie, 1, 0), V = GAME.city.islaPois.cove;
+      if (r) goIn(r, V.x, V.z, 12);
+    },
+    lupe: function (j) { var car = inLand() || j.car; if (car) walkOff(outOf(car, LOOK.lupe, 1, 0)); },
+    vince: function (j) {
+      var car = inLand() || j.car;
+      if (car) [LOOK.vince, CREW[0], CREW[1]].forEach(function (lk, i) { walkOff(outOf(car, lk, i % 2 ? -1 : 1, i)); });
+    },
+    // Gina out of the car, Marco waiting for her at the foot of the pier,
+    // and up it to the casino together
+    marco: function (j) {
+      var car = inLand() || j.car, g = car && outOf(car, GINA, 1, 0);
+      var spot = pavement(CASINO.x, CASINO.z + 4), m = GAME.peds.spawnPed(spot.x, spot.z, { look: LOOK.marco });
+      var door = { x: 452, z: 255.3 };
+      if (g) goIn(g, door.x, door.z, 40);
+      if (m) goIn(m, door.x, door.z + 1.2, 40);
+      // (the Marco back on his corner, if nobody can see him go)
+      var w = j.who;
+      if (w.ped && !GAME.inPlainView(w.ped.pos.x, w.ped.pos.y + 1, w.ped.pos.z)) takeIn(w);
+    },
+    // Tito takes his bike back and rides off on it; you are on your feet
+    tito: function (j) {
+      var b = j.bike, P0 = P();
+      if (!b || b.gone || b.dead) return;
+      if (P0.inCar && P0.car === b) GAME.exitCar();
+      j.bits = j.bits.filter(function (x) { return x.o !== b; });
+      takeIn(j.who);
+      b.mission = false; b.outlaw = false; b.speed = 0;
+      GAME.vehicles.seatOccupant(b, LOOK.tito);
+      b.ai = { mode: 'traffic', desired: 12, laneX: 0, laneZ: 0 };
+    },
+    // Mrs. Albescu walks off with Biscuit at her heel
+    rosa: function (j) {
+      if (!j.dog) return;
+      j.bits = j.bits.filter(function (x) { return x.o !== j.dog; });
+      var w = j.who, owner = w.ped;
+      if (owner) { release(w); leavers.push({ mesh: j.dog, follow: owner }); }
+      else leavers.push({ mesh: j.dog, flee: true });
+    },
+    // his brother out of your boat and onto the quay beside him
+    gus: function (j) {
+      var at = j.who.at, s = pavement(at.x + 1.5, at.z + 1.5);
+      var bro = GAME.peds.spawnPed(s.x, s.z, { look: { shirt: 0xf0f0e8, pants: 0x3a4a68, skin: 0x6a4c34, hair: 'crew', hairCol: 0x1c1a18 } });
+      walkOff(bro);
+    }
+  };
+
   // ---------- the people on the pavement ----------
   function setup() {
     var I = GAME.city.islaPois;
@@ -170,8 +258,15 @@ GAME.strangers = (function () {
       var p = people[i], d2 = U.dist2(p.at.x, p.at.z, f.x, f.z);
       var gone = done(p.def.id) || !avail(p.def) || (job && job.def === p.def && job.away);
       if (p.ped && (p.ped.dead || p.ped.gone)) { if (p.mark) { GAME.scene.remove(p.mark); p.mark = null; } p.ped = null; }
-      if (!p.ped && !gone && d2 < NEAR_R * NEAR_R) putOut(p);
-      else if (p.ped && (gone || d2 > KEEP_R * KEEP_R)) takeIn(p);
+      // (someone who got out of your car on a favour that went wrong is
+      // walking off up the street: not back on their spot until you have gone)
+      if (p.hold && d2 > KEEP_R * KEEP_R) p.hold = false;
+      if (!p.ped && !gone && !p.hold && d2 < NEAR_R * NEAR_R) putOut(p);
+      else if (p.ped && (gone || d2 > KEEP_R * KEEP_R)) {
+        // done, and stood there in front of you: off about their business on
+        // foot, not out of the world
+        if (done(p.def.id) && d2 < KEEP_R * KEEP_R) release(p); else takeIn(p);
+      }
       if (p.ped && p.mark) {
         p.mark.visible = !job;
         p.mark.position.set(p.ped.pos.x, p.ped.pos.y + 2.5 + Math.sin(GAME.time * 3 + i) * 0.12, p.ped.pos.z);
@@ -210,8 +305,14 @@ GAME.strangers = (function () {
   }
   function ask(q) {
     var d = q.def;
+    face(d.id, q.ped ? spotSet(q.ped.pos.x, q.ped.pos.z) : 'here', pitch(d), function () { offer(q); }, [q.ped, q.mark]);
+  }
+  function offer(q) {
+    var d = q.def;
+    if (job || !canAsk()) return;
     GAME.lola.offer({
       from: '🗣 ' + d.who,
+      face: d.id,
       say: d.ask,
       top: true,
       escSays: 'to walk on',
@@ -245,14 +346,26 @@ GAME.strangers = (function () {
         // back to being nobody's business: traffic, or towed away
         b.o.mission = false; b.o.outlaw = false;
         if (b.o.ai && b.o.occupied === 'ai') { b.o.ai = { mode: 'traffic', desired: 11, laneX: 0, laneZ: 0 }; }
-      } else if (b.kind === 'mesh') { GAME.scene.remove(b.o); disposeTree(b.o); }
-      else if (b.kind === 'ped' && !b.o.gone && !b.o.dead) GAME.peds.removePed(b.o);
+      } else if (b.kind === 'mesh') leavers.push({ mesh: b.o, flee: true });
+      else if (b.kind === 'ped') walkOff(b.o);
     }
     GAME.hud.missionEnd();
     target(null);
     job = null;
   }
   function win(line) {
+    var j = job, d = j.def;
+    if (j.ending) return;
+    j.ending = true;
+    target(null);
+    GAME.hud.missionTimer && GAME.hud.missionTimer(null);
+    var set = PHONE[d.id] ? null : d.id === 'gus' ? spotSet(j.who.at.x, j.who.at.z) : 'here';
+    var ls = THANKS[d.id] ? THANKS[d.id](j, line) : [[d.id, 'Thank you.']];
+    face(d.id, set, ls, function () { paid(j, line); }, PHONE[d.id] ? [] : [j.who.ped, j.who.mark]);
+  }
+  function paid(j, line) {
+    if (job !== j) return;
+    if (AFTER[j.def.id]) AFTER[j.def.id](j);
     var d = job.def, s = prefs();
     s.strangers = s.strangers || {};
     s.strangers[d.id] = true;
@@ -267,6 +380,14 @@ GAME.strangers = (function () {
     if (doneCount() === DEFS.length && GAME.herald) GAME.herald.front('samaritan');
   }
   function fail(reason) {
+    var j = job, car = (P().inCar && P().car) || (j.car && !j.car.gone ? j.car : null);
+    // anyone sat in your car is out of it and off up the street, and not
+    // back on their spot until you have gone
+    if (car && !car.dead && dist(car.pos, GAME.focus().x, GAME.focus().z) < 30) {
+      if (j.away) (j.def.id === 'vince' ? [LOOK.vince, CREW[0], CREW[1]] : [LOOK[j.def.id]]).forEach(function (lk, i) { walkOff(outOf(car, lk, i % 2 ? -1 : 1, i)); });
+      if (j.def.id === 'marco' && j.phase === 'drive') walkOff(outOf(car, GINA, 1, 0));
+    }
+    if (j.away) j.who.hold = true;
     GAME.audio.sting('wasted');
     say('FAVOUR FAILED — ' + reason + '  ·  they may ask again', 4);
     var q = job.who;
@@ -594,7 +715,7 @@ GAME.strangers = (function () {
     var her = roadAway(j.who.at, 150, 240);
     if (!her) return fail('She cancelled.');
     j.her = pavement(her.x, her.z);
-    var gina = GAME.peds.spawnPed(j.her.x, j.her.z, { look: { shirt: 0xe86a8a, pants: 0x2a2a34, skin: 0xc89878, hair: 'ponytail', hairCol: 0xa8482a } });
+    var gina = GAME.peds.spawnPed(j.her.x, j.her.z, { look: GINA });
     if (gina) { gina.jobPed = true; gina.state = 'wait'; gina.speed = 0; j.gina = gina; j.bits.push({ kind: 'ped', o: gina }); }
     j.phase = 'car';
     marcoNext(j);
@@ -793,13 +914,105 @@ GAME.strangers = (function () {
     if (dist(f, j.who.at.x, j.who.at.z) < 8) win('Walt counts it twice. "Every cent."');
   }
 
+  // ---------- face to face ----------
+  // A cut to the two of you (scenes.js), the stranger as they stand in the
+  // street; the real one is hidden while their double talks. With scenes
+  // off, or nothing to say, it goes straight on.
+  function face(id, set, ls, then, hide) {
+    hide = hide || [];
+    // (a ped, or a bare mesh like their marker)
+    hide.forEach(function (h) { if (h) (h.mesh || h).visible = false; });
+    var back = function () {
+      hide.forEach(function (h) { if (h && !h.gone) (h.mesh || h).visible = true; });
+      then();
+    };
+    var ok = GAME.scenes && GAME.scenes.play({ id: 'stranger-' + id, shots: [{ set: set, cast: [id, 'you'], lines: ls }] }, back);
+    if (!ok) back();
+  }
+  // a set where somebody stands, the camera out toward the road
+  function spotSet(x, z) {
+    return function () {
+      var rp = GAME.city.nearestRoadPoint(x, z), nx = rp.x - x, nz = rp.z - z, nl = Math.hypot(nx, nz);
+      if (nl < 1) { nx = 1; nz = 0; nl = 1; }
+      return { x: x, z: z, nx: nx / nl, nz: nz / nl };
+    };
+  }
+  // what they want, a sentence or two at a time
+  function pitch(d) {
+    var parts = d.ask.match(/[^.!?—]+[.!?—]+["”']?\s*/g) || [d.ask], out = [], cur = '';
+    parts.forEach(function (t) {
+      if (cur && (cur + t).length > 110) { out.push([d.id, cur.trim()]); cur = ''; }
+      cur += t;
+    });
+    if (cur.trim()) out.push([d.id, cur.trim()]);
+    return out;
+  }
+  // Out of your car, at the kerb side — n spaces a party along it
+  function outOf(car, look, side, n) {
+    var h = car.heading + (side || 1) * Math.PI / 2, off = (car.spec.w || 1.8) / 2 + 0.9, back = (n || 0) * 1.1;
+    var x = car.pos.x + Math.sin(h) * off - Math.sin(car.heading) * back, z = car.pos.z + Math.cos(h) * off - Math.cos(car.heading) * back;
+    var r = GAME.resolveCircle ? GAME.resolveCircle(x, z, 0.35) : { x: x, z: z };
+    var ped = GAME.peds.spawnPed(r.x, r.z, { look: look });
+    if (ped) { ped.heading = car.heading; ped.mesh.rotation.y = ped.heading; }
+    return ped;
+  }
+  // back to being somebody in the street: walking, and gone by the usual
+  // way of things once you are well off
+  function walkOff(ped) {
+    if (!ped || ped.gone || ped.dead) return;
+    ped.jobPed = false; ped.stranger = null; ped.outlaw = false;
+    ped.state = 'walk'; ped.wpT = 0; ped.mesh.visible = true;
+  }
+  // through a door: the airport gate, the observatory, the casino
+  function goIn(ped, x, z, t) {
+    if (!ped || ped.gone || ped.dead) return;
+    ped.stranger = null; ped.jobPed = true; ped.mesh.visible = true;
+    GAME.peds.walkInto(ped, x, z, t || 20);
+  }
+  function release(p) {
+    walkOff(p.ped);
+    p.ped = null;
+    if (p.mark) { GAME.scene.remove(p.mark); p.mark = null; }
+  }
+  // the dog: at his owner's heel until they are well off, or off and away
+  // from you until he is out of sight
+  function stepLeavers(dt) {
+    var f = GAME.focus();
+    for (var i = leavers.length - 1; i >= 0; i--) {
+      var L = leavers[i], m = L.mesh, dp = m.position, tx, tz, run;
+      var far = dist(dp, f.x, f.z);
+      var owner = L.follow && !L.follow.gone && !L.follow.dead ? L.follow : null;
+      if ((L.follow && !owner) || far > 90 || (L.flee && far > 25 && !GAME.inPlainView(dp.x, dp.y + 0.4, dp.z))) {
+        GAME.scene.remove(m); disposeTree(m); leavers.splice(i, 1); continue;
+      }
+      if (owner) {
+        tx = owner.pos.x - Math.sin(owner.heading) * 1.2; tz = owner.pos.z - Math.cos(owner.heading) * 1.2;
+        run = Math.min(7, dist(dp, tx, tz) * 2.4);
+      } else {
+        var ax = dp.x - f.x, az = dp.z - f.z, al = Math.hypot(ax, az) || 1;
+        tx = dp.x + ax / al * 5; tz = dp.z + az / al * 5; run = 6;
+      }
+      var dx = tx - dp.x, dz = tz - dp.z, dd = Math.hypot(dx, dz), legs = m.userData.legs;
+      if (dd > 0.3 && run > 0.2) {
+        var st = Math.min(dd, run * dt), r = GAME.resolveCircle(dp.x + dx / dd * st, dp.z + dz / dd * st, 0.3);
+        dp.x = r.x; dp.z = r.z; dp.y = GAME.city.groundY(dp.x, dp.z);
+        m.rotation.y = Math.atan2(dx, dz);
+        var sw = Math.sin(GAME.time * 16) * 0.6;
+        if (legs) { legs[0].rotation.x = legs[3].rotation.x = sw; legs[1].rotation.x = legs[2].rotation.x = -sw; }
+      } else if (legs) for (var k = 0; k < 4; k++) legs[k].rotation.x = 0;
+      if (m.userData.tail) m.userData.tail.rotation.y = Math.sin(GAME.time * 12) * 0.5;
+    }
+  }
+
   // ---------- each tick ----------
   function update(dt) {
     if (!GAME.started) return;
     if (!enabled) { if (people) { if (job) tidy(); people.forEach(takeIn); } return; }
     if (!people) setup();
     tend(dt);
+    stepLeavers(dt);
     if (!job) { listen(); return; }
+    if (job.ending) return;
     var p = P();
     job.t0 = (job.t0 || 0) + dt;
     if (p.state !== 'alive') return fail(p.state === 'busted' ? 'you got busted' : 'you went down');
@@ -848,11 +1061,19 @@ GAME.strangers = (function () {
     route: function () { return job && job.target ? route : null; },
     target: function () { return job ? job.target : null; },
     get done() { return doneCount(); },
+    // how each of them looks in the street, for the scenes (cast.js)
+    look: function (id) { return LOOK[id] || null; },
+    get leavers() { return leavers.length; },
     // as many as can be reached: the mainland's, and the island's once it is open
     get total() { return reachable(); },
     // headless: who is where, and asking one of them straight away
     people: function () { if (!people) setup(); return people; },
     ask: function (id) { if (!people) setup(); for (var i = 0; i < people.length; i++) if (people[i].def.id === id) { begin(people[i]); return true; } return false; },
-    reset: function () { if (job) tidy(); if (people) people.forEach(takeIn); people = null; }
+    // headless: the favour under way, done (its thanks and its going)
+    finish: function (line) { if (job && !job.ending) { win(line || ''); return true; } return false; },
+    reset: function () {
+      if (job) tidy(); if (people) people.forEach(takeIn); people = null;
+      leavers.forEach(function (L) { GAME.scene.remove(L.mesh); disposeTree(L.mesh); }); leavers = [];
+    }
   };
 })();
