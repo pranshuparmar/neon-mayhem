@@ -85,6 +85,15 @@
       if (GAME.cheatOpen) return;
       // an open dialog owns the keys — Esc must cancel it, not unpause
       if (GAME.hud.dialogOpen()) { GAME.hud.dialogKey(code); return; }
+      // the result card is drawn over every menu (a car bought in the
+      // showroom puts it over the shop), so it has the keys first: it closes
+      // on any a hand is likely to be on, and the list under it hears none —
+      // Enter there was a second purchase behind the card. The sound and the
+      // screen's own switches still answer, as they do over a scene
+      if (GAME.shareOpen) {
+        if (code === 'Escape' || code === 'Enter' || code === 'Space') { GAME.share.hide(); return; }
+        if (code !== 'KeyM' && code !== 'KeyT') return;
+      }
       // and so does Lola, while you are talking to her
       if (GAME.lolaOpen) { GAME.lola.key(code); return; }
       // and a scene, all but the sound and the screen's own switches
@@ -97,12 +106,6 @@
       if (GAME.mapOpen && code === 'Enter' && GAME.hud.mapPick()) return;
       // and the arrows step its legend's solo (one kind of marker at a time)
       if (GAME.mapOpen && (code === 'ArrowLeft' || code === 'ArrowRight')) { GAME.hud.mapSoloStep(code === 'ArrowRight' ? 1 : -1); return; }
-      // the result card closes on any of the keys a hand is likely to be on —
-      // it never needed the mouse
-      if (GAME.shareOpen && (code === 'Escape' || code === 'Enter' || code === 'Space')) {
-        GAME.share.hide();
-        return;
-      }
       // the pause screen's buttons answer the arrows, Enter and Space
       if (GAME.paused && !GAME.mapOpen && !GAME.shopOpen && GAME.hud.pauseKey(code)) return;
       if (code === 'Escape') {

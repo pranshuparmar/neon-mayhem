@@ -185,8 +185,11 @@
     animation:bigFade .45s ease-out; }
   #busted-screen { background:radial-gradient(120% 90% at 50% 45%, rgba(10,50,120,.55) 0%, rgba(4,8,26,.88) 55%, rgba(3,5,16,.96) 100%); }
   @keyframes bigFade { from { opacity:0 } to { opacity:1 } }
+  /* over every menu it can be raised from (shop 36 … map, Lola 38): a car
+     bought in the showroom shows its card over the shop. Under the confirm
+     dialog (70) and the shutter */
   #share-screen { position:fixed; inset:0; display:none; align-items:center; justify-content:safe center; flex-direction:column;
-    z-index:34; padding:18px; gap:14px; background:rgba(5,2,12,.9); animation:bigFade .3s ease-out;
+    z-index:42; padding:18px; gap:14px; background:rgba(5,2,12,.9); animation:bigFade .3s ease-out;
     font-family:"Segoe UI","Helvetica Neue",Arial,sans-serif; overflow-y:auto; }
   /* both caps, so a short landscape phone shrinks the card instead of pushing
      the buttons off the bottom; the intrinsic ratio is kept either way */

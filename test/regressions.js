@@ -326,6 +326,8 @@
 //      out of the street and off the radar, and back when it is over.
 //  32. FIRST IMPRESSION — every title-screen camera shot, all the way along
 //      its drift, stays out of the buildings with a clear view ahead.
+//  33. THE CARD ON TOP — a car bought in the showroom shows its card over the
+//      shop, not behind it, and the list under it hears none of the keys.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -13545,6 +13547,35 @@ function withTimeout(p, ms) {
     return { n: cuts.length, bad: bad };
   });
   check('first impression: every title shot keeps out of the buildings, clear ahead', fi.n >= 4 && fi.bad.length === 0, JSON.stringify(fi));
+
+  // ---------- 33: the purchase card is over the shop ----------
+  // The card for a car bought in the showroom came up BEHIND the shop's menu
+  // (z 34 under 36), and Enter — the key that should shut it — went to the
+  // list under it and opened another purchase's confirmation.
+  var ct = await page.evaluate(function () {
+    var r = {}, P = GAME.player, S = GAME.shops;
+    GAME.police.clearWanted();
+    if (P.inCar) GAME.exitCar();
+    GAME.test.teleport(64, 384); GAME.test.fastForward(0.5);
+    GAME.test.addCash(500000);
+    S.open('showroom0');
+    var ids = Object.keys(GAME.vehicles.TYPES);
+    for (var i = 0; i < ids.length && !r.bought; i++) if (S.buy(ids[i])) r.bought = ids[i];
+    r.shop = !!GAME.shopOpen; r.card = !!GAME.shareOpen;
+    var cs = function (id) { return +getComputedStyle(document.getElementById(id)).zIndex; };
+    r.zCard = cs('share-screen'); r.zShop = cs('shop-screen');
+    var hit = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+    r.onTop = !!(hit && hit.closest('#share-screen'));
+    var cash = P.cash;
+    GAME.onKeyDown('KeyS'); GAME.onKeyDown('Enter');
+    r.closed = !GAME.shareOpen;
+    r.noConfirm = document.getElementById('shop-confirm').style.display !== 'flex';
+    r.cashKept = P.cash === cash;
+    S.close(); GAME.test.fastForward(0.2);
+    return r;
+  });
+  check('card on top: a car bought in the showroom shows its card over the shop, where it can be seen and clicked', !!ct.bought && ct.shop && ct.card && ct.zCard > ct.zShop && ct.onTop, JSON.stringify(ct));
+  check('card on top: Enter shuts the card and the list under it hears nothing', ct.closed && ct.noConfirm && ct.cashKept, JSON.stringify(ct));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the
