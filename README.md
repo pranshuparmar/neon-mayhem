@@ -8,20 +8,20 @@
 
 <p align="center">
   <b><a href="https://pranshuparmar.github.io/neon-mayhem/">▶ PLAY NOW — free, in your browser</a></b><br>
-  <sub>No install, no account, no ads · keyboard, controller or touch · saves in your browser and runs offline</sub>
+  <sub>No install, no account, no ads · keyboard, controller or touch · saves in your browser</sub>
 </p>
 
 A free, fan-made tribute inspired by Grand Theft Auto: Vice City (2002). Everything in the project is original work — the sentence you just read is the only place the original game is named.
 
 ## What you can do
 
-- 🚗 **Drive anything** — sports cars, bikes, a limo, an ice-cream truck, a monster truck. Drift, crash, catch fire.
+- 🚗 **Drive anything** — sports cars, bikes, a limo, an ice-cream truck, a monster truck, a tank. Drift, crash, catch fire.
 - 🚁 **Fly and sail** — a helicopter, a plane that loops and rolls, parachutes, speedboats and a jet ski. Or swim off the beach.
-- 🚓 **Outrun the law** — five stars of heat: roadblocks, spike strips, harbour launches, a helicopter. Break their line of sight to lose them.
+- 🚓 **Outrun the law** — six stars of heat: roadblocks, spike strips, harbour launches, a helicopter, and at six, the army. Break their line of sight to lose them.
 - 💼 **Take the work** — street races, couriers, rampages, takedowns, taxi and ambulance shifts, Lola's story jobs, and favours for strangers.
 - 🏝️ **Two islands** — the neon mainland, and Isla Verde across the channel once you've earned the bridges.
 - 🏠 **Walk in** — every shop, a casino with horse racing, a glass car showroom, and homes you can buy.
-- 🔍 **Hunt** — 25 stunt jumps and 30 lost mixtapes hidden around both islands.
+- 🔍 **Hunt** — 35 stunt jumps and 30 lost mixtapes hidden around both islands.
 - 📻 **Turn up the radio** — three synth stations, every note made live in your browser.
 - 📟 **Ask Lola** — she can show you around on day one, tips you off the first time you meet anything, and `L` asks her what to do next.
 - 📷 **Take pictures** — an old film camera that prints the city like it's 1986.
@@ -50,13 +50,13 @@ Want the details? **[Read the full tour →](docs/FEATURES.md)**
 - 📻 **Radio with personality** — a frequency, a jingle and a DJ for every station, with talk and 1986 ads between the songs.
 - 🔧 **Damage you can see** — bumpers that come off, bonnets that spring, tyres that burst and spark.
 - 🏛 **Landmarks** — the Neon Tide on the strip, a stadium, a film lot and Rico's villa in the hills.
-- 🕹 **Cheats** — PANZER, ASPIRINE, the weapon sets and the rest of Vice City's words, picked from a list (`` ` ``, the joystick button by the radar on a touchscreen, or the pause screen) or entered as button combos on a controller.
+- 🕹 **Cheats** — PANZER, ASPIRINE, the weapon sets and the rest of the classic codes, picked from a list (`` ` ``, the joystick button by the radar on a touchscreen, or the pause screen) or entered as button combos on a controller.
 - 🪖 **Six stars** — the army, its soldiers and a tank you can take; and cruisers that ram, PIT and box you in.
 - 💵 **Store robberies** — a gun on the clerk empties the till while you keep it there, and the law is waiting outside.
 - 🔪 **The arsenal** — bat, knife, katana, chainsaw, grenades, Molotovs, a scoped sniper rifle and a rocket launcher, and a weapon wheel to pick them from.
 - 🟣 **Gangs and turf** — Rico's crew in plum and black against Lola's people in pink, each on their own streets, drawing on sight once Rico has a price on you, and turf that changes hands as the story goes.
 - 🎭 **Story jobs in acts** — a won race brings sore losers or the law, a rampage the crew behind it, the collector's bag goes back to the lock-up, and HIGH TIDE ends with Rico's stand on the marina.
-- 🎬 **Talking heads** — Lola's jobs open on a cut to her lock-up, Vice City style: letterbox, the two of you face to face, subtitles with a face drawn in code and a babble voice for everyone. Rico gets his own cut to the marina before the end.
+- 🎬 **Talking heads** — Lola's jobs open on a cut to her lock-up: letterbox, the two of you face to face, subtitles with a face drawn in code and a babble voice for everyone. Rico gets his own cut to the marina before the end.
 - 🏪 **Businesses that pay** — buy the barber, THREADS, a hardware store, the bar in the Lucky Gull, or VERDE CABS on Isla Verde (an open garage with a Tiger Cab for its owner, earning more with every fare you drive); the till fills every day for you to come and empty — and a hold-up there runs with it.
 - 💰 **The big score** — once the bridges open, Lola wants the Savings & Loan: case it with your camera, fetch Benny "the Ear" from the marina, get a getaway car resprayed, then keep the floor while he works the vault.
 - 🗞️ **A city with its own business** — getaway chases, hold-ups, an armoured van and racers at the lights; a dozen strangers with a favour each, on both islands; and the morning paper when you make the news.
