@@ -2,9 +2,7 @@
 
 **Costa Rosa, 1986.** A neon open world you play in your browser. Steal a ride, outrun the heat, take a job, buy a condo with the takings. Or just cruise the beachfront at night with the radio on.
 
-<p align="center">
-  <a href="https://pranshuparmar.github.io/neon-mayhem/"><img src="media/social-card.png" alt="Neon Mayhem — a night drive down a neon-lit boulevard in Costa Rosa, 1986. Click to play." width="600"></a>
-</p>
+https://github.com/user-attachments/assets/a386063c-cbb4-454b-8afe-7aab7861db72
 
 <p align="center">
   <b><a href="https://pranshuparmar.github.io/neon-mayhem/">▶ PLAY NOW — free, in your browser</a></b><br>
