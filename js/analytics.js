@@ -9,6 +9,12 @@
 // touches the network, so the game keeps working offline and local play does
 // not land in the numbers.
 //
+// count.js ignores pages shown inside an iframe unless told otherwise. Game
+// portals embed the live URL in one, so allow_frame is switched on: those
+// plays are counted, with the portal's page as the referrer. A copy a portal
+// scraped before this setting existed carries the old file, so when it is
+// shown in a frame it still goes uncounted.
+//
 // count.js loads async, so events fired before it arrives are queued and
 // flushed once it is ready; if it never arrives the queue is quietly
 // abandoned. Each event counts at most once per page load — the interesting
@@ -40,6 +46,7 @@ GAME.analytics = (function () {
     var s = document.createElement('script');
     s.async = true;
     s.setAttribute('data-goatcounter', ENDPOINT);
+    s.setAttribute('data-goatcounter-settings', '{"allow_frame": true}');
     s.src = 'https://gc.zgo.at/count.js';
     s.onerror = function () { queue.length = 0; };   // blocked: stop caring
     (document.head || document.documentElement).appendChild(s);
