@@ -2472,8 +2472,11 @@ GAME.vehicles = (function () {
     // shooting back out of the window: slow enough to keep you in range
     if (ai.fireBackT > 0) { stepFireBack(car, dt); desired = Math.min(desired, 9); }
     // a cruiser coming up behind with its siren going: pull over and let it by
-    // (yours, or one on somebody else's tail — streetlife.js)
-    var sc = !mad && (GAME.playerSiren() || (GAME.streetlife && GAME.streetlife.siren()));
+    // (yours, or one on somebody else's tail — streetlife.js). Not the car it
+    // is after: a getaway pulled over for its own pursuer, every chase, and
+    // crawled at your corner at 3 m/s with the cruiser sat on its bumper,
+    // which now and then drove round it and the two of them stuck there.
+    var sc = !mad && !car.outlaw && (GAME.playerSiren() || (GAME.streetlife && GAME.streetlife.siren()));
     if (sc && sc !== car) {
       var srx = sc.pos.x - car.pos.x, srz = sc.pos.z - car.pos.z;
       var sfd = srx * Math.sin(car.heading) + srz * Math.cos(car.heading);
