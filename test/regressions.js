@@ -15523,6 +15523,39 @@ function withTimeout(p, ms) {
     pl.inTank && pl.byKey === 1 && pl.byTouch === 1, JSON.stringify(pl));
   check('launch: Shift brings a helicopter down and Ctrl does not (Ctrl+W closes the tab)',
     pl.inHeli && pl.shiftDrop > 2 && pl.ctrlDrop < 0.6, JSON.stringify({ shift: pl.shiftDrop, ctrl: pl.ctrlDrop }));
+  // the bank: a vault with nothing to do, and nothing to say what it was for
+  var bk = await page.evaluate(function () {
+    var P = GAME.player, H = GAME.heist, I = GAME.isla, ff = GAME.test.fastForward, r = {}, said = [], m0 = GAME.hud.message;
+    var wasOpen = I.isOpen(), step0 = H.step;
+    var b = GAME.shops.locations().filter(function (l) { return l.kind === 'bank'; })[0];
+    GAME.hud.message = function (t) { said.push(String(t)); return m0.apply(GAME.hud, arguments); };
+    function walkIn() {
+      said.length = 0;
+      GAME.interiors.enter(b); ff(0.8);
+      var t = said.filter(function (x) { return /SAVINGS/.test(x); })[0] || '';
+      GAME.interiors.leave(); ff(0.8);
+      return t;
+    }
+    try {
+      if (P.inCar) GAME.exitCar();
+      GAME.police.clearWanted();
+      GAME.test.teleport(b.at.x + 6, b.at.z); ff(0.3);
+      I.setOpen(false); H.step = 0;
+      r.shut = walkIn();
+      I.setOpen(true); H.step = 0;
+      r.open = walkIn();
+      H.step = 2;
+      r.mid = walkIn();
+    } finally {
+      GAME.hud.message = m0;
+      H.step = step0; I.setOpen(wasOpen);
+      if (GAME.interiors.current) { GAME.interiors.leave(); ff(0.8); }
+      GAME.test.teleport(-60, 40); ff(0.5);
+    }
+    return r;
+  });
+  check('launch: walking into the bank says what the vault is for — before the bridges, and where the big score stands after',
+    /once the bridges/.test(bk.shut) && /THE BIG SCORE/.test(bk.open) && /ask her/.test(bk.open) && /next is THE WHEELS/.test(bk.mid), JSON.stringify(bk));
   check('launch: a save export carries the game\'s own keys only, and an import writes no others',
     pl.exported && pl.exported.indexOf('neonMayhemSave') >= 0 && pl.exported.indexOf('another-project') < 0 && pl.imported && pl.theirs === 'theirs' && pl.injected === null,
     JSON.stringify({ exported: pl.exported, imported: pl.imported, theirs: pl.theirs, injected: pl.injected }));

@@ -561,6 +561,18 @@ GAME.heist = (function () {
     return blipOut;
   }
   // what Lola says about it, and what comes next
+  // Walking into the Savings & Loan: what the vault is for, and where the
+  // job stands. It used to say only where the tellers and the vault were,
+  // and before the bridges opened there was nothing to tell you the vault
+  // was anybody's business at all.
+  function bankHint() {
+    if (job) return '';   // (a part under way has its own objective line)
+    var n = step(), touch = GAME.isTouch;
+    var ask = touch ? '❚❚ → ASK LOLA' : GAME.controls ? GAME.controls.label('KeyL') : 'L';
+    if (n >= STEPS.length) return ' The vault\'s new door is still on order.';
+    if (!open()) return ' Lola has plans for that vault: once the bridges to Isla Verde are open, she\'ll call you about it.';
+    return ' Lola\'s big score — ' + (n === 0 ? 'ask her (' + ask + ', THE BIG SCORE) to start it.' : 'next is ' + STEPS[n] + ' (' + ask + ', THE BIG SCORE).');
+  }
   function board() {
     var n = step(), lines = STEPS.map(function (s, i) { return (i < n ? '✓ ' : i === n ? '▶ ' : '· ') + s; }).join('   ');
     if (n >= STEPS.length) return { say: 'We did it, kid. The Savings & Loan is still trying to work out how.', next: null };
@@ -577,6 +589,7 @@ GAME.heist = (function () {
     abandon: abandon,
     blips: blips,
     board: board,
+    bankHint: bankHint,
     offered: offered,
     resprayed: function (car) { /* (the wheels part reads car.resprayT itself) */ },
     route: function () { return job ? route : null; },

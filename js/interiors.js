@@ -1047,7 +1047,8 @@ GAME.interiors = (function () {
         ? (GAME.police.wanted > 0 ? ' — nobody can see you in here. ' + room.where.charAt(0).toUpperCase() + room.where.slice(1) + '.'
           : ' — ' + room.where + '. The mat by the door takes you out.')
         : room.kind === 'shop' ? room.hello + (GAME.police.wanted > 0 && room.shop !== 'bribe' ? ' The law is waiting outside.' : '')
-          : ' — the wheel is at the back, the bar on the left. The mat by the door takes you out.'), 4);
+            + (room.shop === 'bank' && GAME.heist && GAME.heist.bankHint ? GAME.heist.bankHint() : '')
+          : ' — the wheel is at the back, the bar on the left. The mat by the door takes you out.'), room.shop === 'bank' ? 7 : 4);
       if (room.music && GAME.audio.radio && !GAME.audio.muted) GAME.audio.radio.setVolume(0.45);
       GAME.applyTimeOfDay(GAME.timeOfDay);   // the room's own light (main.js)
       GAME.track('interior-' + room.id);
