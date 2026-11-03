@@ -1024,8 +1024,21 @@ GAME.strangers = (function () {
   function boardStart(j, peds, car, pace, then, dead) {
     var on = peds.filter(function (q) { return q && !q.gone && !q.dead; });
     if (!on.length) { then(j); return; }
-    on.forEach(function (q) { q.jobPed = true; q.state = 'wait'; q.speed = 0; });
+    on.forEach(function (q) { q.jobPed = true; q.state = 'wait'; q.speed = 0; q.roundT = 0; });
     j.boarding = { peds: on, car: car, pace: pace || 3.4, then: then, dead: dead || 'Nobody is getting in now.', t: 0, back: j.obj };
+  }
+  // one step toward the door, or 70 degrees off it to one side (side 1 or
+  // -1), pushed out of anything solid on the way. At the ped loop's own
+  // 0.4 m (peds.js): at 0.35 the step went 4 cm into a post that the ped
+  // loop then pushed them back out of, every frame, so here it looked like
+  // a full stride and nobody was ever in the way.
+  function boardMove(q, ux, uz, side, step, dd) {
+    var c = side ? 0.34 : 1, s = side ? 0.94 * side : 0;
+    var vx = ux * c + uz * s, vz = uz * c - ux * s;
+    var x = q.pos.x + vx * step, z = q.pos.z + vz * step;
+    // (the car itself is solid: right at the door they may brush it)
+    if (dd > 1.2) { var rp = GAME.resolveCircle(x, z, 0.4); x = rp.x; z = rp.z; }
+    return { x: x, z: z, got: Math.sqrt((x - q.pos.x) * (x - q.pos.x) + (z - q.pos.z) * (z - q.pos.z)) };
   }
   function boardStep(j, dt) {
     var b = j.boarding, car = inLand();
@@ -1046,12 +1059,23 @@ GAME.strangers = (function () {
       // at the door (or stuck short of it for longer than any walk takes)
       if (dd < 0.55 || b.t > 14) { GAME.peds.removePed(q); continue; }
       waiting++;
-      q.heading = Math.atan2(dx, dz);
-      var step = Math.min(dd, b.pace * dt);
-      q.pos.x += dx / dd * step; q.pos.z += dz / dd * step;
-      var rp = GAME.resolveCircle(q.pos.x, q.pos.z, 0.35);
-      // (the car itself is solid: right at the door they may brush it)
-      if (dd > 1.2) { q.pos.x = rp.x; q.pos.z = rp.z; }
+      var step = Math.min(dd, b.pace * dt), ux = dx / dd, uz = dz / dd, mv;
+      if ((q.roundT || 0) > 0) {
+        q.roundT -= dt;
+        mv = boardMove(q, ux, uz, q.roundS, step, dd);
+      } else {
+        mv = boardMove(q, ux, uz, 0, step, dd);
+        // Something in the way: a street lamp square on the line to the
+        // door held her against it, nose to the post, until the fallback
+        // above. Round it, to whichever side is open, for a stride or two.
+        if (dd > 1.2 && mv.got < step * 0.3) {
+          var mL = boardMove(q, ux, uz, 1, step, dd), mR = boardMove(q, ux, uz, -1, step, dd);
+          q.roundS = mL.got >= mR.got ? 1 : -1; q.roundT = 0.5;
+          mv = q.roundS > 0 ? mL : mR;
+        }
+      }
+      q.heading = mv.got > 0.001 ? Math.atan2(mv.x - q.pos.x, mv.z - q.pos.z) : Math.atan2(dx, dz);
+      q.pos.x = mv.x; q.pos.z = mv.z;
       q.pos.y = GAME.city.groundY(q.pos.x, q.pos.z);
       q.mesh.rotation.y = q.heading;
       q.walkPhase = (q.walkPhase || 0) + b.pace * dt * 2.4;
