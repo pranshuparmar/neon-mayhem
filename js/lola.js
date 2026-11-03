@@ -247,7 +247,6 @@ GAME.lola = (function () {
       ['lola', 'Welcome to Costa Rosa, kid. I\'m Lola — the Ocean Strip is mine. The bars, the clubs, and the fast cars that run up and down it.'],
       ['you', 'Just got off the bus. Where am I, exactly?'],
       ['lola', 'Costa Rosa, 1986. Neon, palm trees, and money nobody asks questions about. Two islands — this one, Isla Rosa, and Isla Verde over the water.'],
-      ['lola', 'Four neighbourhoods on this one. The Ocean Strip, here on the beach. Centro Alto downtown, the towers. Puerto Viejo, the harbour. And Las Colinas, up the hill.'],
       ['lola', 'The bridges to Isla Verde are shut, and that\'s Rico Salazar\'s doing. The island\'s his. So is the harbour — for now.'],
       ['you', 'Who\'s Rico Salazar?'],
       ['lola', 'The other side of this town. His crew wears plum and black and drives black sedans. My people wear pink. Learn the colours.'],

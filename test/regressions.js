@@ -351,7 +351,7 @@
 //      round in a cab and off at the booth; and the camera works on the
 //      wheel and in the glass lift.
 //  41. WHERE AM I — on a first run Lola says who she is and where you are
-//      (the year, the town, the neighbourhoods, Rico's colours, the law)
+//      (the year, the town, Rico's colours, the law)
 //      before she offers to show you around; and it is all to read again
 //      under TELL ME ABOUT COSTA ROSA, following the story.
 //  42. THE REST OF THE CODES — OVERCAST and FOG, as weathers and on the
@@ -14399,8 +14399,11 @@ function withTimeout(p, ms) {
   });
   check('briefing: on a first run Lola tells you where you are before she offers to show you around',
     wb.offered && wb.scene && wb.thenOffer, JSON.stringify(wb));
-  check('briefing: who she is, 1986, the four neighbourhoods, Isla Verde, Rico and his colours, the law — and to ask again',
-    wb.told && wb.told.lola && wb.told.year && wb.told.hoods && wb.told.island && wb.told.gangs && wb.told.law && wb.told.askAgain, JSON.stringify(wb.told));
+  // (the four neighbourhoods are not in it: two islands and then four
+  // neighbourhoods was a lot before you can move. TELL ME ABOUT COSTA ROSA
+  // has them, below)
+  check('briefing: who she is, 1986, Isla Verde, Rico and his colours, the law — and to ask again',
+    wb.told && wb.told.lola && wb.told.year && !wb.told.hoods && wb.told.island && wb.told.gangs && wb.told.law && wb.told.askAgain, JSON.stringify(wb.told));
   check('briefing: TELL ME ABOUT COSTA ROSA has it all to read, part by part, and it follows the story',
     wb.menu && wb.parts === 6 && wb.gangs && wb.back && wb.after, JSON.stringify(wb));
 
