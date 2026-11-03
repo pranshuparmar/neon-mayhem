@@ -188,6 +188,26 @@ GAME.photo = (function () {
       try { d.transaction('shots', 'readwrite').objectStore('shots').delete(shot.t); } catch (e) { }
     });
   }
+  // Everything gone, for a progress reset: the album in memory and the
+  // shots kept in the browser. A RESET used to wipe the save and leave the
+  // photos, so a fresh Costa Rosa opened on a full album. `done` runs once
+  // the store says it is empty (or could not be reached), and at the latest
+  // after a second and a half, so a stuck store never holds the reset up.
+  function wipe(done) {
+    var called = false;
+    function finish() { if (!called) { called = true; if (done) done(); } }
+    album.forEach(function (sh) { if (sh.url) URL.revokeObjectURL(sh.url); });
+    album.length = 0;
+    setTimeout(finish, 1500);
+    openDb(function (d) {
+      if (!d) return finish();
+      try {
+        var tx = d.transaction('shots', 'readwrite');
+        tx.objectStore('shots').clear();
+        tx.oncomplete = finish; tx.onerror = finish; tx.onabort = finish;
+      } catch (e) { finish(); }
+    });
+  }
   function restore() {
     openDb(function (d) {
       if (!d) return;
@@ -391,7 +411,7 @@ GAME.photo = (function () {
 
   return {
     init: init, update: update, snap: snap, capture: capture, grab: grab, key: key,
-    open: openAlbum, close: closeAlbum, download: download,
+    open: openAlbum, close: closeAlbum, download: download, wipe: wipe,
     view: openView, closeView: closeView,
     get albumOpen() { return albumOpen; },
     get viewing() { return viewing; },

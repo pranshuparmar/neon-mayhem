@@ -331,18 +331,20 @@ GAME.hud = (function () {
       // way out first, then asks once more before burning it all down
       dialog({
         title: 'RESET PROGRESS',
-        body: 'This erases EVERYTHING — cash, missions, stunt jumps, property, garage, your look. There is no undo.\nWant a backup? Cancel and use EXPORT SAVE first.',
+        body: 'This erases EVERYTHING — cash, missions, stunt jumps, property, garage, your look, your photos. There is no undo.\nWant a backup? Cancel and use EXPORT SAVE first.',
         ok: 'ERASE EVERYTHING', danger: true,
         onOk: function () {
           dialog({
             title: 'LAST CHANCE',
-            body: 'Wipe the save and start Costa Rosa from nothing?',
+            body: 'Wipe the save and the photo album, and start Costa Rosa from nothing?',
             ok: 'WIPE THE SAVE', danger: true,
             onOk: function () {
               GAME.track('progress-reset');
               // (the game's keys only: the origin is shared with other pages)
               try { (GAME.SAVE_KEYS || ['neonMayhemSave', 'nm_chaos']).forEach(function (k) { localStorage.removeItem(k); }); } catch (e) { }
-              location.reload();
+              // ...and the photo album with it, before the page goes
+              if (GAME.photo && GAME.photo.wipe) GAME.photo.wipe(function () { location.reload(); });
+              else location.reload();
             }
           });
         }

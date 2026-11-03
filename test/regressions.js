@@ -15565,6 +15565,26 @@ function withTimeout(p, ms) {
   });
   check('launch: walking into the bank says what the vault is for — before the bridges, and where the big score stands after',
     /once the bridges/.test(bk.shut) && /THE BIG SCORE/.test(bk.open) && /ask her/.test(bk.open) && /next is THE WHEELS/.test(bk.mid), JSON.stringify(bk));
+  // a RESET wiped the save and left the photos: a fresh Costa Rosa opened
+  // on a full album. (The wipe itself, without the reload RESET then does.)
+  var wp = null;
+  try {
+    if (await page.evaluate(function () { return GAME.photo.count; }) === 0) {
+      await page.evaluate(function () { GAME.photo.snap(); });
+      await page.waitForFunction(function () { return GAME.photo.count > 0 && !GAME.photo.pending; }, null, { timeout: 10000 });
+    }
+    wp = await page.evaluate(function () {
+      return new Promise(function (res) {
+        var before = GAME.photo.count;
+        GAME.photo.wipe(function () {
+          GAME.photo.testReload();   // dropped from memory, read back from the store
+          setTimeout(function () { res({ before: before, after: GAME.photo.count }); }, 1500);
+        });
+      });
+    });
+  } catch (e) { wp = { err: String(e).slice(0, 120) }; }
+  check('launch: a progress reset takes the photo album with it, from the browser\'s store too',
+    wp && wp.before > 0 && wp.after === 0, JSON.stringify(wp));
   check('launch: a save export carries the game\'s own keys only, and an import writes no others',
     pl.exported && pl.exported.indexOf('neonMayhemSave') >= 0 && pl.exported.indexOf('another-project') < 0 && pl.imported && pl.theirs === 'theirs' && pl.injected === null,
     JSON.stringify({ exported: pl.exported, imported: pl.imported, theirs: pl.theirs, injected: pl.injected }));
