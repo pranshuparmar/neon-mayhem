@@ -535,7 +535,12 @@ GAME.peds = (function () {
       } else if (ped.state === 'flee') {
         ped.fleeT -= dt;
         var fh = awayFromFire(ped);
-        ped.heading = U.angleLerp(ped.heading, fh + Math.sin(GAME.time * 3 + i) * 0.5, Math.min(1, dt * 5));
+        // A frightened passer-by sways as they run. Somebody running from
+        // the law (a thief with the takings, Rico for his boat) runs straight:
+        // the sway, on the clock, sent the thief back along the shopfront
+        // he had just come out of whenever he turned on its inward half.
+        if (!ped.outlaw) fh += Math.sin(GAME.time * 3 + i) * 0.5;
+        ped.heading = U.angleLerp(ped.heading, fh, Math.min(1, dt * 5));
         ped.speed = U.damp(ped.speed, 6.8, 4, dt);    // 0.85x the player's 8 sprint
         if (ped.fleeT <= 0) { ped.state = 'walk'; newWaypoint(ped); }
       } else if (ped.state === 'attack') {

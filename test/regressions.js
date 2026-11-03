@@ -14281,6 +14281,43 @@ function withTimeout(p, ms) {
       r.ray = { stood: !!rayPed && !rayPed.gone, boarding: !!(SG.job && SG.job.boarding) };
       for (var k = 0; k < 60 * 12 && SG.job && SG.job.phase === 'car'; k++) { car2.speed = 0; ff(1 / 60); }
       r.ray.inCar = !!rayPed && rayPed.gone && !!SG.job && SG.job.phase === 'drive';
+      // and a street lamp square on the line from her to the door: she stood
+      // nose to the post until the 14 s fallback put her in (CI caught it
+      // where her spot happened to line up with one). She goes round it.
+      if (SG.busy) SG.abandon(); ff(0.3);
+      if (P.inCar) GAME.exitCar(); ff(0.3);
+      var C = GAME.city;
+      var lamp = C.hash.all.filter(function (b) {
+        if (b.tag !== 'prop' || !b.knock || b.h !== 6 || b.maxX - b.minX > 0.6 || b.maxZ - b.minZ > 0.6) return false;
+        var x = (b.minX + b.maxX) / 2, z = (b.minZ + b.maxZ) / 2;
+        if (GAME.isla && GAME.isla.contains(x, z)) return false;
+        var q = C.nearestRoadPoint(x, z), d = Math.hypot(x - q.x, z - q.z);
+        return d > 6.5 && d < 9 && !C.nearCrossing(x, z, 16);
+      })[0];
+      r.lamp = { found: !!lamp };
+      if (lamp) {
+        var lx = (lamp.minX + lamp.maxX) / 2, lz = (lamp.minZ + lamp.maxZ) / 2, lr = C.nearestRoadPoint(lx, lz);
+        var ul = Math.hypot(lx - lr.x, lz - lr.z), ux = (lx - lr.x) / ul, uz = (lz - lr.z) / ul;
+        GAME.test.teleport(lr.x + 30 * uz, lr.z - 30 * ux); ff(1);
+        GAME.prefs.strangers = {};
+        SG.ask('marco'); ff(0.2);
+        var g2 = SG.job && SG.job.gina;
+        r.lamp.gina = !!g2;
+        if (g2) {
+          // her, a pace and a half behind the post; the car on the road
+          // beyond it, side on, its front door square with the post (a door
+          // is half a metre forward of the middle), so her line to it runs
+          // through the post dead centre: nothing to slide off it by
+          g2.pos.set(lx + ux * 1.6, C.groundY(lx + ux * 1.6, lz + uz * 1.6), lz + uz * 1.6);
+          var car3 = GAME.vehicles.spawnCar('sports', lr.x - uz * 0.5, lr.z + ux * 0.5, Math.atan2(uz, -ux), {}); spawned.push(car3);
+          GAME.test.teleport(lr.x - ux * 3, lr.z - uz * 3); ff(0.2);
+          GAME.test.enterNearestCar(car3);
+          var t3 = 0;
+          for (var m = 0; m < 60 * 8 && SG.job && SG.job.phase !== 'drive'; m++) { car3.speed = 0; car3.vx = car3.vz = 0; ff(1 / 60); t3 += 1 / 60; }
+          r.lamp.inCar = g2.gone && !!SG.job && SG.job.phase === 'drive';
+          r.lamp.secs = +t3.toFixed(1);
+        }
+      }
     } finally {
       if (SG.busy) SG.abandon();
       if (P.inCar) GAME.exitCar();
@@ -14297,6 +14334,8 @@ function withTimeout(p, ms) {
   check('strangers: Gina waits a proper drive from the casino', gi.ginaFromCasino >= 380, 'metres from the casino: ' + gi.ginaFromCasino);
   check('strangers: pull up and Gina walks over, then gets in', gi.gina && gi.gina.walking && gi.gina.inCar, JSON.stringify(gi.gina));
   check('strangers: asked from a car, Ray walks to it and gets in — he does not vanish off the pavement', gi.ray && gi.ray.stood && gi.ray.boarding && gi.ray.inCar, JSON.stringify(gi.ray));
+  check('strangers: a street lamp between Gina and the car door, she goes round it and gets in',
+    gi.lamp && gi.lamp.gina && gi.lamp.inCar && gi.lamp.secs < 6, JSON.stringify(gi.lamp));
 
   // ---------- 40: the ferris wheel, and the camera on rides ----------
   var fw2 = await page.evaluate(function () {
@@ -15040,6 +15079,10 @@ function withTimeout(p, ms) {
   // faced as he spawned — into the shop's own front wall as often as not,
   // where he stood (CI once had him 3 m from the door after 3 s). Every shop
   // that can be held up, with him spawned facing in: he is out and away.
+  // And he stays out: he swayed as he ran, like a frightened passer-by, on
+  // the game clock, so a turn on the inward sway ran him back along the
+  // shopfront (CI had him 3 m out after 3 s, on one run in ten). Watched
+  // from the turn on, he is never back within 3 m of the door's wall.
   var rb = await page.evaluate(function () {
     var P = GAME.player, C = GAME.city, S = GAME.streetlife, out = [];
     var keepOpen = GAME.isla ? GAME.isla.isOpen() : false;
@@ -15072,7 +15115,12 @@ function withTimeout(p, ms) {
         inn = { x: (door.x - rq.x) / ql, z: (door.z - rq.z) / ql };
       }
       th.heading = Math.atan2(inn.x, inn.z);   // spawned looking into the shop
-      GAME.test.fastForward(3);
+      var low = Infinity;
+      for (var q = 0; q < 12; q++) {
+        GAME.test.fastForward(0.25);
+        if (q >= 5) low = Math.min(low, -((th.pos.x - door.x) * inn.x + (th.pos.z - door.z) * inn.z));
+      }
+      o.low = +low.toFixed(1);
       o.ran = Math.round(Math.hypot(th.pos.x - door.x, th.pos.z - door.z));
       o.outward = Math.round(-((th.pos.x - door.x) * inn.x + (th.pos.z - door.z) * inn.z));
       o.along = Math.round(Math.abs((th.pos.x - door.x) * -inn.z + (th.pos.z - door.z) * inn.x));
@@ -15087,7 +15135,7 @@ function withTimeout(p, ms) {
     return out;
   });
   check('robbery: at every shop that can be held up, the thief comes out of the door and off down the street',
-    rb.length >= 4 && rb.every(function (o) { return o.running && o.ran > 6 && o.outward > 3 && o.along > 6; }), JSON.stringify(rb));
+    rb.length >= 4 && rb.every(function (o) { return o.running && o.ran > 6 && o.outward > 3 && o.along > 6 && o.low > 3; }), JSON.stringify(rb));
 
   // ---------- 47: a soldier is not a cop in green ----------
   // At six stars the army's men fought exactly as the police did — a pistol
