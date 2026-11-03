@@ -121,17 +121,21 @@ GAME.addCash = function (n) {
 
 // The whole save as a portable string, and the way back. The export first
 // flushes the live state (health, ammo, everything GAME.save carries) and
-// then copies EVERY localStorage key verbatim — if a future feature adds a
-// second key, it rides along without this code changing. Import restores
-// all keys and reloads into the imported life.
+// then copies the game's localStorage keys (GAME.SAVE_KEYS: a new key goes
+// on that list) verbatim. Import restores them and reloads into the
+// imported life.
+// The game's own keys, and only those: the page shares its storage with
+// every other project on the same github.io origin, and an export used to
+// carry all of theirs along (and a RESET wiped them).
+GAME.SAVE_KEYS = ['neonMayhemSave', 'nm_chaos'];
 GAME.exportSave = function () {
   GAME.save();   // snapshot the moment, not the last checkpoint
   var storage = {};
   try {
-    for (var i = 0; i < localStorage.length; i++) {
-      var k = localStorage.key(i);
-      storage[k] = localStorage.getItem(k);
-    }
+    GAME.SAVE_KEYS.forEach(function (k) {
+      var v = localStorage.getItem(k);
+      if (v !== null) storage[k] = v;
+    });
   } catch (e) { }
   return JSON.stringify({ game: 'neon-mayhem', v: 2, exported: new Date().toISOString(), storage: storage }, null, 1);
 };
@@ -144,7 +148,7 @@ GAME.importSave = function (text) {
       if (typeof o.storage.neonMayhemSave !== 'string') return { ok: false, why: 'That save file is missing its game data.' };
       JSON.parse(o.storage.neonMayhemSave);   // must at least be JSON
       for (var k in o.storage) {
-        if (typeof o.storage[k] === 'string') localStorage.setItem(k, o.storage[k]);
+        if (GAME.SAVE_KEYS.indexOf(k) >= 0 && typeof o.storage[k] === 'string') localStorage.setItem(k, o.storage[k]);
       }
       return { ok: true };
     }

@@ -91,10 +91,17 @@ GAME.army = (function () {
       car.gunT = (car.gunT || 0) - dt;
       crush(car, dt);
       if (P.inCar && P.car === car) {
-        // yours: the turret follows the camera, LMB (or FIRE) is the gun
-        if (!told) { told = true; GAME.hud.message('MASTODON — the turret follows your aim, ' + (GAME.isTouch ? 'FIRE' : 'LMB') + ' fires the cannon.', 4); }
+        // yours: the turret follows the camera, and the cannon is LMB — or
+        // Q / E (a pad's LB / RB), or the in-car FIRE on a touchscreen. It
+        // used to read LMB and the on-foot FIRE only, so on a controller or
+        // a phone the tank you took had no gun at all.
+        if (!told) {
+          told = true;
+          var pad = GAME.controls && GAME.controls.usingPad && GAME.controls.usingPad();
+          GAME.hud.message('MASTODON — the turret follows your aim, ' + (GAME.isTouch ? 'FIRE' : pad ? 'RB' : 'LMB') + ' fires the cannon.', 4);
+        }
         turretTo(car, GAME.cam.yaw, dt);
-        var pull = (inp.lmbPressed || inp.lmb || T.fire);
+        var pull = (inp.lmbPressed || inp.lmb || T.fire || T.driveByAuto || GAME.key('KeyQ') || GAME.key('KeyE'));
         inp.lmbPressed = false;
         if (pull && car.gunT <= 0) { car.gunT = 1.3; fire(car, -Math.tan(GAME.cam.pitch - 0.3) * 0.25); }
         continue;

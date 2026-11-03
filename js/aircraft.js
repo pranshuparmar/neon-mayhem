@@ -138,7 +138,8 @@ GAME.aircraft = (function () {
     var P = GAME.player, car = P.car, inp = GAME.input, T = inp.touch;
     var up = 0, fwd = 0, yaw = 0;
     if (GAME.key('Space')) up += 1;
-    if (GAME.key('ShiftLeft') || GAME.key('ShiftRight') || GAME.key('ControlLeft')) up -= 1;
+    // (not Ctrl: with W held for forward, Ctrl+W closes the browser tab)
+    if (GAME.key('ShiftLeft') || GAME.key('ShiftRight')) up -= 1;
     if (GAME.key('KeyW')) fwd += 1;
     if (GAME.key('KeyS')) fwd -= 1;
     if (GAME.key('KeyA')) yaw += 1;
@@ -316,7 +317,7 @@ GAME.aircraft = (function () {
     if (GAME.key('KeyW')) thr += 1;
     if (GAME.key('KeyS')) thr -= 1;
     if (GAME.key('Space')) pitchIn += 1;
-    if (GAME.key('ShiftLeft') || GAME.key('ShiftRight') || GAME.key('ControlLeft')) pitchIn -= 1;
+    if (GAME.key('ShiftLeft') || GAME.key('ShiftRight')) pitchIn -= 1;   // (not Ctrl: Ctrl+W, Ctrl+S)
     if (GAME.key('KeyA')) yawIn += 1;
     if (GAME.key('KeyD')) yawIn -= 1;
     // Q/E barrel-roll the airframe right the way round — Q to the left (the

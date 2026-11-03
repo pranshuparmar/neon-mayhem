@@ -2,13 +2,50 @@
   var renderer, accumulator = 0, lastT = 0;
   GAME.frame = 0;
 
+  // A boot that dies used to leave LOADING COSTA ROSA… pulsing for ever: a
+  // browser with WebGL switched off or blocklisted (some Firefox, VM and
+  // work setups) threw from the renderer and nothing said a word. The title
+  // says what happened instead, and what to do about it.
+  function bootFailed(e) {
+    var webgl = /webgl|context/i.test(String(e && e.message || e));
+    var pe = document.getElementById('press-enter');
+    if (window.console && console.error) console.error(e);
+    if (!pe) return;
+    pe.classList.remove('loading');
+    pe.textContent = webgl ? 'WEBGL IS SWITCHED OFF' : 'COSTA ROSA DID NOT LOAD';
+    pe.style.animation = 'none'; pe.style.color = '#ff5d7a';
+    pe.style.borderColor = 'rgba(255,90,120,.6)'; pe.style.textShadow = '0 0 12px rgba(255,60,100,.8)';
+    var d = document.createElement('div');
+    d.style.cssText = 'position:relative;z-index:1;margin-top:12px;color:#cfe6ff;font-size:13px;line-height:1.6;max-width:620px;text-align:center;padding:0 18px;';
+    d.textContent = webgl
+      ? 'The game draws with WebGL, and this browser has it off or blocked. Turn on hardware (graphics) acceleration in the browser\'s settings and reload — or try another browser.'
+      : 'Something went wrong building the city (' + String(e && e.message || e).slice(0, 120) + '). A reload usually fixes it.';
+    pe.parentNode.insertBefore(d, pe.nextSibling);
+  }
   function boot() {
+    try { bootGame(); } catch (e) { bootFailed(e); }
+  }
+  function bootGame() {
     // a save being brought in on a phone: its own light page, no city (below)
     if (/^#import/.test(location.hash)) { importScreen(); return; }
     var canvas = document.getElementById('game-canvas');
     GAME.touch.init();
 
     renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: !GAME.isTouch, powerPreference: 'high-performance' });
+    // A phone short of memory can take the GPU context away (backgrounded,
+    // mostly), and it is never given back: a black screen, and no way out
+    // but knowing to reload. Say so, and make the tap the reload.
+    canvas.addEventListener('webglcontextlost', function (ev) {
+      if (document.getElementById('ctx-lost')) return;
+      var o = document.createElement('div');
+      o.id = 'ctx-lost';
+      o.style.cssText = 'position:fixed;inset:0;z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(11,7,20,.92);' +
+        'color:#e8f6ff;font:600 16px Inter,"Segoe UI",sans-serif;text-align:center;padding:24px;cursor:pointer;';
+      o.innerHTML = '<div style="font-size:22px;font-weight:900;letter-spacing:3px;color:#8dffd8;margin-bottom:10px">THE SCREEN WENT AWAY</div>' +
+        'The browser took the graphics back (it does that when it runs short of memory).<br>' + (GAME.isTouch ? 'Tap' : 'Click') + ' to reload — your game is saved.';
+      o.addEventListener('click', function () { try { if (GAME.save) GAME.save(); } catch (e2) { } location.reload(); });
+      document.body.appendChild(o);
+    }, false);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, GAME.settings.pixelRatioCap));
     renderer.setSize(window.innerWidth, window.innerHeight);
     GAME.renderer = renderer;

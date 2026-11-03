@@ -381,6 +381,9 @@
 //  52. THE VAN, PLAINLY — the security van looks the part, the objective
 //      line says how in and what the doors have left, a hit sends it
 //      running, and taken to Lola's lock-up it is opened for $1,500.
+//  53. BEFORE THE LAUNCH — a tank's cannon fires from a pad and a phone,
+//      Ctrl is no flight control (Ctrl+W), and a save export carries the
+//      game's own storage keys only.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -15452,6 +15455,74 @@ function withTimeout(p, ms) {
     sv.taken && sv.taken.inIt && sv.taken.wanted >= 2 && sv.taken.marked && !sv.taken.vanRing && /lock-up/.test(sv.taken.obj), JSON.stringify(sv.taken));
   check('van: driven into the lock-up it is opened for $1,500, and that is the end of it',
     sv.delivered && sv.delivered.paid === 1500 && sv.delivered.over && sv.delivered.out && sv.delivered.inside && sv.delivered.obj === '', JSON.stringify(sv.delivered));
+
+  // ---------- 53: before the launch ----------
+  // A tank's cannon read the mouse and the on-foot FIRE only, so a pad or a
+  // phone had a tank with no gun; Ctrl came down in a helicopter (and dived
+  // a plane) with W held, which is Ctrl+W, the tab gone; and the save's
+  // export took — and RESET wiped — every key on the github.io origin.
+  var pl = await page.evaluate(function () {
+    var P = GAME.player, V = GAME.vehicles, T = GAME.input.touch, ff = GAME.test.fastForward, r = {};
+    var shells = 0, fs0 = GAME.arsenal.fireShell;
+    GAME.arsenal.fireShell = function () { shells++; return fs0.apply(this, arguments); };
+    try {
+      if (P.inCar) GAME.exitCar();
+      GAME.police.clearWanted();
+      // the tank: Q / E (a pad's LB / RB) and the in-car touch FIRE fire it
+      GAME.test.teleport(-40, 40); ff(0.3);
+      var tk = V.spawnCar('tank', -36, 40, 0, {});
+      GAME.test.enterNearestCar(tk);
+      for (var w = 0; w < 40 && P.car !== tk; w++) ff(0.1);
+      r.inTank = P.car === tk;
+      tk.gunT = 0; GAME.test.pressKey('KeyE', true); ff(0.1); GAME.test.pressKey('KeyE', false);
+      r.byKey = shells;
+      ff(1.5); tk.gunT = 0;
+      T.driveByAuto = true; ff(0.1); T.driveByAuto = false;
+      r.byTouch = shells - r.byKey;
+      GAME.exitCar(); ff(0.5);
+      if (!tk.gone) V.removeCar(tk);
+      // the helicopter: Shift comes down, Ctrl does nothing
+      GAME.test.teleport(-60, 40); ff(0.3);
+      var hc = V.spawnCar('helicopter', -56, 40, 0, {});
+      ff(0.2); GAME.test.enterNearestCar(hc);
+      for (var w2 = 0; w2 < 40 && P.car !== hc; w2++) ff(0.1);
+      var fly = function (key) {
+        hc.pos.y = GAME.city.groundY(hc.pos.x, hc.pos.z) + 40; hc.vy = 0; ff(0.3);
+        var y0 = hc.pos.y;
+        GAME.test.pressKey(key, true); ff(1.5); GAME.test.pressKey(key, false);
+        return +(y0 - hc.pos.y).toFixed(2);
+      };
+      r.inHeli = P.car === hc;
+      r.shiftDrop = fly('ShiftLeft');
+      r.ctrlDrop = fly('ControlLeft');
+      hc.pos.y = GAME.city.groundY(hc.pos.x, hc.pos.z) + 0.05; ff(0.3);
+      GAME.exitCar(); ff(0.5);
+      if (!hc.gone) V.removeCar(hc);
+      // the save: the game's keys go out and come back, nobody else's
+      localStorage.setItem('another-project', 'theirs');
+      var ex = JSON.parse(GAME.exportSave());
+      r.exported = Object.keys(ex.storage);
+      ex.storage['another-project'] = 'overwritten';
+      ex.storage['injected'] = 'x';
+      r.imported = GAME.importSave(JSON.stringify(ex)).ok;
+      r.theirs = localStorage.getItem('another-project');
+      r.injected = localStorage.getItem('injected');
+    } finally {
+      GAME.arsenal.fireShell = fs0;
+      T.driveByAuto = false;
+      try { localStorage.removeItem('another-project'); localStorage.removeItem('injected'); } catch (e) { }
+      if (P.inCar) GAME.exitCar();
+      GAME.test.teleport(-60, 40); ff(0.5);
+    }
+    return r;
+  });
+  check('launch: a taken tank\'s cannon fires from Q / E (a pad\'s bumpers) and from the touch FIRE',
+    pl.inTank && pl.byKey === 1 && pl.byTouch === 1, JSON.stringify(pl));
+  check('launch: Shift brings a helicopter down and Ctrl does not (Ctrl+W closes the tab)',
+    pl.inHeli && pl.shiftDrop > 2 && pl.ctrlDrop < 0.6, JSON.stringify({ shift: pl.shiftDrop, ctrl: pl.ctrlDrop }));
+  check('launch: a save export carries the game\'s own keys only, and an import writes no others',
+    pl.exported && pl.exported.indexOf('neonMayhemSave') >= 0 && pl.exported.indexOf('another-project') < 0 && pl.imported && pl.theirs === 'theirs' && pl.injected === null,
+    JSON.stringify({ exported: pl.exported, imported: pl.imported, theirs: pl.theirs, injected: pl.injected }));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the

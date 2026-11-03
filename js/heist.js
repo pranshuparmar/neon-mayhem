@@ -114,7 +114,7 @@ GAME.heist = (function () {
   var PITCH = { id: 'bigscore', shots: [{ set: 'lockup', cast: ['lola', 'you'], lines: [
     ['lola', 'Every job you did for me was practice for this one.'],
     ['you', 'Which one?'],
-    ['lola', 'The Costa Rosa Savings & Loan. A Mosler vault, a door nobody ever opened, and twenty-five thousand behind it.'],
+    ['lola', 'The Costa Rosa Savings & Loan. A Keller vault, a door nobody ever opened, and twenty-five thousand behind it.'],
     ['you', 'Nobody walks out of a bank with that.'],
     ['lola', 'So we walk in first. Take a camera and case it: the front from across the street, then the vault, as a customer.']] }] };
   // and Benny, the first time he gets in your car: no cut, just his say
@@ -160,7 +160,7 @@ GAME.heist = (function () {
     GAME.save();
     tidy();
     var next = [
-      'Nice pictures. That vault is a Mosler — and the man who can open a Mosler is Benny "the Ear", at the marina on Isla Verde. Call me when you want him.',
+      'Nice pictures. That vault is a Keller — and the man who can open a Keller is Benny "the Ear", at the marina on Isla Verde. Call me when you want him.',
       'Benny\'s settled in at the lock-up. He says no getaway car of his is going to be a colour anybody has seen. Call me.',
       'Under the tarp, and pretty. That\'s everything. When you\'re ready — and I mean ready — call me, and we go.'
     ][n];

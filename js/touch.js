@@ -113,6 +113,9 @@ GAME.touch = (function () {
       var pe = document.getElementById('press-enter');
       if (pe && !pe.classList.contains('loading')) pe.textContent = 'TAP TO START';
     }
+    // the help cards (title and pause) say thumbs, not keys (and this runs
+    // before the HUD is up on a touch device: the painter is safe to call then)
+    if (GAME.hud && GAME.hud.keyHelp) GAME.hud.keyHelp();
     // the radar moves to the top-left on touch: the bottom-left corner is the
     // virtual stick's zone, and the two were fighting for the same thumb.
     // PAUSE sits just right of it, then the camera, then the cheats, and
@@ -157,6 +160,7 @@ GAME.touch = (function () {
     }
     // (the controls bar comes back on the HUD's own refresh)
     if (GAME.hud && GAME.hud.refreshFsBtn) GAME.hud.refreshFsBtn();
+    if (GAME.hud && GAME.hud.keyHelp) GAME.hud.keyHelp();
   }
 
   function build() {
@@ -466,7 +470,8 @@ GAME.touch = (function () {
       show(btns.radio, true);
       show(btns.horn, !air);
       var hasSMG = !air && P.weapons.smg && P.weapons.smg.have && P.weapons.smg.ammo > 0;
-      show(btns.driveby, hasSMG);
+      // (in a tank the same FIRE is the cannon: army.js)
+      show(btns.driveby, hasSMG || !!(P.car && P.car.spec.tank));
       // JOB starts a shift and, during one, ends it (J does both on a
       // keyboard) — it used to vanish the moment the shift began, so a
       // touchscreen had no way to clock off but stepping out
@@ -483,7 +488,7 @@ GAME.touch = (function () {
     }
 
     // drive-by auto-aims at the nearest side
-    if (inCar && T.driveByAuto && P.car) {
+    if (inCar && T.driveByAuto && P.car && !P.car.spec.tank) {
       var car = P.car, side = 1, bd = 1e9, peds = GAME.world.peds;
       for (var p = 0; p < peds.length; p++) {
         var pd = peds[p];

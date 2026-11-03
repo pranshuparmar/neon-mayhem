@@ -661,7 +661,8 @@ GAME.initInput = function (canvas) {
     // out of fullscreen over an Esc on an overlay, this is where it comes back
     if (GAME.started && GAME.maybeRestoreFullscreen) GAME.maybeRestoreFullscreen();
     if (acquiring) {
-      canvas.requestPointerLock && canvas.requestPointerLock();
+      var lk = canvas.requestPointerLock && canvas.requestPointerLock();
+      if (lk && lk.catch) lk.catch(function () { });
     }
   });
   window.addEventListener('mouseup', function (e) {

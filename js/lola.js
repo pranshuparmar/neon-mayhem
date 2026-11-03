@@ -162,7 +162,7 @@ GAME.lola = (function () {
     return { say: lines.join(' ') };
   }
   var PLACES = [
-    ['hardware', '🔫 GUNS & ARMOR', 'the gun shop'], ['dress', '👕 CLOTHES', 'THREADS'], ['barber', '💈 A HAIRCUT', 'the barber'],
+    ['hardware', '🔫 GUNS & ARMOUR', 'the gun shop'], ['dress', '👕 CLOTHES', 'THREADS'], ['barber', '💈 A HAIRCUT', 'the barber'],
     ['showroom', '🏎 A NEW RIDE', 'the showroom'], ['home', '🏠 MY PLACE', 'your place'], ['casino', '🎰 THE CASINO', 'the Lucky Gull'],
     ['hospital', '➕ A HOSPITAL', 'the hospital'], ['bribe', '🚔 THE DESK SERGEANT', 'the station desk']
   ];
@@ -210,8 +210,8 @@ GAME.lola = (function () {
         'and Isla Verde, across the channel. The days are hot, the nights are hotter, the radio never stops, and everybody here is working an angle. Including me.';
     }],
     ['🏙 THE NEIGHBOURHOODS', function () {
-      return 'Four of them on Isla Rosa. The OCEAN STRIP, on the beach: the boardwalk, the piers, the Lucky Gull casino, the ferris wheel, the Neon Tide club. ' +
-        'CENTRO ALTO, downtown: the towers, the Savings & Loan, Rosa Pictures, and the helipad tower. PUERTO VIEJO, the harbour: the docks, the cranes, the warehouses, the export crane, and the airport out past them. ' +
+      return 'Four of them on Isla Rosa. The OCEAN STRIP, on the beach: the boardwalk, the piers, the Lucky Gull casino, the ferris wheel, the Neon Tide club, and the Savings & Loan. ' +
+        'CENTRO ALTO, downtown: the towers, Rosa Pictures, and the helipad tower. PUERTO VIEJO, the harbour: the docks, the cranes, the warehouses, the export crane, and the airport out past them. ' +
         'And LAS COLINAS, up the hill: the hospital, the barber, the stadium, the nice houses — and Villa Salazar, right at the top.';
     }],
     ['🌉 ISLA VERDE', function () {
