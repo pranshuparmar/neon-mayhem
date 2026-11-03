@@ -8731,6 +8731,9 @@ function withTimeout(p, ms) {
       r.swimmingUp = !!P.swimming;
       GAME.test.pressKey('KeyF', true); ff(0.05); GAME.test.pressKey('KeyF', false); ff(1.5);
       r.taken = { aboard: P.inCar && P.car === tk, managed: SL.fleet.indexOf(tk) >= 0 };
+      // (and if not, what was going on: it failed once on a slow machine and
+      // never again in a hundred runs, so a failure has to say why itself)
+      if (!r.taken.aboard) r.taken.why = { swimming: r.swimmingUp, state: P.state, inCar: P.inCar ? (P.car.spec.label || '?') : null, tk: +Math.hypot(tk.pos.x - P.pos.x, tk.pos.z - P.pos.z).toFixed(1), tkRider: tk.occupied || null, near: GAME.world.cars.filter(function (c) { return c !== tk && Math.hypot(c.pos.x - P.pos.x, c.pos.z - P.pos.z) < 8; }).map(function (c) { return c.spec.label + ':' + (c.occupied || '-'); }) };
       // --- a leisure craft is held at the shut channel the way you are, and
       // nobody is told about it ---
       var edge = GAME.aircraft.edges().closed.maxX;
