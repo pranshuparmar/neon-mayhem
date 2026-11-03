@@ -709,11 +709,14 @@ GAME.peds = (function () {
                 GAME.vehicles.damageCar(tcar, 2, 'fists', false);
                 if (tcar === P.car && P.inCar) {
                   GAME.cameraShake = Math.max(GAME.cameraShake || 0, 0.12);
-                } else if (tcar.occupied === 'ai' && GAME.chaos.on && !tcar.isPolice && !tcar.mission) {
+                } else if (tcar.occupied === 'ai' && GAME.chaos.on && !tcar.isPolice && !tcar.mission && !tcar.outlaw) {
                   // Somebody hammering on your bonnet does not go unanswered.
                   // Two blows in and the man inside gets out, and what was a
                   // person hitting a parked object becomes two people having
-                  // it out — which is the thing worth watching.
+                  // it out — which is the thing worth watching. (Not a man
+                  // with a cruiser on his tail: a getaway driver does not get
+                  // out to argue, and that one used to, ending the chase on
+                  // the spot — streetlife.js counts a driver out as taken.)
                   ped.bangT = (ped.bangT || 0) + 0.55;
                   if (ped.bangT > 1) {
                     ped.bangT = 0;
