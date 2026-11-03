@@ -384,6 +384,9 @@
 //  53. BEFORE THE LAUNCH — a tank's cannon fires from a pad and a phone,
 //      Ctrl is no flight control (Ctrl+W), and a save export carries the
 //      game's own storage keys only.
+//  54. A GETAWAY DRIVER STAYS PUT — banging on the getaway car does not
+//      get its driver out, so the chase is not over a junction short; and
+//      the getaway does not pull over for the cruiser chasing it.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -8728,6 +8731,9 @@ function withTimeout(p, ms) {
       r.swimmingUp = !!P.swimming;
       GAME.test.pressKey('KeyF', true); ff(0.05); GAME.test.pressKey('KeyF', false); ff(1.5);
       r.taken = { aboard: P.inCar && P.car === tk, managed: SL.fleet.indexOf(tk) >= 0 };
+      // (and if not, what was going on: it failed once on a slow machine and
+      // never again in a hundred runs, so a failure has to say why itself)
+      if (!r.taken.aboard) r.taken.why = { swimming: r.swimmingUp, state: P.state, inCar: P.inCar ? (P.car.spec.label || '?') : null, tk: +Math.hypot(tk.pos.x - P.pos.x, tk.pos.z - P.pos.z).toFixed(1), tkRider: tk.occupied || null, near: GAME.world.cars.filter(function (c) { return c !== tk && Math.hypot(c.pos.x - P.pos.x, c.pos.z - P.pos.z) < 8; }).map(function (c) { return c.spec.label + ':' + (c.occupied || '-'); }) };
       // --- a leisure craft is held at the shut channel the way you are, and
       // nobody is told about it ---
       var edge = GAME.aircraft.edges().closed.maxX;
@@ -8942,9 +8948,17 @@ function withTimeout(p, ms) {
       // not the getaway threading a jam — a narrow street with a car parked
       // on one side and one pulled over for the siren on the other holds it
       // up for good, now and then — and it can start a long way off)
+      // And that means the empty ones too: the minute of traffic above
+      // leaves a car or two standing in a junction, its driver out arguing
+      // about a shunt, and a getaway that comes through there was wedged
+      // behind it, a junction short of you, the cruiser on its bumper (CI
+      // had three in ten that way). Group 54 has the other thing that
+      // happened there: one of them banging on it till its driver got out.
       var keepTraffic0 = GAME.settings.maxTraffic;
       GAME.settings.maxTraffic = 0;
-      GAME.world.cars.slice().forEach(function (c) { if (c.occupied === 'ai') GAME.vehicles.removeCar(c); });
+      GAME.world.cars.slice().forEach(function (c) {
+        if (c.occupied === 'ai' || (!c.parkedSpot && !c.occupied && c !== P.car)) GAME.vehicles.removeCar(c);
+      });
       r.chaseOn = S.start('chase');
       var e = S.event, minD = 1e9, lights = false, siren = false;
       // (until it is on its way in: run on past that and it is long gone by
@@ -15636,6 +15650,96 @@ function withTimeout(p, ms) {
   check('launch: a save export carries the game\'s own keys only, and an import writes no others',
     pl.exported && pl.exported.indexOf('neonMayhemSave') >= 0 && pl.exported.indexOf('another-project') < 0 && pl.imported && pl.theirs === 'theirs' && pl.injected === null,
     JSON.stringify({ exported: pl.exported, imported: pl.imported, theirs: pl.theirs, injected: pl.injected }));
+
+  // ---------- 54: a getaway driver stays in his seat ----------
+  // Two blows on a car's bonnet and its driver gets out to have it out
+  // (peds.js) — the getaway's driver too, with a cruiser on his tail, and
+  // streetlife.js counts a driver out as the getaway taken: the chase was
+  // over a junction short of you. CI found one of the men out of a shunt
+  // pounding on it as it squeezed past. A getaway driver stays put.
+  var gb = await page.evaluate(function () {
+    var r = {}, P = GAME.player, C = GAME.city, S = GAME.streetlife, ff = function (s) { GAME.test.fastForward(s); };
+    var keep = { t: GAME.settings.maxTraffic, lvl: GAME.chaos.level }, ped = null;
+    try {
+      if (P.inCar) GAME.exitCar();
+      GAME.police.clearWanted(); S.reset();
+      var node = C.nearestNode(60, 40);
+      GAME.test.teleport(node.x, node.z); ff(0.5);
+      GAME.settings.maxTraffic = 0;
+      GAME.world.cars.slice().forEach(function (c) { if (!c.parkedSpot && c !== P.car) GAME.vehicles.removeCar(c); });
+      GAME.chaos.set(3);
+      r.on = S.start('chase');
+      var e = S.event, perp = e && e.perp;
+      if (perp) {
+        // stopped where it is, and a hothead beside it, fists up at the car
+        var hold = function () { perp.speed = 0; perp.lat = 0; };
+        hold();
+        var sx = perp.pos.x + Math.cos(perp.heading) * 2.2, sz = perp.pos.z - Math.sin(perp.heading) * 2.2;
+        ped = GAME.peds.spawnPed(sx, sz);
+        r.ped = !!ped;
+        if (ped) {
+          ped.temper = 0.9;
+          r.fight = GAME.peds.startFight(ped, { kind: 'car', car: perp }, 14);
+          var hp0 = perp.hp;
+          for (var i = 0; i < 60 * 5; i++) { hold(); ff(1 / 60); }
+          r.blows = Math.round((hp0 - perp.hp) / 2);
+          r.inSeat = perp.occupied === 'ai';
+          r.kind = e.kind;
+          r.chasing = S.event === e && e.kind === 'chase';
+        }
+      }
+    } finally {
+      if (ped && !ped.gone) GAME.peds.removePed(ped);
+      S.reset();
+      GAME.settings.maxTraffic = keep.t; GAME.chaos.set(keep.lvl);
+      GAME.police.clearWanted();
+      GAME.test.teleport(-60, 40); ff(0.5);
+    }
+    return r;
+  });
+  check('getaway: a hothead pounding on the getaway car does not get its driver out, and the chase goes on',
+    gb.on && gb.ped && gb.fight && gb.blows >= 2 && gb.inSeat && gb.chasing, JSON.stringify(gb));
+
+  // And it does not pull over for the cruiser after it. Traffic edges to
+  // the kerb for a siren coming up behind — the chase's own included, and
+  // the getaway is traffic: it yielded to its own pursuer every chase and
+  // came at you at 3 m/s with the cruiser on its bumper, and now and then
+  // the cruiser drove round it and the two sat there, backing up, for the
+  // rest of the chase.
+  var gy = await page.evaluate(function () {
+    var r = {}, P = GAME.player, C = GAME.city, S = GAME.streetlife, ff = function (s) { GAME.test.fastForward(s); };
+    var keep = { t: GAME.settings.maxTraffic, lvl: GAME.chaos.level };
+    try {
+      if (P.inCar) GAME.exitCar();
+      GAME.police.clearWanted(); S.reset();
+      var node = C.nearestNode(60, 40);
+      GAME.test.teleport(node.x, node.z); ff(0.5);
+      GAME.settings.maxTraffic = 0;
+      GAME.world.cars.slice().forEach(function (c) { if (!c.parkedSpot && c !== P.car) GAME.vehicles.removeCar(c); });
+      GAME.chaos.set(3);
+      r.on = S.start('chase');
+      var e = S.event;
+      if (e) {
+        var top = 0, yielded = false, ahead = false;
+        for (var i = 0; i < 60 * 3 && S.event === e && e.kind === 'chase'; i++) {
+          ff(1 / 60);
+          var p = e.perp, c = e.cop;
+          top = Math.max(top, p.speed);
+          if (p.ai && p.ai.yieldT > 0) yielded = true;
+          if ((c.pos.x - p.pos.x) * Math.sin(p.heading) + (c.pos.z - p.pos.z) * Math.cos(p.heading) > 0) ahead = true;
+        }
+        r.top = +top.toFixed(1); r.yielded = yielded; r.copAhead = ahead; r.chasing = S.event === e && e.kind === 'chase';
+      }
+    } finally {
+      S.reset();
+      GAME.settings.maxTraffic = keep.t; GAME.chaos.set(keep.lvl);
+      GAME.police.clearWanted();
+      GAME.test.teleport(-60, 40); ff(0.5);
+    }
+    return r;
+  });
+  check('getaway: it does not pull over for the cruiser on its tail — it runs, and the cruiser stays behind it',
+    gy.on && !gy.yielded && gy.top > 15 && !gy.copAhead && gy.chasing, JSON.stringify(gy));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the
