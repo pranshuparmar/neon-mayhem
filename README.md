@@ -43,7 +43,7 @@ Want the details? **[Read the full tour →](docs/FEATURES.md)**
 
 ## What's new
 
-- 🚐 **The security van** — SECURITY down its sides and an amber light on the roof: knock it about till the back doors give, or take it off the guard and drive it to Lola's lock-up.
+- 🚐 **The security van** — SECURITY down its sides and an amber light on the roof: knock it about till the back doors give, or take it off the guard, shake the law, and drive it into Lola's lock-up.
 - 🏎 **MINI MAYHEM RACE** — toy buggies, two laps round the pitch at Memorial Stadium.
 - 🏗 **Import/export** — two lists of wanted cars for the crane on the docks, paid by condition, with a bonus for each full list.
 - 📻 **Radio with personality** — a frequency, a jingle and a DJ for every station, with talk and 1986 ads between the songs.

@@ -15431,13 +15431,20 @@ function withTimeout(p, ms) {
       r.taken = { inIt: P.car === van, wanted: GAME.police.wanted, obj: obj(),
         marked: S.blips().some(function (q) { return q.ring && Math.hypot(q.x - L.x, q.z - L.z) < 1; }),
         vanRing: S.blips().some(function (q) { return q.ring && Math.hypot(q.x - van.pos.x, q.z - van.pos.z) < 1; }) };
-      // delivered: paid, out, the van rolled inside, the line cleared
-      GAME.police.clearWanted();
+      // at the door with the law on: too hot, the door stays shut
       var rp = GAME.city.nearestRoadPoint(L.x, L.z);
-      van.pos.set(L.x + (rp.x - L.x) * 0.3, GAME.city.groundY(L.x, L.z), L.z + (rp.z - L.z) * 0.3); van.speed = 0;
+      var atDoor = function () { van.pos.set(L.x + (rp.x - L.x) * 0.3, GAME.city.groundY(L.x, L.z), L.z + (rp.z - L.z) * 0.3); van.speed = 0; };
       var cash0 = P.cash;
-      ff(0.5);
-      r.delivered = { paid: P.cash - cash0, over: !S.event, out: !P.inCar, inside: !!van.gone, obj: obj() };
+      GAME.police.setWanted(2);
+      atDoor(); said.length = 0; ff(1.5);
+      r.hot = { paid: P.cash - cash0, still: S.event === ev && P.car === van, told: said.some(function (t) { return /Too hot/.test(t); }), obj: obj() };
+      // delivered once they're lost: to black, paid, out, the van rolled inside, back in
+      GAME.police.clearWanted();
+      atDoor(); ff(0.2);
+      var fade = document.getElementById('fade-layer');
+      r.black = fade.style.opacity === '1' && S.event === ev;
+      ff(1.0);
+      r.delivered = { paid: P.cash - cash0, over: !S.event, out: !P.inCar, inside: !!van.gone, obj: obj(), lit: fade.style.opacity === '0' };
     } finally {
       GAME.hud.message = m0; GAME.hud.pager = pg0;
       if (P.inCar) GAME.exitCar();
@@ -15456,8 +15463,10 @@ function withTimeout(p, ms) {
     sv.hit && /doors are at ([1-9]\d?)%/.test(sv.hit.obj) && !/100%/.test(sv.hit.obj) && sv.hit.desired > 9 && sv.hit.away, JSON.stringify(sv.hit));
   check('van: take it, and the guard calls it in, and the lock-up is marked and on the line',
     sv.taken && sv.taken.inIt && sv.taken.wanted >= 2 && sv.taken.marked && !sv.taken.vanRing && /lock-up/.test(sv.taken.obj), JSON.stringify(sv.taken));
-  check('van: driven into the lock-up it is opened for $1,500, and that is the end of it',
-    sv.delivered && sv.delivered.paid === 1500 && sv.delivered.over && sv.delivered.out && sv.delivered.inside && sv.delivered.obj === '', JSON.stringify(sv.delivered));
+  check('van: with the law on you Lola won\'t open up — too hot, lose them first',
+    sv.hot && sv.hot.paid === 0 && sv.hot.still && sv.hot.told && /Lose the law/.test(sv.hot.obj), JSON.stringify(sv.hot));
+  check('van: once they\'re lost it goes to black, rolls in for $1,500, and comes back up with you at the door',
+    sv.black && sv.delivered && sv.delivered.paid === 1500 && sv.delivered.over && sv.delivered.out && sv.delivered.inside && sv.delivered.obj === '' && sv.delivered.lit, JSON.stringify({ black: sv.black, delivered: sv.delivered }));
 
   // ---------- 53: before the launch ----------
   // A tank's cannon read the mouse and the on-foot FIRE only, so a pad or a

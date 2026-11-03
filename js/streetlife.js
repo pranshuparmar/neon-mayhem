@@ -209,7 +209,8 @@ GAME.streetlife = (function () {
   //    puts his foot down and heads away from you;
   //  - or take it off them — pull the guard out and drive it to her lock-up
   //    by the harbour, where her crew opens it properly for $1,500. The
-  //    guard calls it in the moment you are in it.
+  //    guard calls it in the moment you are in it, and she will not open
+  //    the door with the law on you: lose them first.
   // Near it, the objective line says so, with how much the doors have left.
   //
   // It used to be nowhere to be found: a grey dot of two pixels on a grey
@@ -220,7 +221,7 @@ GAME.streetlife = (function () {
   // marked on the map, it keeps its rounds to your part of town, and it is
   // about for four minutes. And it used to look like any cargo van, said
   // nothing about what to do with it, and taking it did nothing at all.
-  var VAN_SECS = 240, VAN_ROUND = 110, VAN_LOST = 400, VAN_NEAR = 60, VAN_PAY = 1500, DOORS = 0.3;
+  var VAN_SECS = 240, VAN_ROUND = 110, VAN_LOST = 400, VAN_NEAR = 60, VAN_PAY = 1500, DOORS = 0.3, VAN_FADE = 0.75;
   function lockup() { return GAME.heist && GAME.heist.LOCKUP || { x: -140, z: 206 }; }
   function startVan() {
     var f = GAME.focus();
@@ -233,7 +234,7 @@ GAME.streetlife = (function () {
     van.armoured = true; van.keep = true;
     GAME.vehicles.armourVan(van);
     ev = { kind: 'van', t: 0, van: van, hp0: van.hp, aimAt: 0, panel: false, said: '', seen: false, hit: false, taken: false };
-    if (GAME.hud.pager) GAME.hud.pager('LOLA', 'There\'s a security van doing its rounds near you — SECURITY down the side, amber light on the roof. It\'s the ringed dot on your radar, and the $ on your map. Hit it hard enough and the back doors give. Or take it off them and bring it to my lock-up by the harbour, and my people will open it properly.');
+    if (GAME.hud.pager) GAME.hud.pager('LOLA', 'There\'s a security van doing its rounds near you — SECURITY down the side, amber light on the roof. It\'s the ringed dot on your radar, and the $ on your map. Hit it hard enough and the back doors give. Or take it off them, lose the law, and bring it to my lock-up by the harbour — my people will open it properly.');
     return true;
   }
   // the objective line, while the van is yours to deal with: near it, or in it
@@ -274,17 +275,39 @@ GAME.streetlife = (function () {
     }
     if (ev.taken) {
       var L = lockup();
-      if (inIt && U.dist2(van.pos.x, van.pos.z, L.x, L.z) < 10 * 10 && Math.abs(van.speed) < 3) {
-        GAME.exitCar();
-        pay(VAN_PAY, 'Lola\'s people roll the van inside and open it up.');
-        if (GAME.hud.pager) GAME.hud.pager('LOLA', 'Now THAT is a delivery. Don\'t make a habit of it where anybody can see you.');
-        if (GAME.herald) GAME.herald.front('van', {});
+      // Delivered: the screen goes to black, the van rolls in behind it and
+      // you are stood at the door when it comes back. (It used to vanish
+      // from under you, stars and all.) Counted in game time, like the
+      // missions' own blackouts, so a pause holds it.
+      if (ev.inside !== undefined) {
+        van.speed = 0;
+        if (p.state !== 'alive') { GAME.hud.fadeSet(0); end(); return; }
+        if (ev.t - ev.inside < VAN_FADE) return;
+        if (p.inCar && p.car === van) GAME.exitCar();
         var gone = van;
         end();
         GAME.vehicles.removeCar(gone);
+        GAME.hud.fadeSet(0);
+        pay(VAN_PAY, 'Lola\'s people roll the van inside and open it up.');
+        if (GAME.hud.pager) GAME.hud.pager('LOLA', 'Now THAT is a delivery. Don\'t make a habit of it where anybody can see you.');
+        if (GAME.herald) GAME.herald.front('van', {});
         return;
       }
-      vanPanel(inIt ? 'Get it to Lola\'s lock-up by the harbour — the $ on your map.' : 'Get back in the van — Lola\'s lock-up by the harbour.');
+      var atDoor = inIt && U.dist2(van.pos.x, van.pos.z, L.x, L.z) < 10 * 10;
+      var hot = GAME.police.wanted > 0;
+      // ...and not with the law behind you: she will not open the door on
+      // a van with cruisers on it. The loot is yours only once you've lost them.
+      if (atDoor && hot) {
+        if (ev.t >= (ev.hotT || 0)) { ev.hotT = ev.t + 5; say('Too hot — Lola won\'t open up with the law on you. Lose them, then bring it in.', 4); }
+      } else if (atDoor && Math.abs(van.speed) < 3) {
+        ev.inside = ev.t;
+        GAME.hud.fadeSet(1);
+        vanPanel(null);
+        return;
+      }
+      vanPanel(!inIt ? 'Get back in the van — Lola\'s lock-up by the harbour.'
+        : hot ? 'Lose the law — Lola won\'t take it in hot. Then her lock-up by the harbour.'
+          : 'Get it to Lola\'s lock-up by the harbour — the $ on your map.');
       if (van.gone || p.state !== 'alive' || U.dist2(van.pos.x, van.pos.z, f.x, f.z) > VAN_LOST * VAN_LOST) end();
       return;
     }
@@ -495,6 +518,8 @@ GAME.streetlife = (function () {
       ev.van.keep = false; if (ev.van.ai) ev.van.ai.toward = null;
       var bc = ev.van.mesh && ev.van.mesh.userData.beacon;
       if (bc) { bc[0].visible = false; bc[1].visible = false; }
+      // (cut short mid-delivery: the black goes with it)
+      if (ev.inside !== undefined) GAME.hud.fadeSet(0);
       if (ev.panel) {
         var M = GAME.missions;
         if (!(M && M.active) && !(GAME.heist && GAME.heist.busy) && !(GAME.strangers && GAME.strangers.busy)) GAME.hud.missionEnd();
