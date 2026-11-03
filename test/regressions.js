@@ -15040,6 +15040,10 @@ function withTimeout(p, ms) {
   // faced as he spawned — into the shop's own front wall as often as not,
   // where he stood (CI once had him 3 m from the door after 3 s). Every shop
   // that can be held up, with him spawned facing in: he is out and away.
+  // And he stays out: he swayed as he ran, like a frightened passer-by, on
+  // the game clock, so a turn on the inward sway ran him back along the
+  // shopfront (CI had him 3 m out after 3 s, on one run in ten). Watched
+  // from the turn on, he is never back within 3 m of the door's wall.
   var rb = await page.evaluate(function () {
     var P = GAME.player, C = GAME.city, S = GAME.streetlife, out = [];
     var keepOpen = GAME.isla ? GAME.isla.isOpen() : false;
@@ -15072,7 +15076,12 @@ function withTimeout(p, ms) {
         inn = { x: (door.x - rq.x) / ql, z: (door.z - rq.z) / ql };
       }
       th.heading = Math.atan2(inn.x, inn.z);   // spawned looking into the shop
-      GAME.test.fastForward(3);
+      var low = Infinity;
+      for (var q = 0; q < 12; q++) {
+        GAME.test.fastForward(0.25);
+        if (q >= 5) low = Math.min(low, -((th.pos.x - door.x) * inn.x + (th.pos.z - door.z) * inn.z));
+      }
+      o.low = +low.toFixed(1);
       o.ran = Math.round(Math.hypot(th.pos.x - door.x, th.pos.z - door.z));
       o.outward = Math.round(-((th.pos.x - door.x) * inn.x + (th.pos.z - door.z) * inn.z));
       o.along = Math.round(Math.abs((th.pos.x - door.x) * -inn.z + (th.pos.z - door.z) * inn.x));
@@ -15087,7 +15096,7 @@ function withTimeout(p, ms) {
     return out;
   });
   check('robbery: at every shop that can be held up, the thief comes out of the door and off down the street',
-    rb.length >= 4 && rb.every(function (o) { return o.running && o.ran > 6 && o.outward > 3 && o.along > 6; }), JSON.stringify(rb));
+    rb.length >= 4 && rb.every(function (o) { return o.running && o.ran > 6 && o.outward > 3 && o.along > 6 && o.low > 3; }), JSON.stringify(rb));
 
   // ---------- 47: a soldier is not a cop in green ----------
   // At six stars the army's men fought exactly as the police did — a pistol
