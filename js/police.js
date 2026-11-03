@@ -1238,7 +1238,7 @@ GAME.police = (function () {
           for (var tb = 0; tb < 4; tb++) GAME.vehicles.burstTyre(P.car, tb);
           GAME.fx.spawn(P.car.pos.x, 0.4, P.car.pos.z, { count: 10, color: 0xffe0a0, spread: 3, life: 0.4 });
           GAME.audio.crash(0.5, P.car.pos.x, P.car.pos.z);
-          GAME.hud.message('Tires shredded!', 2);
+          GAME.hud.message('Tyres shredded!', 2);
         }
       }
     }

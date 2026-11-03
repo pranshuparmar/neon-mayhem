@@ -24,6 +24,7 @@ Every action, on all three: keyboard and mouse, a controller (standard layout �
 | Steer | `A` / `D` | left stick | stick |
 | Handbrake · slide a boat · the monster truck's hop | `Space` | A | ⇋ |
 | Drive-by (with an SMG) | `Q` / `E` (left / right) · LMB (the side you look) | LB / RB | FIRE (the nearer side) |
+| Tank: turret · cannon | mouse · LMB (or `Q` / `E`) | right stick · RB (or LB) | drag · FIRE |
 | Horn (sounds while held) · a cruiser's siren · the ice cream chimes | `G` | R3 | 📢 |
 | Radio station (and off) | `,` / `.` | D-pad ← / → | ♪ (next) |
 | Start · end a shift | `J` | X | JOB / END |
@@ -33,7 +34,7 @@ Every action, on all three: keyboard and mouse, a controller (standard layout �
 
 | Action | Keyboard & mouse | Controller | Touch |
 |---|---|---|---|
-| Helicopter: climb / descend | `Space` / `Shift` (or `Ctrl`) | RT / LT (or A / B) | ▲ UP / ▼ DN |
+| Helicopter: climb / descend | `Space` / `Shift` | RT / LT (or A / B) | ▲ UP / ▼ DN |
 | Helicopter: fly · yaw | `W` `S` · `A` `D` | left stick | stick |
 | TALON: chin gun / rockets | LMB / RMB | RB / LB | GUN / RKT |
 | Plane: throttle | `W` / `S` | RT / LT | THR+ / THR− |
@@ -44,7 +45,7 @@ Every action, on all three: keyboard and mouse, a controller (standard layout �
 | Steer the parachute | `W A S D` | left stick | stick |
 | A car or boat with wings (the `COMEFLYWITHME` and `AIRSHIP` cheats): climb / dive | hold `W` / `S` (or `Space` / `Shift`); let go to glide down | stick back / forward, RT to keep your speed (held, with the stick left alone, it flies level) | stick back / forward, GAS to keep your speed (likewise) |
 
-A plane rolls down the runway on throttle and climbs once it's fast; airborne, the elevator is unrestricted — pull hard enough and it loops.
+A plane rolls down the runway on throttle; past rotation speed (about 60 m of runway) pull back — `Space` or the stick — to lift off. Airborne, the elevator is unrestricted: pull hard enough and it loops.
 
 **In the water:** swim with `W A S D` / the left stick / the stick; the faster stroke is `Shift` / B / RUN; `F` / Y / ENTER climbs into a boat alongside. You climb out yourself at a beach, a pier or any low edge.
 
@@ -58,14 +59,14 @@ A plane rolls down the runway on throttle and climbs once it's fast; airborne, t
 | Photo | `C` | L3 | 📷 |
 | Cheats (the list) | `` ` `` | START → GAME → CHEATS · a cheat's combo in play | the joystick beside the radar |
 | See a photo full size | `V` (the last one) · click it in PHOTOS | START → PHOTOS → A | tap the print · tap it in PHOTOS |
-| Call Lola | `L` | START → 📟 ASK LOLA | 📟 beside the camera (while her tips are on) · ❚❚ → 📟 ASK LOLA |
+| Call Lola | `L` | START → 📟 ASK LOLA | 📟 along the top (while her tips are on) · ❚❚ → 📟 ASK LOLA |
 | Retry a failed run | `Y` | D-pad ↑ | RETRY |
 | Abandon a mission, a favour or a part of the big score · clock off | `X` twice · pause → ABANDON | START → ABANDON | ❚❚ → ABANDON (JOB → END for a shift) |
 | Carry on after WASTED / BUSTED | `R` or `Enter` | A | tap |
 | Skip the glass lift's ride | `Space`, `F` or `Enter` | A or Y | tap |
 | A scene: next line · skip it | `Space` or `Enter`, click · `Esc` | A · B or START | tap · SKIP |
 | Skip ahead in a race you bet on | `Space` or `Enter` | A | JUMP |
-| Mute · CRT · day/night | `M` · `T` · `N` | pause → SOUND · CRT · TIME | pause → SOUND · CRT · TIME |
+| Mute · CRT · day/night | `M` · `T` · `N` (pins DAY or NIGHT; AUTO is under pause → TIME) | pause → SOUND · CRT · TIME | pause → SOUND · CRT · TIME |
 | Hide the hint bar | `H` | pause → HINT BAR | (no bar on touch) |
 | Fullscreen | ⛶ · pause → FULL SCREEN | START → FULL SCREEN ¹ | ⛶ · pause → FULL SCREEN |
 
@@ -82,8 +83,8 @@ A plane rolls down the runway on throttle and climbs once it's fast; airborne, t
 | The result card | `Esc`, `Enter` or `Space` | A or B | tap |
 | CONTROLS | click a key to rebind · arrows and `Enter` for the settings | D-pad · A · B | tap |
 
-**Your keys, your way.** Every keyboard action can be moved to another key from **CONTROLS** on the pause screen (click the action, press the new key; a key already in use swaps over). The same screen sets look sensitivity (mouse and right stick), inverted look and field of view, and all of it is remembered. `Esc` always pauses. A controller's layout is fixed, and listed on that screen.
+**Your keys, your way.** Every action listed on **CONTROLS** on the pause screen can be moved to another key (click its key, press the new one; a key already in use swaps over). The same screen sets look sensitivity (mouse and right stick), inverted look and field of view, and all of it is remembered. `Esc` always pauses. A controller's layout is fixed, and listed on that screen.
 
 🎮 **Controllers** work as soon as one is plugged in and a button is pressed. Whichever you last touched — the pad or the keyboard and mouse — is what the prompts, the hint bar and the help name.
 
-📱 **On phones and tablets** touch controls appear automatically: a floating stick under the left thumb, a context-sensitive action cluster under the right — buttons appear only when they apply — with the radar, PAUSE, the camera and ⛶ (while windowed) along the top. Starting the game enters fullscreen and asks for landscape (on an iPhone, where Safari has no fullscreen for pages, add it to the home screen instead — it runs full screen from there); if the browser ever refuses, ⛶ says so. **IMPORT SAVE** on a phone opens a page of its own with no city loaded, so the file picker can't get the game's tab reclaimed by the phone mid-import. **Left-handed?** One tap on the pause screen mirrors the whole cluster — stick to the right thumb, buttons to the left, and the camera drag swaps sides to match — and it is remembered.
+📱 **On phones and tablets** touch controls appear automatically: a floating stick under the left thumb, a context-sensitive action cluster under the right — buttons appear only when they apply — with the radar, PAUSE, the camera, the 🕹 cheats, 📟 Lola (while her tips are on) and ⛶ (while windowed) along the top. Starting the game enters fullscreen and asks for landscape (on an iPhone, where Safari has no fullscreen for pages, add it to the home screen instead — it runs full screen from there); if the browser ever refuses, ⛶ says so. **IMPORT SAVE** on a phone opens a page of its own with no city loaded, so the file picker can't get the game's tab reclaimed by the phone mid-import. **Left-handed?** SETTINGS → CONTROLS: LEFT on the pause screen mirrors the whole cluster — stick to the right thumb, buttons to the left, and the camera drag swaps sides to match — and it is remembered.

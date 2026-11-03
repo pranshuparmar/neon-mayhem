@@ -331,17 +331,20 @@ GAME.hud = (function () {
       // way out first, then asks once more before burning it all down
       dialog({
         title: 'RESET PROGRESS',
-        body: 'This erases EVERYTHING — cash, missions, stunt jumps, property, garage, your look. There is no undo.\nWant a backup? Cancel and use EXPORT SAVE first.',
+        body: 'This erases EVERYTHING — cash, missions, stunt jumps, property, garage, your look, your photos. There is no undo.\nWant a backup? Cancel and use EXPORT SAVE first.',
         ok: 'ERASE EVERYTHING', danger: true,
         onOk: function () {
           dialog({
             title: 'LAST CHANCE',
-            body: 'Wipe the save and start Costa Rosa from nothing?',
+            body: 'Wipe the save and the photo album, and start Costa Rosa from nothing?',
             ok: 'WIPE THE SAVE', danger: true,
             onOk: function () {
               GAME.track('progress-reset');
-              try { localStorage.clear(); } catch (e) { }
-              location.reload();
+              // (the game's keys only: the origin is shared with other pages)
+              try { (GAME.SAVE_KEYS || ['neonMayhemSave', 'nm_chaos']).forEach(function (k) { localStorage.removeItem(k); }); } catch (e) { }
+              // ...and the photo album with it, before the page goes
+              if (GAME.photo && GAME.photo.wipe) GAME.photo.wipe(function () { location.reload(); });
+              else location.reload();
             }
           });
         }
@@ -357,6 +360,7 @@ GAME.hud = (function () {
         if (r.ok) { GAME.track('save-imported'); location.reload(); }
         else dialog({ title: 'IMPORT FAILED', body: r.why, ok: 'OK', cancel: false });
       };
+      rd.onerror = function () { dialog({ title: 'IMPORT FAILED', body: 'Could not read that file.', ok: 'OK', cancel: false }); };
       rd.readAsText(f);
     });
     pauseBtn('pause-exit', function () { location.reload(); });
@@ -441,7 +445,7 @@ GAME.hud = (function () {
     // hospital, the destination and the depot were three more pinks beside
     // the rampage's
     ['#c86bff', 'S — Respray', 'respray'], [HOSPITAL_HEX, 'H — Hospital', 'hospital'], ['#5aa0ff', 'P — Police', 'police'],
-    ['#eef0ff', 'Weapon', 'weapon'], ['#ff4d6a', 'Health', 'health'], ['#4a6cff', 'Armor', 'armor'],
+    ['#eef0ff', 'Weapon', 'weapon'], ['#ff4d6a', 'Health', 'health'], ['#4a6cff', 'Armour', 'armor'],
     ['#8de0ff', '✈ Airport · Ⓗ Helipad · ⚓ Boats', 'airport'],
     // (the ice cream depot is a place of business like the rest: one family,
     // and one less row in the legend)
@@ -869,7 +873,17 @@ GAME.hud = (function () {
     swim: '<b>stick</b> swim · <b>B</b> faster stroke · climb out at a beach, pier or low edge · <b>Y</b> board a boat · <b>BACK</b> map',
     boat: '<b>RT / LT</b> throttle · <b>stick</b> steer · <b>A</b> slide · <b>Y</b> step off · <b>R3</b> horn · <b>D-pad ← →</b> radio · <b>BACK</b> map'
   };
+  // ...and for thumbs: a phone's title screen used to list WASD and the mouse
+  var TOUCH_HELP = '<b>Left thumb</b> move / steer &nbsp;·&nbsp; <b>Drag the right side</b> look around<br>' +
+    '<b>RUN · JUMP · AIM · FIRE</b> on foot &nbsp;·&nbsp; <b>ENTER</b> get in &nbsp;·&nbsp; <b>GAS / BRAKE</b> drive<br>' +
+    '<b>Tap the radar</b> map &nbsp;·&nbsp; <b>❚❚</b> pause — Lola, the cheats, settings and the rest';
   function paintKeyHelp() {
+    if (GAME.isTouch) {
+      var tc = document.getElementById('controls-card');
+      if (tc) tc.innerHTML = TOUCH_HELP;
+      if (el['pause-controls']) el['pause-controls'].innerHTML = TOUCH_HELP;
+      return;
+    }
     if (onPad()) {
       var pc = document.getElementById('controls-card');
       if (pc) pc.innerHTML = PAD_HELP;
@@ -878,7 +892,7 @@ GAME.hud = (function () {
     }
     var h = '<b>' + K('KeyW') + K('KeyA') + K('KeyS') + K('KeyD') + '</b> move / drive &nbsp;·&nbsp; <b>Mouse</b> camera &nbsp;·&nbsp; <b>RMB / ' + K('Tab') + '</b> aim lock-on &nbsp;·&nbsp; <b>LMB</b> fire<br>' +
       '<b>' + K('KeyQ') + ' / ' + K('KeyE') + '</b> cycle target · drive-by · plane roll &nbsp;·&nbsp; <b>' + K('Space') + '</b> jump · climb / handbrake &nbsp;·&nbsp; <b>' + K('KeyF') + '</b> enter / exit car &nbsp;·&nbsp; <b>' + K('ShiftLeft') + '</b> sprint<br>' +
-      '<b>1–5</b> weapons &nbsp;·&nbsp; <b>' + K('Comma') + ' / ' + K('Period') + '</b> radio &nbsp;·&nbsp; <b>' + K('KeyG') + '</b> horn / siren &nbsp;·&nbsp; <b>' + K('KeyJ') + '</b> job &nbsp;·&nbsp; <b>' + K('KeyX') + '</b> abandon mission &nbsp;·&nbsp; <b>' + K('KeyC') + '</b> photo · <b>' + K('KeyV') + '</b> see it &nbsp;·&nbsp; <b>' + K('KeyL') + '</b> Lola &nbsp;·&nbsp; <b>' + K('KeyP') + '</b> map &nbsp;·&nbsp; <b>' + K('Backquote') + '</b> cheats &nbsp;·&nbsp; <b>' + K('KeyM') + '</b> mute &nbsp;·&nbsp; <b>' + K('KeyH') + '</b> hide help &nbsp;·&nbsp; <b>Esc</b> pause';
+      '<b>1–9</b> weapons &nbsp;·&nbsp; <b>' + K('Comma') + ' / ' + K('Period') + '</b> radio &nbsp;·&nbsp; <b>' + K('KeyG') + '</b> horn / siren &nbsp;·&nbsp; <b>' + K('KeyJ') + '</b> job &nbsp;·&nbsp; <b>' + K('KeyX') + '</b> abandon mission &nbsp;·&nbsp; <b>' + K('KeyC') + '</b> photo · <b>' + K('KeyV') + '</b> see it &nbsp;·&nbsp; <b>' + K('KeyL') + '</b> Lola &nbsp;·&nbsp; <b>' + K('KeyP') + '</b> map &nbsp;·&nbsp; <b>' + K('Backquote') + '</b> cheats &nbsp;·&nbsp; <b>' + K('KeyM') + '</b> mute &nbsp;·&nbsp; <b>' + K('KeyH') + '</b> hide help &nbsp;·&nbsp; <b>Esc</b> pause';
     var card = document.getElementById('controls-card');
     if (card) card.innerHTML = h;
     if (el['pause-controls']) el['pause-controls'].innerHTML = h;
@@ -1608,6 +1622,8 @@ GAME.hud = (function () {
     },
     mapClear: function () { GAME.nav.clear(); if (GAME.mapOpen) drawBigMap(); },
     pauseKey: pauseKey,
+    // the help cards alone (touch.js, on a switch between thumbs and keys)
+    keyHelp: paintKeyHelp,
     // after a rebind: the bar and both help cards say the new keys
     keysChanged: function () {
       ctlMode = ''; refreshControlsBar(); paintKeyHelp();

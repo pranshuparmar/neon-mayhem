@@ -240,7 +240,7 @@ GAME.shops = (function () {
       blade('knife', 'KNIFE', 250, 'Quiet. Close.'),
       blade('katana', 'KATANA', 1800, 'Somebody\'s grandfather\'s. Sharp as the day.'),
       blade('chainsaw', 'CHAINSAW', 3000, 'For the yard. Mostly.'),
-      { id: 'armor', name: 'BODY ARMOR', ds: 'Takes the hits so you don’t.', price: 800, off: P.armor >= 100 },
+      { id: 'armor', name: 'BODY ARMOUR', ds: 'Takes the hits so you don’t.', price: 800, off: P.armor >= 100 },
       { id: 'medkit', name: 'FIRST-AID KIT', ds: 'Patches you back to full.', price: 150, off: P.health >= 100 }
     ];
   }
@@ -286,7 +286,7 @@ GAME.shops = (function () {
       rows.push({ id: 'style_' + s.id, name: 'CUT · ' + s.name, price: 150, owned: o.hairStyle === s.id, ds: o.hairStyle === s.id ? 'Your current cut.' : '' });
     });
     HAIRCOLORS.forEach(function (s) {
-      rows.push({ id: 'color_' + s.id, name: 'HAIR COLOR · ' + s.name, price: 100, sw: s.hex, owned: o.hairColor === s.id, ds: o.hairColor === s.id ? 'Your current color.' : '' });
+      rows.push({ id: 'color_' + s.id, name: 'HAIR COLOUR · ' + s.name, price: 100, sw: s.hex, owned: o.hairColor === s.id, ds: o.hairColor === s.id ? 'Your current colour.' : '' });
     });
     SKINTONES.forEach(function (s) {
       rows.push({ id: 'skin_' + s.id, name: 'SKIN TONE · ' + s.name, price: 100, sw: s.hex, owned: o.skin === s.hex, ds: o.skin === s.hex ? 'Your tone.' : '' });
@@ -1838,7 +1838,7 @@ GAME.shops = (function () {
       // hovered row swapped in — this is exactly how you'd walk out
       var o = previewOutfit(it);
       var pkey = 'ped:' + o.shirt + '/' + o.pants + '/' + o.hairStyle + '/' + o.hairColor + '/' + o.skin;
-      if (tag) tag.textContent = 'YOU · wearing ' + it.name.replace(/^(SHIRT|PANTS|CUT|HAIR COLOR|SKIN TONE) · /, '');
+      if (tag) tag.textContent = 'YOU · wearing ' + it.name.replace(/^(SHIRT|PANTS|CUT|HAIR COLOUR|SKIN TONE) · /, '');
       if (pkey === pv.key) return;
       pv.key = pkey;
       clearPvObj();

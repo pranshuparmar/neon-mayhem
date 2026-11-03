@@ -351,7 +351,7 @@
 //      round in a cab and off at the booth; and the camera works on the
 //      wheel and in the glass lift.
 //  41. WHERE AM I — on a first run Lola says who she is and where you are
-//      (the year, the town, the neighbourhoods, Rico's colours, the law)
+//      (the year, the town, Rico's colours, the law)
 //      before she offers to show you around; and it is all to read again
 //      under TELL ME ABOUT COSTA ROSA, following the story.
 //  42. THE REST OF THE CODES — OVERCAST and FOG, as weathers and on the
@@ -378,6 +378,12 @@
 //      beat and drawn when he is after you; VERDE HARDWARE has a store.
 //  51. ANY SIDE — stopped in a boat, a launch takes you whether it comes
 //      up astern, ahead or alongside.
+//  52. THE VAN, PLAINLY — the security van looks the part, the objective
+//      line says how in and what the doors have left, a hit sends it
+//      running, and taken to Lola's lock-up it is opened for $1,500.
+//  53. BEFORE THE LAUNCH — a tank's cannon fires from a pad and a phone,
+//      Ctrl is no flight control (Ctrl+W), and a save export carries the
+//      game's own storage keys only.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -14393,8 +14399,11 @@ function withTimeout(p, ms) {
   });
   check('briefing: on a first run Lola tells you where you are before she offers to show you around',
     wb.offered && wb.scene && wb.thenOffer, JSON.stringify(wb));
-  check('briefing: who she is, 1986, the four neighbourhoods, Isla Verde, Rico and his colours, the law — and to ask again',
-    wb.told && wb.told.lola && wb.told.year && wb.told.hoods && wb.told.island && wb.told.gangs && wb.told.law && wb.told.askAgain, JSON.stringify(wb.told));
+  // (the four neighbourhoods are not in it: two islands and then four
+  // neighbourhoods was a lot before you can move. TELL ME ABOUT COSTA ROSA
+  // has them, below)
+  check('briefing: who she is, 1986, Isla Verde, Rico and his colours, the law — and to ask again',
+    wb.told && wb.told.lola && wb.told.year && !wb.told.hoods && wb.told.island && wb.told.gangs && wb.told.law && wb.told.askAgain, JSON.stringify(wb.told));
   check('briefing: TELL ME ABOUT COSTA ROSA has it all to read, part by part, and it follows the story',
     wb.menu && wb.parts === 6 && wb.gangs && wb.back && wb.after, JSON.stringify(wb));
 
@@ -15378,6 +15387,207 @@ function withTimeout(p, ms) {
   }
   check('patrol: stopped in a boat, the launch takes you wherever it comes up — astern, ahead or alongside',
     ends.length === 3 && ends.every(function (e) { return e.inBoat && e.taken !== null && e.taken < 25; }), JSON.stringify(ends));
+
+  // ---------- 52: the security van says what it is, and what to do ----------
+  // It looked like any cargo van, Lola's page said she wasn't telling you
+  // anything, and pulling the guard out and driving off did nothing at all.
+  // Now it wears SECURITY and an amber beacon, the objective line says how
+  // in and how much the doors have left, hitting it sends it running, and a
+  // van taken to Lola's lock-up is opened there for $1,500.
+  var sv = await page.evaluate(function () {
+    var P = GAME.player, S = GAME.streetlife, ff = GAME.test.fastForward, r = {}, said = [], m0 = GAME.hud.message, pg0 = GAME.hud.pager, paged = [];
+    var keep = { t: GAME.settings.maxTraffic };
+    var obj = function () { return document.getElementById('mission-hud').style.display !== 'none' ? document.getElementById('mission-obj').textContent : ''; };
+    GAME.settings.maxTraffic = 0;
+    GAME.hud.message = function (t) { said.push(String(t)); return m0.apply(GAME.hud, arguments); };
+    GAME.hud.pager = function (who, t) { paged.push(String(t)); return pg0.apply(GAME.hud, arguments); };
+    try {
+      if (P.inCar) GAME.exitCar();
+      GAME.police.clearWanted();
+      S.reset();
+      var node = GAME.city.nearestNode(60, 40);
+      GAME.test.teleport(node.x, node.z); ff(0.5);
+      if (!S.start('van')) return r;
+      var ev = S.event, van = ev.van;
+      r.looks = { beacon: !!(van.mesh.userData.beacon && van.mesh.userData.beacon.length === 2), label: van.label };
+      r.both = paged.some(function (t) { return /back doors/.test(t) && /lock-up/.test(t); });
+      // far off, nothing on the objective line; close by, what to do
+      r.farObj = obj();
+      GAME.test.teleport(van.pos.x + 7, van.pos.z + 7); ff(0.4);
+      r.near = { hint: said.some(function (t) { return /security van/i.test(t) && /lock-up/.test(t); }), obj: obj() };
+      // hit, the doors count down and it runs, away from you
+      van.byPlayer = false;
+      GAME.vehicles.damageCar(van, ev.hp0 * 0.35, 'gun', true); ff(0.3);
+      var tw = van.ai && van.ai.toward;
+      r.hit = { obj: obj(), desired: van.ai && van.ai.desired,
+        away: !!tw && Math.hypot(tw.x - P.pos.x, tw.z - P.pos.z) > Math.hypot(van.pos.x - P.pos.x, van.pos.z - P.pos.z) + 100 };
+      // taken: the alarm, the lock-up marked, and the line says where
+      van.speed = 0;
+      GAME.test.teleport(van.pos.x + 2.6, van.pos.z); ff(0.3);
+      GAME.test.enterNearestCar(van);
+      for (var w = 0; w < 40 && P.car !== van; w++) ff(0.1);
+      ff(0.3);
+      var L = GAME.heist.LOCKUP;
+      r.taken = { inIt: P.car === van, wanted: GAME.police.wanted, obj: obj(),
+        marked: S.blips().some(function (q) { return q.ring && Math.hypot(q.x - L.x, q.z - L.z) < 1; }),
+        vanRing: S.blips().some(function (q) { return q.ring && Math.hypot(q.x - van.pos.x, q.z - van.pos.z) < 1; }) };
+      // at the door with the law on: too hot, the door stays shut
+      var rp = GAME.city.nearestRoadPoint(L.x, L.z);
+      var atDoor = function () { van.pos.set(L.x + (rp.x - L.x) * 0.3, GAME.city.groundY(L.x, L.z), L.z + (rp.z - L.z) * 0.3); van.speed = 0; };
+      var cash0 = P.cash;
+      GAME.police.setWanted(2);
+      atDoor(); said.length = 0; ff(1.5);
+      r.hot = { paid: P.cash - cash0, still: S.event === ev && P.car === van, told: said.some(function (t) { return /Too hot/.test(t); }), obj: obj() };
+      // delivered once they're lost: to black, paid, out, the van rolled inside, back in
+      GAME.police.clearWanted();
+      atDoor(); ff(0.2);
+      var fade = document.getElementById('fade-layer');
+      r.black = fade.style.opacity === '1' && S.event === ev;
+      ff(1.0);
+      r.delivered = { paid: P.cash - cash0, over: !S.event, out: !P.inCar, inside: !!van.gone, obj: obj(), lit: fade.style.opacity === '0' };
+    } finally {
+      GAME.hud.message = m0; GAME.hud.pager = pg0;
+      if (P.inCar) GAME.exitCar();
+      S.reset();
+      GAME.police.clearWanted();
+      GAME.settings.maxTraffic = keep.t;
+      GAME.test.teleport(-60, 40); ff(0.5);
+    }
+    return r;
+  });
+  check('van: it looks the part — a SECURITY van, amber beacon and all — and Lola says both ways in',
+    sv.looks && sv.looks.beacon && sv.looks.label === 'Security Van' && sv.both, JSON.stringify({ looks: sv.looks, both: sv.both }));
+  check('van: close by, the objective line says what to do and that the doors are whole; far off, nothing',
+    sv.near && sv.near.hint && /doors are at 100%/.test(sv.near.obj) && /lock-up/.test(sv.near.obj) && sv.farObj === '', JSON.stringify({ far: sv.farObj, near: sv.near }));
+  check('van: hit it and the doors count down, and it puts its foot down and runs from you',
+    sv.hit && /doors are at ([1-9]\d?)%/.test(sv.hit.obj) && !/100%/.test(sv.hit.obj) && sv.hit.desired > 9 && sv.hit.away, JSON.stringify(sv.hit));
+  check('van: take it, and the guard calls it in, and the lock-up is marked and on the line',
+    sv.taken && sv.taken.inIt && sv.taken.wanted >= 2 && sv.taken.marked && !sv.taken.vanRing && /lock-up/.test(sv.taken.obj), JSON.stringify(sv.taken));
+  check('van: with the law on you Lola won\'t open up — too hot, lose them first',
+    sv.hot && sv.hot.paid === 0 && sv.hot.still && sv.hot.told && /Lose the law/.test(sv.hot.obj), JSON.stringify(sv.hot));
+  check('van: once they\'re lost it goes to black, rolls in for $1,500, and comes back up with you at the door',
+    sv.black && sv.delivered && sv.delivered.paid === 1500 && sv.delivered.over && sv.delivered.out && sv.delivered.inside && sv.delivered.obj === '' && sv.delivered.lit, JSON.stringify({ black: sv.black, delivered: sv.delivered }));
+
+  // ---------- 53: before the launch ----------
+  // A tank's cannon read the mouse and the on-foot FIRE only, so a pad or a
+  // phone had a tank with no gun; Ctrl came down in a helicopter (and dived
+  // a plane) with W held, which is Ctrl+W, the tab gone; and the save's
+  // export took — and RESET wiped — every key on the github.io origin.
+  var pl = await page.evaluate(function () {
+    var P = GAME.player, V = GAME.vehicles, T = GAME.input.touch, ff = GAME.test.fastForward, r = {};
+    var shells = 0, fs0 = GAME.arsenal.fireShell;
+    GAME.arsenal.fireShell = function () { shells++; return fs0.apply(this, arguments); };
+    try {
+      if (P.inCar) GAME.exitCar();
+      GAME.police.clearWanted();
+      // the tank: Q / E (a pad's LB / RB) and the in-car touch FIRE fire it
+      GAME.test.teleport(-40, 40); ff(0.3);
+      var tk = V.spawnCar('tank', -36, 40, 0, {});
+      GAME.test.enterNearestCar(tk);
+      for (var w = 0; w < 40 && P.car !== tk; w++) ff(0.1);
+      r.inTank = P.car === tk;
+      tk.gunT = 0; GAME.test.pressKey('KeyE', true); ff(0.1); GAME.test.pressKey('KeyE', false);
+      r.byKey = shells;
+      ff(1.5); tk.gunT = 0;
+      T.driveByAuto = true; ff(0.1); T.driveByAuto = false;
+      r.byTouch = shells - r.byKey;
+      GAME.exitCar(); ff(0.5);
+      if (!tk.gone) V.removeCar(tk);
+      // the helicopter: Shift comes down, Ctrl does nothing
+      GAME.test.teleport(-60, 40); ff(0.3);
+      var hc = V.spawnCar('helicopter', -56, 40, 0, {});
+      ff(0.2); GAME.test.enterNearestCar(hc);
+      for (var w2 = 0; w2 < 40 && P.car !== hc; w2++) ff(0.1);
+      var fly = function (key) {
+        hc.pos.y = GAME.city.groundY(hc.pos.x, hc.pos.z) + 40; hc.vy = 0; ff(0.3);
+        var y0 = hc.pos.y;
+        GAME.test.pressKey(key, true); ff(1.5); GAME.test.pressKey(key, false);
+        return +(y0 - hc.pos.y).toFixed(2);
+      };
+      r.inHeli = P.car === hc;
+      r.shiftDrop = fly('ShiftLeft');
+      r.ctrlDrop = fly('ControlLeft');
+      hc.pos.y = GAME.city.groundY(hc.pos.x, hc.pos.z) + 0.05; ff(0.3);
+      GAME.exitCar(); ff(0.5);
+      if (!hc.gone) V.removeCar(hc);
+      // the save: the game's keys go out and come back, nobody else's
+      localStorage.setItem('another-project', 'theirs');
+      var ex = JSON.parse(GAME.exportSave());
+      r.exported = Object.keys(ex.storage);
+      ex.storage['another-project'] = 'overwritten';
+      ex.storage['injected'] = 'x';
+      r.imported = GAME.importSave(JSON.stringify(ex)).ok;
+      r.theirs = localStorage.getItem('another-project');
+      r.injected = localStorage.getItem('injected');
+    } finally {
+      GAME.arsenal.fireShell = fs0;
+      T.driveByAuto = false;
+      try { localStorage.removeItem('another-project'); localStorage.removeItem('injected'); } catch (e) { }
+      if (P.inCar) GAME.exitCar();
+      GAME.test.teleport(-60, 40); ff(0.5);
+    }
+    return r;
+  });
+  check('launch: a taken tank\'s cannon fires from Q / E (a pad\'s bumpers) and from the touch FIRE',
+    pl.inTank && pl.byKey === 1 && pl.byTouch === 1, JSON.stringify(pl));
+  check('launch: Shift brings a helicopter down and Ctrl does not (Ctrl+W closes the tab)',
+    pl.inHeli && pl.shiftDrop > 2 && pl.ctrlDrop < 0.6, JSON.stringify({ shift: pl.shiftDrop, ctrl: pl.ctrlDrop }));
+  // the bank: a vault with nothing to do, and nothing to say what it was for
+  var bk = await page.evaluate(function () {
+    var P = GAME.player, H = GAME.heist, I = GAME.isla, ff = GAME.test.fastForward, r = {}, said = [], m0 = GAME.hud.message;
+    var wasOpen = I.isOpen(), step0 = H.step;
+    var b = GAME.shops.locations().filter(function (l) { return l.kind === 'bank'; })[0];
+    GAME.hud.message = function (t) { said.push(String(t)); return m0.apply(GAME.hud, arguments); };
+    function walkIn() {
+      said.length = 0;
+      GAME.interiors.enter(b); ff(0.8);
+      var t = said.filter(function (x) { return /SAVINGS/.test(x); })[0] || '';
+      GAME.interiors.leave(); ff(0.8);
+      return t;
+    }
+    try {
+      if (P.inCar) GAME.exitCar();
+      GAME.police.clearWanted();
+      GAME.test.teleport(b.at.x + 6, b.at.z); ff(0.3);
+      I.setOpen(false); H.step = 0;
+      r.shut = walkIn();
+      I.setOpen(true); H.step = 0;
+      r.open = walkIn();
+      H.step = 2;
+      r.mid = walkIn();
+    } finally {
+      GAME.hud.message = m0;
+      H.step = step0; I.setOpen(wasOpen);
+      if (GAME.interiors.current) { GAME.interiors.leave(); ff(0.8); }
+      GAME.test.teleport(-60, 40); ff(0.5);
+    }
+    return r;
+  });
+  check('launch: walking into the bank says what the vault is for — before the bridges, and where the big score stands after',
+    /once the bridges/.test(bk.shut) && /THE BIG SCORE/.test(bk.open) && /ask her/.test(bk.open) && /next is THE WHEELS/.test(bk.mid), JSON.stringify(bk));
+  // a RESET wiped the save and left the photos: a fresh Costa Rosa opened
+  // on a full album. (The wipe itself, without the reload RESET then does.)
+  var wp = null;
+  try {
+    if (await page.evaluate(function () { return GAME.photo.count; }) === 0) {
+      await page.evaluate(function () { GAME.photo.snap(); });
+      await page.waitForFunction(function () { return GAME.photo.count > 0 && !GAME.photo.pending; }, null, { timeout: 10000 });
+    }
+    wp = await page.evaluate(function () {
+      return new Promise(function (res) {
+        var before = GAME.photo.count;
+        GAME.photo.wipe(function () {
+          GAME.photo.testReload();   // dropped from memory, read back from the store
+          setTimeout(function () { res({ before: before, after: GAME.photo.count }); }, 1500);
+        });
+      });
+    });
+  } catch (e) { wp = { err: String(e).slice(0, 120) }; }
+  check('launch: a progress reset takes the photo album with it, from the browser\'s store too',
+    wp && wp.before > 0 && wp.after === 0, JSON.stringify(wp));
+  check('launch: a save export carries the game\'s own keys only, and an import writes no others',
+    pl.exported && pl.exported.indexOf('neonMayhemSave') >= 0 && pl.exported.indexOf('another-project') < 0 && pl.imported && pl.theirs === 'theirs' && pl.injected === null,
+    JSON.stringify({ exported: pl.exported, imported: pl.imported, theirs: pl.theirs, injected: pl.injected }));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the

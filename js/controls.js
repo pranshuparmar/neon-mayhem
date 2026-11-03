@@ -161,7 +161,10 @@ GAME.controls = (function () {
     return BUTTONS[b] || null;
   }
   function poll(dt) {
-    var list = navigator.getGamepads ? navigator.getGamepads() : null, g = null;
+    // (a page framed without allow="gamepad" throws here, and this runs first
+    // in every frame: a throw would stop the game dead)
+    var list = null, g = null;
+    try { list = navigator.getGamepads ? navigator.getGamepads() : null; } catch (e) { list = null; }
     if (list) for (var i = 0; i < list.length; i++) if (list[i] && list[i].connected) { g = list[i]; break; }
     if (!g) {
       if (pad.on) release();

@@ -20,7 +20,7 @@ GAME.herald = (function () {
       function (o) { return { head: 'WHO IS THE GHOST OF COSTA ROSA?', sub: 'Another ' + o.stars + '-star chase, another empty street. Officers off the record admit they have no name and no face.' }; }
     ],
     van: [
-      function () { return { head: 'ARMORED VAN HIT IN BROAD DAYLIGHT', sub: 'Guards shaken but unhurt as the takings vanish into thin air. Security firm "deeply embarrassed."' }; },
+      function () { return { head: 'ARMOURED VAN HIT IN BROAD DAYLIGHT', sub: 'Guards shaken but unhurt as the takings vanish into thin air. Security firm "deeply embarrassed."' }; },
       function () { return { head: 'ANOTHER VAN, ANOTHER HEIST', sub: 'Security firms double the guard on their rounds. Insurers ask whether that will be enough.' }; }
     ],
     hero: [

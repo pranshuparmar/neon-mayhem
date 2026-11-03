@@ -196,7 +196,7 @@ GAME.missions = (function () {
       cps: [[350, -150], [350, 50], [350, 250], [250, 350], [150, 250], [150, 50]]
     },
     {
-      id: 'race1', type: 'race', name: 'HARBOR LOOP', reward: 550, start: { x: -450, z: -100 },
+      id: 'race1', type: 'race', name: 'HARBOUR LOOP', reward: 550, start: { x: -450, z: -100 },
       cps: [[-450, 150], [-350, 250], [-250, 350], [-150, 250], [-150, 50], [-250, -50], [-350, -50]]
     },
     {
@@ -217,7 +217,7 @@ GAME.missions = (function () {
     // the Neon Tide, now — the best part of half a kilometre and three turns.)
     { id: 'courier2', type: 'courier', name: 'BEACH RUN', reward: 340, time: 115, start: { x: 204, z: 225 }, drops: 4, legMin: 300, legMax: 660 },
     { id: 'rampage0', type: 'rampage', name: 'STRIP HAVOC', reward: 400, time: 30, target: 3000, weapon: 'smg', ammo: 160, start: { x: 241.6, z: -258.4 } },
-    { id: 'rampage1', type: 'rampage', name: 'HARBOR HAVOC', reward: 450, time: 30, target: 3500, weapon: 'shotgun', ammo: 30, start: { x: -341.6, z: 258.4 } },
+    { id: 'rampage1', type: 'rampage', name: 'HARBOUR HAVOC', reward: 450, time: 30, target: 3500, weapon: 'shotgun', ammo: 30, start: { x: -341.6, z: 258.4 } },
     { id: 'rampage2', type: 'rampage', name: 'UPTOWN HAVOC', reward: 400, time: 30, target: 2500, weapon: 'smg', ammo: 160, start: { x: 41.6, z: -341.6 } },
     // On the water, in the bay between the beach and the channel: both start
     // beside a mooring where a boat waits, and both are run in one.

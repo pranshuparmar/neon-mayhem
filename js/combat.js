@@ -606,7 +606,7 @@ GAME.combat = (function () {
   // ---------- pickups ----------
   var PICKUP_DEFS = {
     health: { color: 0xff4d6a, label: 'HEALTH' },
-    armor: { color: 0x4a6cff, label: 'ARMOR' },   // the map's armour blue (hud.js PICKUP_BLIP)
+    armor: { color: 0x4a6cff, label: 'ARMOUR' },   // the map's armour blue (hud.js PICKUP_BLIP)
     pistol: { color: 0xd8d8e8, label: 'PISTOL AMMO' },
     smg: { color: 0xffe14f, label: 'SMG AMMO' },
     shotgun: { color: 0xff8a3d, label: 'SHOTGUN AMMO' },

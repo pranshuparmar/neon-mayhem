@@ -636,6 +636,56 @@ function buildCarMesh(type, colorHex, parts) {
   g.userData.bodyMesh = body;
   return g;
 }
+
+// The security van's livery, over a cargo van (streetlife.js): SECURITY down
+// both sides on navy panels, a gold stripe along the body, a steel bull bar
+// on the nose and a locking bar across the back doors, and an amber beacon
+// on the roof that the van event flashes (userData.beacon). It used to be a
+// cargo van in grey, and nobody could tell it from the traffic.
+var securityPanelMat = null;
+function securityPanel() {
+  if (!securityPanelMat) {
+    var cv = document.createElement('canvas');
+    cv.width = 256; cv.height = 48;
+    var x = cv.getContext('2d');
+    x.fillStyle = '#16306e'; x.fillRect(0, 0, 256, 48);
+    x.fillStyle = '#e8b830'; x.fillRect(0, 0, 256, 4); x.fillRect(0, 44, 256, 4);
+    x.fillStyle = '#f4f4f8'; x.font = 'bold 30px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText('SECURITY', 128, 25);
+    var tex = new THREE.CanvasTexture(cv);
+    securityPanelMat = new THREE.MeshLambertMaterial({ map: tex });
+    securityPanelMat.userData.shared = true;
+  }
+  return securityPanelMat;
+}
+function armourVan(car) {
+  var g = car.mesh, s = car.spec;
+  if (!g || g.userData.beacon || s !== VEHICLES.van) return;
+  var hw = s.w / 2, hl = s.l / 2, cabHW = s.w * 0.82 / 2, roof = 0.42 + s.bodyH / 2 + s.cabinH - 0.05;
+  g.add(new THREE.Mesh(cachedGeo('securityvan', function (b) {
+    b.addBox(hw + 0.015, 0.6, 0, 0.03, 0.14, s.l - 0.3, 0, 0xe8b830, 0);           // gold stripe, both flanks
+    b.addBox(-hw - 0.015, 0.6, 0, 0.03, 0.14, s.l - 0.3, 0, 0xe8b830, 0);
+    b.addBox(0, 0.5, hl + 0.12, s.w - 0.1, 0.42, 0.12, 0, 0x30343c, 0);              // bull bar
+    b.addBox(0, 0.86, hl + 0.12, s.w - 0.3, 0.08, 0.1, 0, 0x30343c, 0);
+    b.addBox(0, 1.2, -hl + 0.05, 0.04, 0.9, 0.08, 0, 0x101216, 0);                   // the back doors' seam
+    b.addBox(0, 1.05, -hl + 0.02, s.w * 0.7, 0.08, 0.1, 0, 0x8a9098, 0);             // and the bar across them
+    b.addBox(0, roof + 0.05, hl - 1.0, 0.7, 0.1, 0.36, 0, 0x20242e, 0);              // the beacon's base
+  }), sharedVertexLambert()));
+  [1, -1].forEach(function (side) {
+    var p = new THREE.Mesh(sharedBoxGeo(0.02, 0.42, 2.4), securityPanel());
+    // (a box's +x and -x faces both run their map the way you read it from
+    // outside, so the same thin box reads SECURITY on either flank)
+    p.position.set(side * (cabHW + 0.012), 0.42 + s.bodyH / 2 + 0.52, -0.5);
+    g.add(p);
+  });
+  car.label = 'Security Van';
+  var a = new THREE.Mesh(sharedBoxGeo(0.28, 0.16, 0.28), sharedBasic(0xffa020));
+  var b2 = new THREE.Mesh(sharedBoxGeo(0.28, 0.16, 0.28), sharedBasic(0xffa020));
+  a.position.set(0.18, roof + 0.18, hl - 1.0); b2.position.set(-0.18, roof + 0.18, hl - 1.0);
+  b2.visible = false;
+  g.add(a); g.add(b2);
+  g.userData.beacon = [a, b2];
+}
 // the four wheels of a car, `k` times their size (and a little wider, so a
 // big one does not read as a disc on its edge)
 function carWheels(b, s, hw, hl, k) {
@@ -1917,6 +1967,7 @@ GAME.vehicles = (function () {
     // pooling win). Only a private material may be freed.
     if (oldMat && oldMat.dispose && !(oldMat.userData && oldMat.userData.shared)) oldMat.dispose();
     if (car.mesh.userData.lightbar) car.mesh.userData.lightbar.forEach(function (m) { m.visible = false; });
+    if (car.mesh.userData.beacon) car.mesh.userData.beacon.forEach(function (m) { m.visible = false; });
     car.speed *= 0.2;
     // area damage
     var p = GAME.player;
@@ -2886,6 +2937,7 @@ GAME.vehicles = (function () {
     shotTyre: shotTyre,
     burstTyre: burstTyre,
     removeCar: removeCar,
+    armourVan: armourVan,
     ejectDriver: ejectDriver,
     shotAt: shotAt,
     seatOccupant: seatOccupant,
