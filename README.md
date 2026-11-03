@@ -9,7 +9,7 @@ https://github.com/user-attachments/assets/a386063c-cbb4-454b-8afe-7aab7861db72
   <sub>No install, no account, no ads · keyboard, controller or touch · saves in your browser</sub>
 </p>
 
-A free, fan-made tribute inspired by Grand Theft Auto: Vice City (2002). Everything in the project is original work — the sentence you just read is the only place the original game is named.
+A free, fan-made tribute inspired by Grand Theft Auto: Vice City (2002). Everything in the project is original work (only the cheat words are borrowed, as a nod) — and the sentence you just read is the only place the original game is named.
 
 ## What you can do
 
@@ -20,7 +20,7 @@ A free, fan-made tribute inspired by Grand Theft Auto: Vice City (2002). Everyth
 - 🏝️ **Two islands** — the neon mainland, and Isla Verde across the channel once you've earned the bridges.
 - 🏠 **Walk in** — every shop, a casino with horse racing, a glass car showroom, and homes you can buy.
 - 🔍 **Hunt** — 35 stunt jumps and 30 lost mixtapes hidden around both islands.
-- 📻 **Turn up the radio** — three synth stations, every note made live in your browser.
+- 📻 **Turn up the radio** — three synth stations and a fourth to find, every note made live in your browser.
 - 📟 **Ask Lola** — she can show you around on day one, tips you off the first time you meet anything, and `L` asks her what to do next.
 - 📷 **Take pictures** — an old film camera that prints the city like it's 1986.
 
@@ -43,6 +43,7 @@ Want the details? **[Read the full tour →](docs/FEATURES.md)**
 
 ## What's new
 
+- 🚐 **The security van** — SECURITY down its sides and an amber light on the roof: knock it about till the back doors give, or take it off the guard and drive it to Lola's lock-up.
 - 🏎 **MINI MAYHEM RACE** — toy buggies, two laps round the pitch at Memorial Stadium.
 - 🏗 **Import/export** — two lists of wanted cars for the crane on the docks, paid by condition, with a bonus for each full list.
 - 📻 **Radio with personality** — a frequency, a jingle and a DJ for every station, with talk and 1986 ads between the songs.
@@ -58,12 +59,9 @@ Want the details? **[Read the full tour →](docs/FEATURES.md)**
 - 🏪 **Businesses that pay** — buy the barber, THREADS, a hardware store, the bar in the Lucky Gull, or VERDE CABS on Isla Verde (an open garage with a Tiger Cab for its owner, earning more with every fare you drive); the till fills every day for you to come and empty — and a hold-up there runs with it.
 - 💰 **The big score** — once the bridges open, Lola wants the Savings & Loan: case it with your camera, fetch Benny "the Ear" from the marina, get a getaway car resprayed, then keep the floor while he works the vault.
 - 🗞️ **A city with its own business** — getaway chases, hold-ups, an armoured van and racers at the lights; a dozen strangers with a favour each, on both islands; and the morning paper when you make the news.
-- 🌊 **Life on the water** — jet skis and boats out in the bay, a jet ski of your own at the northern pier, and the harbour patrol's launches when you're wanted at sea.
+- 🌊 **Life on the water** — swim, take a speedboat or your own jet ski from the northern pier, run the BAY REGATTA and CONTRABAND jobs, and meet the harbour patrol's launches when you're wanted at sea.
 - 🎓 **Lola's first day** — a new game can be shown around: a ride, a first delivery, then a new look at the barber with the pay.
-- 🏠 **Walk-in interiors** — every shop, your homes, the casino's horse races, and a glass showroom with the helicopters on its roof.
-- 🌊 **The sea** — swim, take a speedboat, run the BAY REGATTA and CONTRABAND jobs.
 - 🚓 **A city that answers** — drivers who flee or fire back, manhunts you can escape, rain and a live clock.
-- 📟 **Lola on call** and 📷 **a 1986 film camera**.
 - 🛗 **More to find** — a glass lift up the helipad tower, takedowns, ten Isla Verde jumps and thirty lost tapes.
 - 🔉 **A city you can hear** — traffic going by, people about, your own footsteps, the surf and the gulls, kept quiet.
 
@@ -93,7 +91,7 @@ python3 -m http.server 8000
 # open http://localhost:8000
 ```
 
-The only network request the game ever makes is an anonymous visit count (see [Analytics](#analytics)), skipped entirely when you run it locally or offline.
+Run locally (or from `file://`), the game makes no network requests at all. The published site loads GoatCounter's counter and sends anonymous counts — see [Analytics](#analytics).
 
 ## Tech
 
@@ -104,7 +102,7 @@ The only network request the game ever makes is an anonymous visit count (see [A
 
 ## Analytics
 
-The published site counts visits and a handful of anonymous events — things like a session started, a mission or shift finished, a stunt jump found, a wanted level reached, aircraft flown, the bridges opened, a shop purchase made, a result card saved or shared — via [GoatCounter](https://www.goatcounter.com/): cookieless, no identifier stored in the browser, and nothing about you kept. `js/analytics.js` is a thin wrapper that silently no-ops when the counter is blocked or unavailable, so the game never depends on it. Plays on a game portal that embeds the live site in a frame are counted too, with the portal as the referrer. It is skipped entirely on `file://`, `localhost` and LAN addresses — a local or offline copy makes no network request at all.
+The published site counts visits and anonymous in-game events (about seventy kinds, each sent at most once a visit) — things like a session started, a mission or shift finished, a stunt jump found, a wanted level reached, aircraft flown, the bridges opened, a shop purchase made, a result card saved or shared — via [GoatCounter](https://www.goatcounter.com/): cookieless, no identifier stored in the browser, and nothing about you kept. `js/analytics.js` is a thin wrapper that silently no-ops when the counter is blocked or unavailable, so the game never depends on it. Plays on a game portal that embeds the live site in a frame are counted too, with the portal as the referrer. It is skipped entirely on `file://`, `localhost` and LAN addresses — a local or offline copy makes no network request at all.
 
 ## Disclaimer
 
