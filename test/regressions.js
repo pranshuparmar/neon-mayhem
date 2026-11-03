@@ -378,6 +378,9 @@
 //      beat and drawn when he is after you; VERDE HARDWARE has a store.
 //  51. ANY SIDE — stopped in a boat, a launch takes you whether it comes
 //      up astern, ahead or alongside.
+//  52. THE VAN, PLAINLY — the security van looks the part, the objective
+//      line says how in and what the doors have left, a hit sends it
+//      running, and taken to Lola's lock-up it is opened for $1,500.
 //  14. BROADPHASE     — a non-finite lookup has to return, not spin. This
 //      group runs LAST and under a timeout of its own: without the guard the
 //      page does not fail, it stops answering.
@@ -15378,6 +15381,77 @@ function withTimeout(p, ms) {
   }
   check('patrol: stopped in a boat, the launch takes you wherever it comes up — astern, ahead or alongside',
     ends.length === 3 && ends.every(function (e) { return e.inBoat && e.taken !== null && e.taken < 25; }), JSON.stringify(ends));
+
+  // ---------- 52: the security van says what it is, and what to do ----------
+  // It looked like any cargo van, Lola's page said she wasn't telling you
+  // anything, and pulling the guard out and driving off did nothing at all.
+  // Now it wears SECURITY and an amber beacon, the objective line says how
+  // in and how much the doors have left, hitting it sends it running, and a
+  // van taken to Lola's lock-up is opened there for $1,500.
+  var sv = await page.evaluate(function () {
+    var P = GAME.player, S = GAME.streetlife, ff = GAME.test.fastForward, r = {}, said = [], m0 = GAME.hud.message, pg0 = GAME.hud.pager, paged = [];
+    var keep = { t: GAME.settings.maxTraffic };
+    var obj = function () { return document.getElementById('mission-hud').style.display !== 'none' ? document.getElementById('mission-obj').textContent : ''; };
+    GAME.settings.maxTraffic = 0;
+    GAME.hud.message = function (t) { said.push(String(t)); return m0.apply(GAME.hud, arguments); };
+    GAME.hud.pager = function (who, t) { paged.push(String(t)); return pg0.apply(GAME.hud, arguments); };
+    try {
+      if (P.inCar) GAME.exitCar();
+      GAME.police.clearWanted();
+      S.reset();
+      var node = GAME.city.nearestNode(60, 40);
+      GAME.test.teleport(node.x, node.z); ff(0.5);
+      if (!S.start('van')) return r;
+      var ev = S.event, van = ev.van;
+      r.looks = { beacon: !!(van.mesh.userData.beacon && van.mesh.userData.beacon.length === 2), label: van.label };
+      r.both = paged.some(function (t) { return /back doors/.test(t) && /lock-up/.test(t); });
+      // far off, nothing on the objective line; close by, what to do
+      r.farObj = obj();
+      GAME.test.teleport(van.pos.x + 7, van.pos.z + 7); ff(0.4);
+      r.near = { hint: said.some(function (t) { return /security van/i.test(t) && /lock-up/.test(t); }), obj: obj() };
+      // hit, the doors count down and it runs, away from you
+      van.byPlayer = false;
+      GAME.vehicles.damageCar(van, ev.hp0 * 0.35, 'gun', true); ff(0.3);
+      var tw = van.ai && van.ai.toward;
+      r.hit = { obj: obj(), desired: van.ai && van.ai.desired,
+        away: !!tw && Math.hypot(tw.x - P.pos.x, tw.z - P.pos.z) > Math.hypot(van.pos.x - P.pos.x, van.pos.z - P.pos.z) + 100 };
+      // taken: the alarm, the lock-up marked, and the line says where
+      van.speed = 0;
+      GAME.test.teleport(van.pos.x + 2.6, van.pos.z); ff(0.3);
+      GAME.test.enterNearestCar(van);
+      for (var w = 0; w < 40 && P.car !== van; w++) ff(0.1);
+      ff(0.3);
+      var L = GAME.heist.LOCKUP;
+      r.taken = { inIt: P.car === van, wanted: GAME.police.wanted, obj: obj(),
+        marked: S.blips().some(function (q) { return q.ring && Math.hypot(q.x - L.x, q.z - L.z) < 1; }),
+        vanRing: S.blips().some(function (q) { return q.ring && Math.hypot(q.x - van.pos.x, q.z - van.pos.z) < 1; }) };
+      // delivered: paid, out, the van rolled inside, the line cleared
+      GAME.police.clearWanted();
+      var rp = GAME.city.nearestRoadPoint(L.x, L.z);
+      van.pos.set(L.x + (rp.x - L.x) * 0.3, GAME.city.groundY(L.x, L.z), L.z + (rp.z - L.z) * 0.3); van.speed = 0;
+      var cash0 = P.cash;
+      ff(0.5);
+      r.delivered = { paid: P.cash - cash0, over: !S.event, out: !P.inCar, inside: !!van.gone, obj: obj() };
+    } finally {
+      GAME.hud.message = m0; GAME.hud.pager = pg0;
+      if (P.inCar) GAME.exitCar();
+      S.reset();
+      GAME.police.clearWanted();
+      GAME.settings.maxTraffic = keep.t;
+      GAME.test.teleport(-60, 40); ff(0.5);
+    }
+    return r;
+  });
+  check('van: it looks the part — a SECURITY van, amber beacon and all — and Lola says both ways in',
+    sv.looks && sv.looks.beacon && sv.looks.label === 'Security Van' && sv.both, JSON.stringify({ looks: sv.looks, both: sv.both }));
+  check('van: close by, the objective line says what to do and that the doors are whole; far off, nothing',
+    sv.near && sv.near.hint && /doors are at 100%/.test(sv.near.obj) && /lock-up/.test(sv.near.obj) && sv.farObj === '', JSON.stringify({ far: sv.farObj, near: sv.near }));
+  check('van: hit it and the doors count down, and it puts its foot down and runs from you',
+    sv.hit && /doors are at ([1-9]\d?)%/.test(sv.hit.obj) && !/100%/.test(sv.hit.obj) && sv.hit.desired > 9 && sv.hit.away, JSON.stringify(sv.hit));
+  check('van: take it, and the guard calls it in, and the lock-up is marked and on the line',
+    sv.taken && sv.taken.inIt && sv.taken.wanted >= 2 && sv.taken.marked && !sv.taken.vanRing && /lock-up/.test(sv.taken.obj), JSON.stringify(sv.taken));
+  check('van: driven into the lock-up it is opened for $1,500, and that is the end of it',
+    sv.delivered && sv.delivered.paid === 1500 && sv.delivered.over && sv.delivered.out && sv.delivered.inside && sv.delivered.obj === '', JSON.stringify(sv.delivered));
 
   // ---------- 14: the broadphase survives a non-finite lookup ----------
   // Math.floor(±Infinity) is ±Infinity and i++ never moves off it, so the

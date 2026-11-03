@@ -201,9 +201,16 @@ GAME.streetlife = (function () {
   }
 
   // ---------- the armoured van ----------
-  // A security van on its rounds: grey, heavy, three and a half times the
-  // hull of a van. Lola mentions it. Get it down far enough and the back
-  // doors give — three bags on the road and three stars on you.
+  // A security van on its rounds: grey with SECURITY down its sides and an
+  // amber beacon going, three and a half times the hull of a van. There are
+  // two ways into it, and Lola tells you both:
+  //  - knock it about (ram it, shoot it) until the back doors give: three
+  //    bags on the road and three stars on you. Once it is hit, the driver
+  //    puts his foot down and heads away from you;
+  //  - or take it off them — pull the guard out and drive it to her lock-up
+  //    by the harbour, where her crew opens it properly for $1,500. The
+  //    guard calls it in the moment you are in it.
+  // Near it, the objective line says so, with how much the doors have left.
   //
   // It used to be nowhere to be found: a grey dot of two pixels on a grey
   // radar, gone off the edge as soon as it turned away, off the map
@@ -211,8 +218,10 @@ GAME.streetlife = (function () {
   // wherever the junctions took it. Now it is ringed on the radar (held to
   // the rim while it is out of range, so you know which way to go) and
   // marked on the map, it keeps its rounds to your part of town, and it is
-  // about for four minutes.
-  var VAN_SECS = 240, VAN_ROUND = 110, VAN_LOST = 400;
+  // about for four minutes. And it used to look like any cargo van, said
+  // nothing about what to do with it, and taking it did nothing at all.
+  var VAN_SECS = 240, VAN_ROUND = 110, VAN_LOST = 400, VAN_NEAR = 60, VAN_PAY = 1500, DOORS = 0.3;
+  function lockup() { return GAME.heist && GAME.heist.LOCKUP || { x: -140, z: 206 }; }
   function startVan() {
     var f = GAME.focus();
     var rp = roadSpot(120, 200);
@@ -222,13 +231,27 @@ GAME.streetlife = (function () {
     if (!van) return false;
     van.hp = van.spec.hp * 3.5;
     van.armoured = true; van.keep = true;
-    ev = { kind: 'van', t: 0, van: van, hp0: van.hp, aimAt: 0 };
-    if (GAME.hud.pager) GAME.hud.pager('LOLA', 'There\'s a security van doing its rounds near you — grey, slow, heavy. It\'s the ringed dot on your radar, and the $ on your map. I\'m not telling you to do anything. I\'m just telling you.');
+    GAME.vehicles.armourVan(van);
+    ev = { kind: 'van', t: 0, van: van, hp0: van.hp, aimAt: 0, panel: false, said: '', seen: false, hit: false, taken: false };
+    if (GAME.hud.pager) GAME.hud.pager('LOLA', 'There\'s a security van doing its rounds near you — SECURITY down the side, amber light on the roof. It\'s the ringed dot on your radar, and the $ on your map. Hit it hard enough and the back doors give. Or take it off them and bring it to my lock-up by the harbour, and my people will open it properly.');
     return true;
   }
+  // the objective line, while the van is yours to deal with: near it, or in it
+  function vanPanel(text) {
+    var M = GAME.missions, busy = M && M.active || GAME.heist && GAME.heist.busy || GAME.strangers && GAME.strangers.busy;
+    if (text && !busy) {
+      if (!ev.panel) { GAME.hud.missionStart('SECURITY VAN', text); ev.panel = true; ev.said = text; }
+      else if (ev.said !== text) { GAME.hud.missionObjective(text); ev.said = text; }
+    } else if (ev.panel) {
+      if (!busy) GAME.hud.missionEnd();
+      ev.panel = false; ev.said = '';
+    }
+  }
   function stepVan() {
-    var f = GAME.focus(), van = ev.van;
-    if (van.dead || van.hp < ev.hp0 * 0.3) {
+    var f = GAME.focus(), van = ev.van, p = P();
+    var bc = van.mesh && van.mesh.userData.beacon;
+    if (bc && !van.dead) { var ph = (GAME.time * 3 | 0) % 2; bc[0].visible = ph === 0; bc[1].visible = ph === 1; }
+    if (van.dead || van.hp < ev.hp0 * DOORS) {
       // the back doors give
       var bx = -Math.sin(van.heading) * (van.spec.l / 2 + 1.2), bz = -Math.cos(van.heading) * (van.spec.l / 2 + 1.2);
       for (var i = 0; i < 3; i++) GAME.combat.dropPickup(van.pos.x + bx + (i - 1) * 1.1, van.pos.z + bz, 'cash', 250);
@@ -242,12 +265,48 @@ GAME.streetlife = (function () {
       end();
       return;
     }
+    var inIt = p.inCar && p.car === van && p.state === 'alive';
+    // taken: the guard's out, the alarm's in, and the lock-up is where it goes
+    if (inIt && !ev.taken) {
+      ev.taken = true;
+      GAME.police.setWanted(Math.max(GAME.police.wanted, 2));
+      say('The guard\'s called it in. Get the van to Lola\'s lock-up by the harbour.', 4);
+    }
+    if (ev.taken) {
+      var L = lockup();
+      if (inIt && U.dist2(van.pos.x, van.pos.z, L.x, L.z) < 10 * 10 && Math.abs(van.speed) < 3) {
+        GAME.exitCar();
+        pay(VAN_PAY, 'Lola\'s people roll the van inside and open it up.');
+        if (GAME.hud.pager) GAME.hud.pager('LOLA', 'Now THAT is a delivery. Don\'t make a habit of it where anybody can see you.');
+        if (GAME.herald) GAME.herald.front('van', {});
+        var gone = van;
+        end();
+        GAME.vehicles.removeCar(gone);
+        return;
+      }
+      vanPanel(inIt ? 'Get it to Lola\'s lock-up by the harbour — the $ on your map.' : 'Get back in the van — Lola\'s lock-up by the harbour.');
+      if (van.gone || p.state !== 'alive' || U.dist2(van.pos.x, van.pos.z, f.x, f.z) > VAN_LOST * VAN_LOST) end();
+      return;
+    }
     var away2 = U.dist2(van.pos.x, van.pos.z, f.x, f.z);
     if (van.gone || away2 > VAN_LOST * VAN_LOST || ev.t > VAN_SECS) { end(); return; }
-    // its rounds: once it has wandered off, back toward wherever you are
+    // close by: what it is, what to do, and how much the doors have left
+    if (away2 < VAN_NEAR * VAN_NEAR) {
+      if (!ev.seen) { ev.seen = true; say('The security van. Ram it or shoot it till the back doors give — or take it to Lola\'s lock-up.', 5); }
+      var left = Math.max(0, Math.round(100 * (van.hp - ev.hp0 * DOORS) / (ev.hp0 * (1 - DOORS))));
+      vanPanel('Ram it or shoot it — the back doors are at ' + left + '%. Or take it to Lola\'s lock-up.');
+    } else vanPanel(null);
+    // hit, it runs: foot down, and away from you
+    if (!ev.hit && van.hp < ev.hp0 * 0.97 && van.byPlayer) { ev.hit = true; ev.aimAt = 0; if (van.ai) van.ai.desired = 16; }
     if (ev.t >= ev.aimAt && van.ai) {
       ev.aimAt = ev.t + 6;
-      van.ai.toward = away2 > VAN_ROUND * VAN_ROUND ? { x: f.x, z: f.z } : null;
+      if (ev.hit) {
+        var ax = van.pos.x - f.x, az = van.pos.z - f.z, al = Math.hypot(ax, az) || 1;
+        van.ai.toward = { x: van.pos.x + ax / al * 300, z: van.pos.z + az / al * 300 };
+      } else {
+        // its rounds: once it has wandered off, back toward wherever you are
+        van.ai.toward = away2 > VAN_ROUND * VAN_ROUND ? { x: f.x, z: f.z } : null;
+      }
     }
   }
 
@@ -432,7 +491,15 @@ GAME.streetlife = (function () {
     // whatever was kept for it goes back to being ordinary traffic
     if (ev && ev.perp) ev.perp.keep = false;
     if (ev && ev.cop) ev.cop.keep = false;
-    if (ev && ev.van) { ev.van.keep = false; if (ev.van.ai) ev.van.ai.toward = null; }
+    if (ev && ev.van) {
+      ev.van.keep = false; if (ev.van.ai) ev.van.ai.toward = null;
+      var bc = ev.van.mesh && ev.van.mesh.userData.beacon;
+      if (bc) { bc[0].visible = false; bc[1].visible = false; }
+      if (ev.panel) {
+        var M = GAME.missions;
+        if (!(M && M.active) && !(GAME.heist && GAME.heist.busy) && !(GAME.strangers && GAME.strangers.busy)) GAME.hud.missionEnd();
+      }
+    }
     if (ev && ev.kind === 'chase' || ev && ev.kind === 'chaseDone') {
       var cop = ev.cop;
       if (cop && !cop.gone && !cop.dead) {
@@ -485,7 +552,12 @@ GAME.streetlife = (function () {
     }
     if (ev && ev.kind === 'chase' && !ev.perp.gone) put(ev.perp.pos.x, ev.perp.pos.z, '#ff3b3b', 3.5);
     if (ev && ev.kind === 'robbery' && !ev.thief.gone) put(ev.thief.pos.x, ev.thief.pos.z, '#ff3b3b', 3);
-    if (ev && ev.kind === 'van' && !ev.van.gone) put(ev.van.pos.x, ev.van.pos.z, '#d8dde6', 3.5, true);
+    if (ev && ev.kind === 'van' && !ev.van.gone) {
+      var p = P(), inIt = p.inCar && p.car === ev.van;
+      if (!inIt) put(ev.van.pos.x, ev.van.pos.z, '#d8dde6', 3.5, true);
+      // taken: where it goes
+      if (ev.taken) { var L = lockup(); put(L.x, L.z, '#ffd040', 4, true); }
+    }
     if (racer && racer.marker) put(racer.fin[0], racer.fin[1], '#ffe14f', 4.5);
     blipBuf.length = n;
     return blipBuf;

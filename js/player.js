@@ -469,7 +469,7 @@ function sitIn(car) {
   P.mesh.visible = P.onBike || !!car.spec.boat; // riders stay visible on a bike, and at a boat's helm
   GAME.cam.freeT = 0;
   GAME.audio.radio.setVolume(GAME.audio.muted ? 0 : 0.7);
-  GAME.hud.message(car.spec.label, 1.6);
+  GAME.hud.message(car.label || car.spec.label, 1.6);   // (a car of its own: the security van)
   if (GAME.lola) GAME.lola.first(car.spec.boat ? 'boat' : car.spec.heli ? 'heli' : car.spec.plane ? 'plane' : '');
   // the radio comes on tuned to whatever the last driver left it on — the
   // first time, wherever a stranger had it; after that wherever YOU did.
@@ -741,7 +741,7 @@ function enterHint(dt) {
   if (car === enterHintCar) return;
   enterHintCar = car;
   GAME.hud.enterHint(car ? (GAME.controls ? GAME.controls.label('KeyF') : 'F') + ' — ' +
-    (car.occupied === 'ai' ? 'take the ' : 'get in the ') + car.spec.label : '');
+    (car.occupied === 'ai' ? 'take the ' : 'get in the ') + (car.label || car.spec.label) : '');
 }
 
 // The roof height of a car at a point in its own frame — what your feet
